@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://50airtec-art.github.io/website/sitemap.xml
+Sitemap: https://50airtec.com/sitemap.xml
