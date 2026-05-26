@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="91mm" height="55mm"
+     viewBox="0 0 91 55"
+     xmlns:xlink="http://www.w3.org/1999/xlink">
+
+  <!-- Background -->
+  <rect width="91" height="55" fill="#ffffff"/>
+
+  <!-- Logo mark (circular 50 mark) — top left -->
+  <image href="logo-mark.png" x="5" y="5" width="16" height="16"/>
+
+  <!-- Company name block — right of logo, vertically centered to mark -->
+  <g font-family="'Noto Sans JP','Hiragino Sans','Yu Gothic',sans-serif">
+    <text x="24" y="13.5"
+          font-size="5.2"
+          font-weight="700"
+          fill="#1A1D21"
+          letter-spacing="0.3">50Airtec</text>
+    <text x="24" y="18.5"
+          font-size="2.4"
+          font-weight="400"
+          fill="#5A6068"
+          letter-spacing="1.2">ゴーマルエアテック</text>
+  </g>
+
+  <!-- Divider line -->
+  <line x1="5" y1="25" x2="86" y2="25" stroke="#E5E7EA" stroke-width="0.25"/>
+
+  <!-- Tagline (center) -->
+  <text x="45.5" y="33.5"
+        font-family="'Noto Sans JP','Hiragino Sans','Yu Gothic',sans-serif"
+        font-size="3.2"
+        font-weight="500"
+        fill="#1A1D21"
+        text-anchor="middle"
+        letter-spacing="0.5">快適な空気環境を、確かな技術で。</text>
+
+  <!-- QR codes — bottom -->
+  <!-- Website QR -->
+  <image href="qr-website.png" x="22" y="38" width="12" height="12"/>
+  <text x="28" y="52.6"
+        font-family="'Inter','Helvetica Neue',sans-serif"
+        font-size="1.9"
+        font-weight="500"
+        fill="#5A6068"
+        text-anchor="middle"
+        letter-spacing="0.4">WEBSITE</text>
+
+  <!-- Instagram QR -->
+  <image href="qr-instagram.png" x="57" y="38" width="12" height="12"/>
+  <text x="63" y="52.6"
+        font-family="'Inter','Helvetica Neue',sans-serif"
+        font-size="1.9"
+        font-weight="500"
+        fill="#5A6068"
+        text-anchor="middle"
+        letter-spacing="0.4">INSTAGRAM</text>
+
+</svg>

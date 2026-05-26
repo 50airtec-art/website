@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="91mm" height="55mm"
+     viewBox="0 0 91 55">
+
+  <!-- Background -->
+  <rect width="91" height="55" fill="#ffffff"/>
+
+  <!-- Left side: text -->
+  <g font-family="'Noto Sans JP','Hiragino Sans','Yu Gothic',sans-serif">
+    <text x="7" y="11"
+          font-size="3.6"
+          font-weight="700"
+          fill="#1A1D21"
+          letter-spacing="0.3">ご感想をお聞かせください</text>
+
+    <text x="7" y="17.5"
+          font-size="2.2"
+          font-weight="500"
+          fill="#5A6068"
+          letter-spacing="0.3">お時間あるときに、</text>
+    <text x="7" y="21"
+          font-size="2.2"
+          font-weight="500"
+          fill="#5A6068"
+          letter-spacing="0.3">星の評価だけでも</text>
+    <text x="7" y="24.5"
+          font-size="2.2"
+          font-weight="500"
+          fill="#5A6068"
+          letter-spacing="0.3">嬉しいです。</text>
+
+    <!-- Star icons -->
+    <g transform="translate(7, 30)" fill="#F5A623">
+      <text font-size="5" letter-spacing="0.5">★★★★★</text>
+    </g>
+
+    <!-- Instruction -->
+    <text x="7" y="42"
+          font-size="2.0"
+          font-weight="500"
+          fill="#1A1D21"
+          letter-spacing="0.2">スマホのカメラで</text>
+    <text x="7" y="45.5"
+          font-size="2.0"
+          font-weight="500"
+          fill="#1A1D21"
+          letter-spacing="0.2">右のQRを読み取り、</text>
+    <text x="7" y="49"
+          font-size="2.0"
+          font-weight="500"
+          fill="#1A1D21"
+          letter-spacing="0.2">レビュー投稿ページへ。</text>
+  </g>
+
+  <!-- Right side: QR code with frame -->
+  <rect x="58" y="6" width="28" height="43" rx="2" fill="none" stroke="#E5E7EA" stroke-width="0.3"/>
+  <image href="qr-review.png" x="60" y="8" width="24" height="24"/>
+
+  <!-- QR label -->
+  <text x="72" y="36"
+        font-family="'Inter','Helvetica Neue',sans-serif"
+        font-size="2.0"
+        font-weight="700"
+        fill="#1A1D21"
+        text-anchor="middle"
+        letter-spacing="0.3">GOOGLE</text>
+  <text x="72" y="39"
+        font-family="'Inter','Helvetica Neue',sans-serif"
+        font-size="2.0"
+        font-weight="700"
+        fill="#1A1D21"
+        text-anchor="middle"
+        letter-spacing="0.3">REVIEW</text>
+  <text x="72" y="46"
+        font-family="'Noto Sans JP','Hiragino Sans','Yu Gothic',sans-serif"
+        font-size="1.7"
+        font-weight="500"
+        fill="#5A6068"
+        text-anchor="middle"
+        letter-spacing="0.2">50Airtec</text>
+
+</svg>

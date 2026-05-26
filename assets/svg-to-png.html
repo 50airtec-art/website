@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>SVG → PNG 変換</title>
+<style>
+  body { font-family: 'Noto Sans JP', sans-serif; padding: 32px; background: #f6f7f8; color: #1A1D21; max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 24px; }
+  .card { background: #fff; padding: 24px; border: 1px solid #E5E7EA; border-radius: 6px; margin-bottom: 20px; }
+  .card h2 { font-size: 16px; margin-bottom: 12px; }
+  .preview { display: flex; justify-content: center; padding: 20px; background: #f6f7f8; border-radius: 4px; }
+  .preview svg { width: 200px; height: auto; }
+  button {
+    margin-top: 12px; padding: 12px 28px; background: #1A1D21; color: #fff;
+    border: none; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 500;
+  }
+  button:hover { background: #2a2e34; }
+  label { font-size: 14px; color: #5A6068; display: block; margin-bottom: 8px; }
+  input[type="number"] { padding: 8px 12px; border: 1px solid #E5E7EA; border-radius: 4px; width: 120px; font-size: 14px; }
+  .note { font-size: 13px; color: #5A6068; margin-top: 12px; line-height: 1.7; }
+</style>
+</head>
+<body>
+
+<h1>SVG → PNG 変換ツール</h1>
+
+<div class="card">
+  <label for="dpi">解像度（DPI）— 印刷用は 300、Canva表示用は 150 がおすすめ</label>
+  <input type="number" id="dpi" value="300" min="72" max="600">
+</div>
+
+<div class="card">
+  <h2>① WEBSITE QRカード</h2>
+  <div class="preview" id="websiteWrap">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 36"><rect x="0.5" y="0.5" width="29" height="35" rx="4" ry="4" fill="none" stroke="#1A1D21" stroke-width="1"/><rect x="2" y="2" width="26" height="32" rx="2.5" fill="#ffffff"/><image href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAJYAQMAAACEqAqfAAAABlBMVEX///8aHSH3domaAAAACXBIWXMAAA7EAAAOxAGVKw4bAAACQElEQVR4nO3cQY7aMBQGYI9YsOQIHIWjkaPlKD3CLFkg3DaOnRcSVKlSlRS+fzMzefbn2T3ZDqQk8om55GW+Q7FLKedHfXAciueVOXcWi8Visba3uhTThvdT8WsYe8j5NgwpxZADi8VisVh7sUKXO4b+WDL0x0MotoWGPFgsFovF2rN1rk/mxRIWi8Visf4jq1T6cfJXgFgsFovF+hgrJPbaXzOu+Slt/xjCYrFYLNY+rEXisWe3fia6CIvFYrFYW1uv01aJLfAvw2KxWCzWv7fajCGlBbb0w55vOMcsuaV0yvlHPeSsxTuLxWKxWLuwunFbl4Yu2IaHYq7Dy0KlWMNisVgs1rta4WN2Lf1UTKHydAlYG/GdxWKxWKyNrZL5n6d5C6z3fEur5sBisVgs1i6s63iVV9K2dZfhl25aqG0IW2oxs1gsFou1vVVmLHZu51n/a0eV5X3MluvanSGLxWKxWJtZ3ViJ27q2yjy3ulDL2pkoi8VisVjvYcVvPKlbxH5qxHGhmPBfsFgsFou1Dyt0ueOiP6ZpxtKqb3ImFovFYrE2tl7kHN7HrKuk+ZnoZbYQi8VisVhbW+XJPN8r93w5NM/FQrnt+VgsFovF2tLqUszTnq/7Y39cvedjsVgsFusNrDwmttM8WY/X93xhJovFYrFYO7X65+YZuf5558lisVgs1n6tMuP6+2f8wsuYWjywWCwWi7UXK2RpVagtlEJzDEUWi8Visba2Fol7vjq85bQyIbNYLBaL9V6WyOflJ/p3RG+PbijeAAAAAElFTkSuQmCC" x="4" y="4" width="22" height="22"/><line x1="6" y1="27.5" x2="24" y2="27.5" stroke="#1A1D21" stroke-width="0.3"/><text x="15" y="30.5" font-family="Inter,sans-serif" font-size="2.2" font-weight="700" fill="#1A1D21" text-anchor="middle" letter-spacing="0.3">WEBSITE</text><text x="15" y="33.2" font-family="Inter,sans-serif" font-size="1.9" font-weight="500" fill="#5A6068" text-anchor="middle" letter-spacing="0.2">50airtec.com</text></svg>
+  </div>
+  <button onclick="downloadPNG('websiteWrap', 'qr-website-card', 30, 36)">PNGをダウンロード</button>
+</div>
+
+<div class="card">
+  <h2>② INSTAGRAM QRカード</h2>
+  <div class="preview" id="instagramWrap">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 36"><defs><linearGradient id="igGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FFDC80"/><stop offset="25%" stop-color="#FCAF45"/><stop offset="50%" stop-color="#F77737"/><stop offset="75%" stop-color="#E1306C"/><stop offset="100%" stop-color="#833AB4"/></linearGradient></defs><rect x="0.5" y="0.5" width="29" height="35" rx="4" ry="4" fill="none" stroke="url(#igGrad)" stroke-width="1"/><rect x="2" y="2" width="26" height="32" rx="2.5" fill="#ffffff"/><image href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAJYAQMAAACEqAqfAAAABlBMVEX///+KI4d0FSzKAAAACXBIWXMAAA7EAAAOxAGVKw4bAAACMklEQVR4nO3aS24DIQyAYSQOxtU5GBJV5uEXJFJX9TS/FxFg+yM7dzIthSC+MdoMMV6ndc5uiuqVaFKybcPCwsLCymwN03Ruj8IuQgC1LrRhYWFhYWW3juZrJgzpm9cAaTEx3rRhYWFhYT3LaiezPjDoGRYWFhbWP7BKrL7pa4WFhYWF9VBLo0nmStRpovuS0IaFhYWFldoKMRZw/7G2YWFhYWEltj7H0aITo/jV7wILCwsL6y8tOwTGZjukWd8F7D6wsLCwsHJbRZYHs6Yl3K9Eet31jQYWFhYWVmqryXmXQ1WnjA3b5xgTWFhYWFh5rVCojwTB37VtnxWwsLCwsJJaLtophBr1g7o7w8LCwsLKaF3N2uJqjqxdaQw7VM4VFhYWFlZya55gtSurakmRZu3wswMLCwsLK6WlDwLhQyeGban2TnuGhYWFhZXbauaP/rqk2wZsUTVzCAsLCwsrrzXd/l2E67TNfBksLCwsrMyWjoNAr6NES7ofL+Y+LCwsLKzM1h3dgGH7ZnaYm7CwsLCwklvhl54Was7E9MxcVSwsLCysvNYujnSXlfWLXzkVCwsLCyuxZffaN5exsaN1u9pYWFhYWNksN0HCiLBqWZrjPMHCwsLCSm5pzYft9ANES+Q6LCwsLKwHWmdaYkno24O7FwsLCwvriZapiS+Fiy8RHwsLCwsruaVhR8T9vz5Nq01HlZKKhYWFhfUEK4SbHd1cE5r9YwIWFhYWVnKLIL4vfgAGsTlXPE9LjAAAAABJRU5ErkJggg==" x="4" y="4" width="22" height="22"/><line x1="6" y1="27.5" x2="24" y2="27.5" stroke="url(#igGrad)" stroke-width="0.3"/><text x="15" y="30.5" font-family="Inter,sans-serif" font-size="2.2" font-weight="700" fill="#E1306C" text-anchor="middle" letter-spacing="0.3">INSTAGRAM</text><text x="15" y="33.2" font-family="Inter,sans-serif" font-size="1.9" font-weight="500" fill="#5A6068" text-anchor="middle" letter-spacing="0.2">@50airtec</text></svg>
+  </div>
+  <button onclick="downloadPNG('instagramWrap', 'qr-instagram-card', 30, 36)">PNGをダウンロード</button>
+</div>
+
+<p class="note">
+  ボタンを押すとPNGが自動ダウンロードされます。<br>
+  保存先はブラウザのダウンロードフォルダ（通常: <code>C:\Users\toooo\Downloads\</code>）。<br>
+  そのPNGをCanvaに直接アップロードしてご利用ください。
+</p>
+
+<script>
+function downloadPNG(wrapId, filename, widthMm, heightMm) {
+  const dpi = parseInt(document.getElementById('dpi').value) || 300;
+  const pxPerMm = dpi / 25.4;
+  const widthPx = Math.round(widthMm * pxPerMm);
+  const heightPx = Math.round(heightMm * pxPerMm);
+
+  const svgEl = document.querySelector('#' + wrapId + ' svg');
+  const svgClone = svgEl.cloneNode(true);
+  svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  svgClone.setAttribute('width', widthMm + 'mm');
+  svgClone.setAttribute('height', heightMm + 'mm');
+  const svgStr = new XMLSerializer().serializeToString(svgClone);
+  const svgBlob = new Blob([svgStr], {type: 'image/svg+xml;charset=utf-8'});
+  const url = URL.createObjectURL(svgBlob);
+
+  const img = new Image();
+  img.onload = function() {
+    const canvas = document.createElement('canvas');
+    canvas.width = widthPx;
+    canvas.height = heightPx;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, widthPx, heightPx);
+    ctx.drawImage(img, 0, 0, widthPx, heightPx);
+    canvas.toBlob(function(blob) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename + '_' + dpi + 'dpi.png';
+      a.click();
+      URL.revokeObjectURL(url);
+    }, 'image/png');
+  };
+  img.onerror = function(e) {
+    alert('変換に失敗しました');
+    console.error(e);
+  };
+  img.src = url;
+}
+</script>
+
+</body>
+</html>
