@@ -1353,6 +1353,36 @@ img.logo-img {
   margin-right: auto;
 }
 
+/* LINE card variant */
+.contact-card-line {
+  background: #06C755;
+  border-color: #06C755;
+  color: #ffffff;
+}
+
+.contact-card-line:hover {
+  background: #05a847;
+  border-color: #05a847;
+  color: #ffffff;
+  opacity: 1;
+}
+
+.contact-card-line .contact-card-icon {
+  color: #ffffff;
+}
+
+.contact-card-line .contact-type {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.contact-card-line .contact-action {
+  color: #ffffff;
+}
+
+.contact-card-line .contact-note {
+  color: rgba(255, 255, 255, 0.8);
+}
+
 .contact-card {
   display: flex;
   align-items: center;
