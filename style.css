@@ -1506,6 +1506,50 @@ img.logo-img {
   z-index: 1;
 }
 
+.contact-badges {
+  list-style: none;
+  padding: 0;
+  margin: 0 auto 40px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 20px;
+  max-width: 900px;
+}
+
+.contact-badges li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(199, 156, 92, 0.4);
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.contact-badges .cb-check {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: #c79c5c;
+  color: #1a1d21;
+  border-radius: 50%;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.contact-badges .cb-note {
+  font-size: 12px;
+  opacity: 0.75;
+  margin-left: 4px;
+}
+
 .contact-options {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1513,11 +1557,80 @@ img.logo-img {
   margin-bottom: 64px;
 }
 
+.contact-options.triple {
+  grid-template-columns: repeat(3, 1fr);
+}
+
 .contact-options.single {
   grid-template-columns: 1fr;
   max-width: 640px;
   margin-left: auto;
   margin-right: auto;
+}
+
+/* Tel card variant (higher specificity to override .contact-card default) */
+.contact-options .contact-card-tel {
+  background: rgba(199, 156, 92, 0.12);
+  border-color: rgba(199, 156, 92, 0.55);
+}
+
+.contact-options .contact-card-tel:hover {
+  background: rgba(199, 156, 92, 0.22);
+  border-color: #c79c5c;
+}
+
+.contact-options .contact-card-tel .contact-card-icon {
+  color: #c79c5c;
+}
+
+.contact-options .contact-card-tel .contact-tel-number {
+  font-family: var(--font-en);
+  font-size: 22px;
+  letter-spacing: 0.02em;
+  color: #ffe4b0;
+}
+
+.form-lead {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  margin: -8px 0 24px;
+  text-align: center;
+}
+
+.form-note {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  margin: 12px 0 0;
+  text-align: center;
+  line-height: 1.7;
+}
+
+.optional {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.6);
+  border-radius: 3px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+@media (max-width: 900px) {
+  .contact-options.triple {
+    grid-template-columns: 1fr;
+  }
+  .contact-badges {
+    gap: 8px 12px;
+    margin-bottom: 32px;
+  }
+  .contact-badges li {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+  .contact-card-tel .contact-tel-number {
+    font-size: 20px;
+  }
 }
 
 /* LINE card variant */

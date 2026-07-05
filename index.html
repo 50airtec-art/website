@@ -20,6 +20,14 @@
   <meta name="author" content="50Airtec">
   <meta name="robots" content="index,follow">
   <link rel="canonical" href="https://50airtec.com/">
+  <link rel="alternate" hreflang="ja" href="https://50airtec.com/">
+  <link rel="alternate" hreflang="ja-JP" href="https://50airtec.com/">
+  <link rel="alternate" hreflang="x-default" href="https://50airtec.com/">
+  <meta http-equiv="content-language" content="ja-JP">
+  <meta name="geo.region" content="JP-06">
+  <meta name="geo.placename" content="山形県寒河江市">
+  <meta name="geo.position" content="38.379;140.276">
+  <meta name="ICBM" content="38.379, 140.276">
 
   <!-- Open Graph -->
   <meta property="og:type" content="website">
@@ -660,10 +668,18 @@
     <div class="container contact-inner">
       <div class="section-header light">
         <p class="section-label">CONTACT</p>
-        <h2 class="section-title">お問い合わせ</h2>
-        <p class="section-desc">現地調査・お見積もりは無料です（寒河江市から車でおよそ1時間圏内）。庄内・置賜・最上、宮城県・福島県への出張は距離や規模に応じて出張費をご相談させていただく場合があります。まずはお気軽にご連絡ください。</p>
+        <h2 class="section-title">まずはお気軽にご相談ください</h2>
+        <p class="section-desc">「機種選定の相談だけ」「料金の質問だけ」でも大歓迎です。お問い合わせ・ご相談は完全無料。しつこい営業は一切ありません。</p>
       </div>
-      <div class="contact-options">
+
+      <ul class="contact-badges">
+        <li><span class="cb-check">✓</span>ご相談だけでも歓迎</li>
+        <li><span class="cb-check">✓</span>お見積もり無料<span class="cb-note">（車で1時間圏内）</span></li>
+        <li><span class="cb-check">✓</span>原則24時間以内に返信</li>
+        <li><span class="cb-check">✓</span>しつこい営業なし</li>
+      </ul>
+
+      <div class="contact-options triple">
         <a href="https://lin.ee/TLQAHqxS" class="contact-card contact-card-line" target="_blank" rel="noopener">
           <div class="contact-card-icon">
             <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -672,9 +688,21 @@
             </svg>
           </div>
           <div class="contact-card-body">
-            <span class="contact-type">LINE でお問い合わせ</span>
-            <strong class="contact-action">気軽にメッセージを送る</strong>
+            <span class="contact-type">気軽さNo.1</span>
+            <strong class="contact-action">LINEで相談する</strong>
             <span class="contact-note">友だち追加 → トーク開始でOK</span>
+          </div>
+        </a>
+        <a href="tel:070-8969-7724" class="contact-card contact-card-tel">
+          <div class="contact-card-icon">
+            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M14 6h6l4 10-5 3a20 20 0 0 0 10 10l3-5 10 4v6c0 2-2 4-4 4A32 32 0 0 1 10 10c0-2 2-4 4-4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round" fill="none"/>
+            </svg>
+          </div>
+          <div class="contact-card-body">
+            <span class="contact-type">急ぎの方はこちら</span>
+            <strong class="contact-action contact-tel-number">070-8969-7724</strong>
+            <span class="contact-note">平日 9:00〜18:00 / 五十嵐が直接対応</span>
           </div>
         </a>
         <a href="#contact-form" class="contact-card">
@@ -685,32 +713,33 @@
             </svg>
           </div>
           <div class="contact-card-body">
-            <span class="contact-type">メールフォームからのご連絡</span>
-            <strong class="contact-action">下記フォームよりお問い合わせください</strong>
-            <span class="contact-note">確認次第、担当者よりご返信いたします</span>
+            <span class="contact-type">じっくり書きたい方</span>
+            <strong class="contact-action">メールフォーム</strong>
+            <span class="contact-note">下記フォームからお送りください</span>
           </div>
         </a>
       </div>
       <div class="contact-form-wrap" id="contact-form">
-        <h3 class="form-title">お問い合わせフォーム</h3>
+        <h3 class="form-title">メールフォーム</h3>
+        <p class="form-lead">3分ほどで入力できます。ご相談だけでも大歓迎です。</p>
         <form class="contact-form" onsubmit="handleSubmit(event)">
 
           <div class="form-row">
             <div class="form-group">
               <label for="name">お名前 <span class="required">必須</span></label>
-              <input type="text" id="name" name="name" placeholder="山田 太郎" required>
+              <input type="text" id="name" name="name" placeholder="例: 五十嵐（フルネームでなくてもOK）" required>
             </div>
             <div class="form-group">
-              <label for="company">会社名・屋号</label>
-              <input type="text" id="company" name="company" placeholder="株式会社 ○○">
+              <label for="company">会社名・屋号 <span class="optional">任意</span></label>
+              <input type="text" id="company" name="company" placeholder="個人のお客様は空欄でOK">
             </div>
           </div>
           <div class="form-group">
             <label for="email">メールアドレス <span class="required">必須</span></label>
-            <input type="email" id="email" name="email" placeholder="info@example.com" required>
+            <input type="email" id="email" name="email" placeholder="ご返信用のアドレス" required>
           </div>
           <div class="form-group">
-            <label for="service">ご希望のサービス <span class="required">必須</span></label>
+            <label for="service">ご相談内容 <span class="required">必須</span></label>
             <select id="service" name="service" required>
               <option value="">選択してください</option>
               <option>業務用エアコン 設計・施工（新規）</option>
@@ -719,14 +748,16 @@
               <option>家庭用エアコン 新規取付・交換</option>
               <option>家庭用エアコン クリーニング</option>
               <option>家庭用エアコン 修理</option>
+              <option>料金や相談だけ</option>
               <option>その他・ご相談</option>
             </select>
           </div>
           <div class="form-group">
-            <label for="message">ご要望・ご質問</label>
-            <textarea id="message" name="message" rows="5" placeholder="詳細をご記入ください（設置場所・台数・ご予算など）"></textarea>
+            <label for="message">ご要望・ご質問 <span class="optional">任意</span></label>
+            <textarea id="message" name="message" rows="5" placeholder="例: 店舗（30坪）に業務用エアコンを設置したいです。予算感も相談させてください。&#10;&#10;※分かる範囲でOK。「相談だけ」でも問題ありません。"></textarea>
           </div>
-          <button type="submit" class="btn btn-primary btn-block">送信する</button>
+          <button type="submit" class="btn btn-primary btn-block">この内容で無料相談する</button>
+          <p class="form-note">送信後、原則24時間以内にご返信します。担当は代表 五十嵐が直接対応いたします。</p>
         </form>
       </div>
     </div>
