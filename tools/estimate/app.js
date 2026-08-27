@@ -36,6 +36,24 @@
     return s;
   }
 
+  /**
+   * 単価表の項目につける文字色。
+   * シリーズごとに色を変えて、単価表から選ぶときに見分けやすくするためのもの。
+   * CSVは外から持ってくるファイルなので、決めた色の名前と #rrggbb 以外は受け付けない。
+   */
+  var ITEM_COLORS = {
+    '青': '#1565c0', '緑': '#2e7d32', '橙': '#e65100', '赤': '#c62828',
+    '紫': '#6a1b9a', '茶': '#5d4037', '水': '#0277bd', '桃': '#ad1457',
+    '灰': '#546e7a', '黒': ''
+  };
+  function itemColor(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (!s) return '';
+    if (ITEM_COLORS.hasOwnProperty(s)) return ITEM_COLORS[s];
+    if (/^#[0-9a-f]{6}$/i.test(s)) return s;
+    return '';
+  }
+
   /** 製品ページを新しいタブで開く小さなボタン。URLが無いときは null を返す */
   function refButton(url, label) {
     var u = safeUrl(url);
@@ -316,6 +334,8 @@
     shown.forEach(function (r) {
       var b = el('button', 'item-btn');
       b.type = 'button';
+      var col = itemColor(r.item.color);
+      if (col) b.style.color = col;      // シリーズごとの色分け
       if (r.item.code) b.appendChild(el('i', 'item-code', r.item.code));
       b.appendChild(el('b', null, r.item.name));
       if (r.item.spec) b.appendChild(el('em', null, r.item.spec));
@@ -1744,6 +1764,9 @@
       return i;
     }
 
+    var mcol = itemColor(item.color);
+    if (mcol) row.style.color = mcol;    // シリーズごとの色分け（単価マスタ側）
+
     row.appendChild(inp(item.code || '', 'm-code', 'text', function (v) { item.code = v; }, '品番'));
     row.appendChild(inp(item.name, null, 'text', function (v) { item.name = v; }, '品名'));
     row.appendChild(inp(item.spec || '', null, 'text', function (v) { item.spec = v; }, '規格・仕様'));
@@ -1825,6 +1848,7 @@
     name:     ['品名', '名称', '商品名', '製品名', '品名・仕様', 'name'],
     spec:     ['規格', '仕様', 'サイズ', '規格・仕様', 'spec'],
     url:      ['URL', 'ＵＲＬ', 'リンク', '製品ページ', '参考URL', 'ページ', 'url', 'link'],
+    color:    ['色', '色分け', '文字色', 'カラー', 'color'],
     unit:     ['単位', 'unit'],
     price:    ['定価', '単価', '価格', '金額', '希望小売価格', '標準価格', 'price']
   };
@@ -1908,6 +1932,7 @@
           name: name || code,
           spec: cell('spec'),
           url: safeUrl(cell('url')),
+          color: cell('color'),
           unit: cell('unit') || '個',
           price: toPrice(cell('price'))
         }
@@ -1974,15 +1999,12 @@
       o.value = c.name;
       sel.appendChild(o);
     });
-    var other = el('option', null, '材料（因幡電工）');
-    other.value = '材料（因幡電工）';
-    if (!pb.categories.some(function (c) { return c.name === '材料（因幡電工）'; })) sel.appendChild(other);
     var has = function (v) {
       return Array.prototype.some.call(sel.options, function (o) { return o.value === v; });
     };
-    // 前の選択を保つ。初回は材料を入れることが多いので材料カテゴリを既定にする
+    // 前に選んでいたカテゴリが残っていればそれを保つ。無ければ先頭にする。
+    // （この欄は、カテゴリ列の無いCSVを取り込むときの入れ先を決めるためのもの）
     if (keep && has(keep)) sel.value = keep;
-    else if (has('材料（因幡電工）')) sel.value = '材料（因幡電工）';
     else if (sel.options.length) sel.selectedIndex = 0;
   }
 
@@ -2015,8 +2037,8 @@
   $('#btn-csv-template').addEventListener('click', function () {
     var lines = [
       'カテゴリ,品番,品名,規格,単位,定価,URL',
-      '材料（因幡電工）,LD-70,スリムダクト LD ダクト,ダクト 70,本,0,https://www.inaba-denko.com/ja/product/detail/1540000',
-      '材料（因幡電工）,,ここに実際の品番・品名・定価を入れてください,,個,0,'
+      '材料,LD-70,スリムダクト LD ダクト,ダクト 70,本,0,https://www.inaba-denko.com/ja/product/detail/1540000',
+      '材料,,ここに実際の品番・品名・定価を入れてください,,個,0,'
     ].join('\r\n');
     // Excelでそのまま開けるよう BOM 付き UTF-8 で書き出す
     var blob = new Blob(['﻿' + lines], { type: 'text/csv;charset=utf-8' });

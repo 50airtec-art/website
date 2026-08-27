@@ -589,3 +589,7 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
 }
 .bk-warn span { flex: 1; min-width: 200px; }
 @media print { .bk-warn { display: none !important; } }
+
+/* 単価表の色分け：入力欄も行の色を受け継ぐ */
+.mrow input { color: inherit; }
+.item-btn b, .item-btn .item-code { color: inherit; }
