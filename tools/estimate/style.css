@@ -177,7 +177,10 @@ table.lines input:focus { background: #fff; }
 .c-move { width: 34px; }
 .c-qty { width: 84px; }
 .c-unit { width: 70px; }
+.c-rate { width: 78px; }
 .c-price { width: 116px; }
+.rate-sel { width: 100%; padding: 6px 4px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+td.c-rate.is-off .rate-sel { border-color: var(--accent); color: var(--accent); font-weight: 600; background: var(--accent-soft); }
 .c-amount { width: 120px; text-align: right; }
 .c-del { width: 108px; }
 td.c-amount { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; padding-right: 10px; }
@@ -492,3 +495,81 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
 @media (max-width: 600px) {
   .chooser-opts { grid-template-columns: 1fr 1fr; }
 }
+
+/* ===== 現場（案件） ===== */
+#site-search { width: 100%; margin-bottom: 12px; }
+.site-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  text-align: left; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: #fff; padding: 12px 14px; margin-bottom: 8px;
+}
+.site-row:hover { border-color: var(--accent); background: var(--accent-soft); }
+.site-row .est-main { flex: 1; min-width: 0; }
+.site-row .est-main b { display: block; font-size: 15px; }
+.site-row .est-main small { display: block; font-size: 12px; color: var(--text-light); margin-top: 2px; }
+.site-right { flex: none; text-align: right; }
+.site-right small { display: block; font-size: 11px; color: var(--text-light); }
+.site-head { margin-bottom: 12px; }
+.site-head .card-title { margin-bottom: 4px; }
+.site-acts { margin-bottom: 16px; }
+.site-sec-label { font-size: 12px; font-weight: 700; color: var(--text-sub); margin: 16px 0 8px; }
+
+/* ===== 現地調査チェックシート（画面） ===== */
+.survey-block { margin-bottom: 20px; }
+.survey-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 16px 0 8px; }
+.survey-head .site-sec-label { margin: 0; }
+.survey-count { font-size: 11px; color: var(--text-light); }
+.survey-head .btn-sm { margin-left: auto; }
+.survey-head .btn-sm + .btn-sm { margin-left: 0; }
+
+.survey-sec { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; background: #fff; }
+.survey-sec > summary {
+  cursor: pointer; padding: 10px 14px; font-size: 13px; font-weight: 700;
+  color: var(--text-sub); list-style: none; user-select: none;
+}
+.survey-sec > summary::-webkit-details-marker { display: none; }
+.survey-sec > summary::before { content: '▸ '; color: var(--text-light); }
+.survey-sec[open] > summary::before { content: '▾ '; }
+.survey-sec[open] > summary { border-bottom: 1px solid var(--border); }
+
+.survey-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; padding: 12px 14px; }
+.survey-f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.survey-f-wide { grid-column: 1 / -1; }
+.survey-k { font-size: 11px; font-weight: 700; color: var(--text-sub); }
+.survey-f input[type=text], .survey-f input[type=date], .survey-f textarea {
+  width: 100%; padding: 6px 8px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 6px; background: #fff;
+}
+.survey-sub { margin-top: 4px; }
+.survey-opts { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.survey-chk { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
+.survey-chk input { width: 16px; height: 16px; }
+
+@media (max-width: 700px) {
+  .survey-grid { grid-template-columns: 1fr; }
+}
+
+/* ===== 現地調査チェックシート（印刷） ===== */
+.sv-page { font-size: 8.5pt; }
+.sv-title {
+  text-align: center; font-size: 13pt; font-weight: 700; letter-spacing: .1em;
+  background: #dde3ea; padding: 2.5mm; margin-bottom: 3mm;
+}
+.sv-sec {
+  background: #2b5578; color: #fff; font-weight: 700; font-size: 9pt;
+  padding: 1.4mm 2.5mm; margin-top: 2.5mm;
+}
+.sv-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.sv-tbl th, .sv-tbl td { border: .4pt solid #9aa5b1; padding: 1.3mm 2mm; vertical-align: top; }
+.sv-tbl .sv-k { width: 24mm; background: #dfe5ec; font-weight: 600; text-align: left; font-size: 8pt; }
+.sv-tbl .sv-v { width: 62mm; background: #f4f2ee; }
+.sv-head .sv-k { background: #d5dce4; }
+.sv-head .sv-v { background: #e9edf2; }
+.sv-o { display: inline-block; margin-right: 2.5mm; white-space: nowrap; }
+.sv-sub { display: block; margin-top: .8mm; color: #333; }
+.sv-ph { color: #999; }
+
+/* 請求書：税率ごとの内訳（インボイス） */
+.sheet-sum tr.tax-break th, .sheet-sum tr.tax-break td { background: #fafafa; font-size: 8.5pt; color: #333; }
+.inv-block { margin-top: 8px; }

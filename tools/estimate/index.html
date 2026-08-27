@@ -23,7 +23,7 @@
       </div>
       <nav class="tabs">
         <button class="tab is-active" data-view="edit">見積作成</button>
-        <button class="tab" data-view="list">保存済み</button>
+        <button class="tab" data-view="list">現場</button>
         <button class="tab" data-view="master">単価マスタ</button>
         <button class="tab" data-view="settings">自社情報</button>
       </nav>
@@ -96,6 +96,7 @@
                 <th class="c-name">品名・仕様</th>
                 <th class="c-qty">数量</th>
                 <th class="c-unit">単位</th>
+                <th class="c-rate">掛率</th>
                 <th class="c-price">単価</th>
                 <th class="c-amount">金額</th>
                 <th class="c-del"></th>
@@ -139,15 +140,30 @@
 
     <!-- ============ 保存済み ============ -->
     <section class="view" id="view-list">
-      <div class="card">
+      <!-- 現場の一覧 -->
+      <div class="card" id="site-list-card">
         <div class="card-head">
-          <h2 class="card-title">保存済みの見積</h2>
+          <h2 class="card-title">現場</h2>
           <div class="card-actions">
+            <button class="btn btn-primary" id="btn-new-site">＋ 現場を追加</button>
             <button class="btn btn-ghost" id="btn-export-estimates">バックアップを書き出す</button>
             <label class="btn btn-ghost file-btn">読み込む<input type="file" id="file-import-estimates" accept="application/json"></label>
           </div>
         </div>
-        <div id="estimate-list"></div>
+        <input type="search" id="site-search" placeholder="現場名・お客様名で検索">
+        <div id="site-list"></div>
+      </div>
+
+      <!-- 現場の中身（見積・請求書・現調シート） -->
+      <div class="card" id="site-detail-card" style="display:none">
+        <div class="card-head">
+          <button class="btn btn-ghost btn-sm" id="btn-site-back">← 現場一覧</button>
+          <div class="card-actions">
+            <button class="btn btn-ghost" id="btn-site-edit">現場情報を編集</button>
+            <button class="btn btn-ghost btn-danger" id="btn-site-del">現場を削除</button>
+          </div>
+        </div>
+        <div id="site-detail"></div>
       </div>
     </section>
 
@@ -253,6 +269,20 @@
       </div>
 
       <div class="card">
+        <h2 class="card-title">端末を移すとき（全データのバックアップ）</h2>
+        <p class="hint">
+          <strong>スマホとパソコンの両方で使うときは、これ1つで全部運べます。</strong><br>
+          自社情報・ロゴ・社判・単価マスタ・機種データ・現場・現調シート・見積・請求書を、
+          まとめて1つのファイルに書き出します。<br>
+          <small>※読み込むと、いまの内容はすべて置き換わります。</small>
+        </p>
+        <div class="csv-btns">
+          <button class="btn btn-primary" id="btn-export-all">全部まとめて書き出す</button>
+          <label class="btn btn-ghost file-btn">まとめて読み込む<input type="file" id="file-import-all" accept="application/json"></label>
+        </div>
+      </div>
+
+      <div class="card">
         <h2 class="card-title">ロゴ（見積書の右上に入ります）</h2>
         <p class="hint">
           会社のロゴを入れると、見積書の会社名の上に印字されます。<strong>入れなくても大丈夫です。</strong><br>
@@ -324,6 +354,7 @@
 <div id="sheet"></div>
 
 <script src="pricebook.js"></script>
+<script src="survey.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

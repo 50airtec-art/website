@@ -10,6 +10,8 @@
   var KEY_EST   = 'airtec_estimates_v1';
   var KEY_DRAFT = 'airtec_draft_v1';
   var KEY_MDL   = 'airtec_models_v1';
+  var KEY_SITE  = 'airtec_sites_v1';
+  var KEY_INV   = 'airtec_invoices_v1';
 
   /* ---------- 便利関数 ---------- */
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -151,9 +153,12 @@
   /* ======================================================================
      計算
      ====================================================================== */
-  function calc() {
+  function calc() { return calcOf(st); }
+
+  /** 見積でも請求書でも使えるように、対象の書類を受け取って計算する */
+  function calcOf(st) {
     var subtotal = 0;
-    st.lines.forEach(function (l) { subtotal += num(l.qty) * num(l.price); });
+    (st.lines || []).forEach(function (l) { subtotal += num(l.qty) * num(l.price); });
 
     var overhead = subtotal * num(st.overhead) / 100;
     var discount = num(st.discount);
@@ -347,10 +352,17 @@
      明細
      ====================================================================== */
   function addLine(line) {
-    st.lines.push(Object.assign({ name: '', spec: '', qty: 1, unit: '式', price: 0, url: '' }, line || {}));
+    var l = Object.assign({ name: '', spec: '', qty: 1, unit: '式', price: 0, url: '' }, line || {});
+    // base は掛率をかける前の元値（単価マスタの定価）。rate は「定価の何%で出すか」
+    if (l.base == null) l.base = num(l.price);
+    if (l.rate == null) l.rate = 100;
+    st.lines.push(l);
     renderLines();
     persistDraft();
   }
+
+  /* 明細行の「掛率」プルダウンの選択肢（定価の何%で出すか） */
+  var RATES = [100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50];
 
   function renderLines() {
     var tb = $('#lines-body');
@@ -396,11 +408,48 @@
       tdUnit.appendChild(iUnit);
       tr.appendChild(tdUnit);
 
+      // 掛率（定価の何%で出すか）
+      // 古い見積を開いたときは base / rate が無いので、ここで今の単価を元値とみなす
+      if (l.base == null) l.base = num(l.price);
+      if (l.rate == null) l.rate = 100;
+
+      var tdRate = el('td', 'c-rate');
+      var sRate = el('select', 'rate-sel');
+      RATES.forEach(function (r) {
+        var o = el('option', null, r + '%');
+        o.value = r;
+        if (num(l.rate) === r) o.selected = true;
+        sRate.appendChild(o);
+      });
+      // 選択肢に無い掛率（手入力の結果など）も残せるようにしておく
+      if (RATES.indexOf(num(l.rate)) < 0) {
+        var oX = el('option', null, l.rate + '%');
+        oX.value = l.rate; oX.selected = true;
+        sRate.insertBefore(oX, sRate.firstChild);
+      }
+      tdRate.appendChild(sRate);
+      tr.appendChild(tdRate);
+
       // 単価
       var tdPrice = el('td', 'c-price');
       var iPrice = el('input'); iPrice.type = 'number'; iPrice.step = '1'; iPrice.value = l.price;
       tdPrice.appendChild(iPrice);
       tr.appendChild(tdPrice);
+
+      function showBaseHint() {
+        // 掛率が100%でないときだけ、元の定価が分かるようにしておく
+        iPrice.title = num(l.rate) === 100 ? '' : '定価 ' + yen(num(l.base)) + ' の ' + l.rate + '%';
+        tdRate.classList.toggle('is-off', num(l.rate) !== 100);
+      }
+      showBaseHint();
+
+      sRate.addEventListener('change', function () {
+        l.rate = num(sRate.value);
+        l.price = Math.round(num(l.base) * l.rate / 100);
+        iPrice.value = l.price;
+        showBaseHint();
+        recalc();
+      });
 
       // 金額
       var tdAmt = el('td', 'c-amount', yen(num(l.qty) * num(l.price)));
@@ -414,7 +463,14 @@
         persistDraft();
       }
       iQty.addEventListener('input', recalc);
-      iPrice.addEventListener('input', recalc);
+      iPrice.addEventListener('input', function () {
+        // 単価を手で書き換えたら、その金額が新しい元値。掛率は100%に戻す
+        l.base = num(iPrice.value);
+        l.rate = 100;
+        sRate.value = '100';
+        showBaseHint();
+        recalc();
+      });
 
       // 製品ページ ＋ 単価表に登録 ＋ 削除
       var tdDel = el('td', 'c-del');
@@ -545,6 +601,33 @@
   $('#btn-save').addEventListener('click', function () {
     var list = load(KEY_EST, []);
     var t = calc();
+
+    // どの現場のものか決まっていなければ、件名と宛名から現場を作る
+    if (!st.siteId) {
+      var nm = (st.subject || '').trim() || (st.site || '').trim() || (st.customer || '').trim();
+      if (!nm) { toast('先に件名かお客様名を入れてください（現場の名前になります）'); return; }
+      var sites = loadSites();
+      var found = null;
+      sites.forEach(function (x) {
+        if (x.name === nm && (x.customer || '') === (st.customer || '').trim()) found = x;
+      });
+      if (!found) {
+        found = {
+          id: 's' + Date.now() + Math.floor(Math.random() * 1000),
+          name: nm,
+          customer: (st.customer || '').trim(),
+          honorific: st.honorific || '御中',
+          address: st.site || '',
+          tel: '',
+          memo: '',
+          createdAt: new Date().toISOString()
+        };
+        sites.push(found);
+        if (saveSites(sites) === false) return;
+      }
+      st.siteId = found.id;
+    }
+
     var rec = clone(st);
     rec.total = t.total;
     rec.savedAt = new Date().toISOString();
@@ -559,68 +642,761 @@
   /* ======================================================================
      保存済み一覧
      ====================================================================== */
-  function renderList() {
-    var box = $('#estimate-list');
+  /* ======================================================================
+     現場（案件）
+     ----------------------------------------------------------------------
+     1つの現場に、見積・請求書・現調シートがぶら下がる構造。
+     見積は siteId で現場に結びつく。
+     ====================================================================== */
+  var openSiteId = null;      // いま開いている現場（null なら一覧を表示）
+
+  function loadSites() { return load(KEY_SITE, []); }
+  function saveSites(v) { return save(KEY_SITE, v); }
+  function findSite(id) {
+    var hit = null;
+    loadSites().forEach(function (s) { if (s.id === id) hit = s; });
+    return hit;
+  }
+  function estimatesOf(siteId) {
+    return load(KEY_EST, []).filter(function (e) { return e.siteId === siteId; });
+  }
+
+  /**
+   * 現場という考え方が無かった頃に保存した見積を、現場にふり分ける。
+   * 宛名＋件名が同じものは1つの現場にまとめる。中身は書き換えず siteId を足すだけ。
+   */
+  function migrateEstimatesToSites() {
     var list = load(KEY_EST, []);
+    var orphans = list.filter(function (e) { return !e.siteId; });
+    if (!orphans.length) return 0;
+
+    var sites = loadSites();
+    var byKey = {};
+    sites.forEach(function (s) { byKey[(s.customer || '') + ' :: ' + (s.name || '')] = s; });
+
+    orphans.forEach(function (e) {
+      var name = (e.subject || '').trim() || (e.site || '').trim() || '（件名なし）';
+      var cust = (e.customer || '').trim();
+      var key = cust + ' :: ' + name;
+      var s = byKey[key];
+      if (!s) {
+        s = {
+          id: 's' + Date.now() + Math.floor(Math.random() * 1000),
+          name: name,
+          customer: cust,
+          honorific: e.honorific || '御中',
+          address: e.site || '',
+          tel: '',
+          memo: '',
+          createdAt: e.savedAt || new Date().toISOString()
+        };
+        sites.push(s);
+        byKey[key] = s;
+      }
+      e.siteId = s.id;
+    });
+    saveSites(sites);
+    save(KEY_EST, list);
+    return orphans.length;
+  }
+
+  function siteDialog(site) {
+    var isNew = !site;
+    var s = site || { name: '', customer: '', honorific: '御中', address: '', tel: '', memo: '' };
+    var name = prompt(isNew ? '現場名（件名）を入れてください\n例：〇〇商店 事務所エアコン更新' : '現場名（件名）', s.name);
+    if (name === null) return null;
+    name = name.trim();
+    if (!name) { toast('現場名を入れてください'); return null; }
+    var cust = prompt('お客様名', s.customer);
+    if (cust === null) return null;
+    var addr = prompt('工事場所（住所）', s.address);
+    if (addr === null) return null;
+    var tel = prompt('連絡先（任意）', s.tel);
+    if (tel === null) return null;
+    s.name = name; s.customer = cust.trim(); s.address = addr.trim(); s.tel = tel.trim();
+    return s;
+  }
+
+  $('#btn-new-site').addEventListener('click', function () {
+    var s = siteDialog(null);
+    if (!s) return;
+    s.id = 's' + Date.now() + Math.floor(Math.random() * 1000);
+    s.createdAt = new Date().toISOString();
+    var sites = loadSites();
+    sites.push(s);
+    if (saveSites(sites) === false) return;
+    openSiteId = s.id;
+    renderList();
+    toast('現場を作りました');
+  });
+
+  $('#btn-site-back').addEventListener('click', function () { openSiteId = null; renderList(); });
+
+  $('#btn-site-edit').addEventListener('click', function () {
+    var sites = loadSites();
+    var s = null;
+    sites.forEach(function (x) { if (x.id === openSiteId) s = x; });
+    if (!s) return;
+    if (!siteDialog(s)) return;
+    saveSites(sites);
+    renderList();
+    toast('現場情報を更新しました');
+  });
+
+  $('#btn-site-del').addEventListener('click', function () {
+    var s = findSite(openSiteId);
+    if (!s) return;
+    var n = estimatesOf(s.id).length;
+    if (!confirm('現場「' + s.name + '」を削除します。\n' +
+      (n ? 'この現場の見積 ' + n + '件も一緒に消えます。\n' : '') + 'よろしいですか？')) return;
+    saveSites(loadSites().filter(function (x) { return x.id !== s.id; }));
+    save(KEY_EST, load(KEY_EST, []).filter(function (e) { return e.siteId !== s.id; }));
+    openSiteId = null;
+    renderList();
+    toast('削除しました');
+  });
+
+  $('#site-search').addEventListener('input', function () { renderSiteList(); });
+
+  function renderList() {
+    migrateEstimatesToSites();
+    var showDetail = !!(openSiteId && findSite(openSiteId));
+    $('#site-list-card').style.display = showDetail ? 'none' : '';
+    $('#site-detail-card').style.display = showDetail ? '' : 'none';
+    if (showDetail) renderSiteDetail(); else renderSiteList();
+  }
+
+  function renderSiteList() {
+    var box = $('#site-list');
     box.innerHTML = '';
-    if (!list.length) {
-      box.appendChild(el('p', 'empty-note', 'まだ保存された見積はありません。'));
+    var q = ($('#site-search').value || '').trim().toLowerCase();
+    var sites = loadSites();
+    var ests = load(KEY_EST, []);
+
+    if (!sites.length) {
+      box.appendChild(el('p', 'empty-note',
+        'まだ現場がありません。「＋ 現場を追加」で作るか、見積を保存すると自動で作られます。'));
       return;
     }
-    list.sort(function (a, b) { return String(b.savedAt).localeCompare(String(a.savedAt)); });
+    var shown = sites.filter(function (s) {
+      if (!q) return true;
+      return ((s.name || '') + ' ' + (s.customer || '') + ' ' + (s.address || '')).toLowerCase().indexOf(q) >= 0;
+    });
+    if (!shown.length) { box.appendChild(el('p', 'empty-note', '見つかりませんでした。')); return; }
 
-    list.forEach(function (e) {
+    // 更新が新しい現場を上に
+    var lastOf = {};
+    ests.forEach(function (e) {
+      if (!e.siteId) return;
+      if (!lastOf[e.siteId] || String(e.savedAt) > lastOf[e.siteId]) lastOf[e.siteId] = String(e.savedAt);
+    });
+    shown.sort(function (a, b) {
+      return String(lastOf[b.id] || b.createdAt || '').localeCompare(String(lastOf[a.id] || a.createdAt || ''));
+    });
+
+    shown.forEach(function (s) {
+      var mine = ests.filter(function (e) { return e.siteId === s.id; });
+      var sum = mine.reduce(function (a, e) { return a + num(e.total); }, 0);
+      var row = el('button', 'site-row'); row.type = 'button';
+      var main = el('div', 'est-main');
+      main.appendChild(el('b', null, s.name));
+      main.appendChild(el('small', null,
+        (s.customer || '（お客様名なし）') + (s.address ? '　/　' + s.address : '')));
+      row.appendChild(main);
+      var right = el('div', 'site-right');
+      right.appendChild(el('div', 'est-amount', mine.length ? yen(sum) : '—'));
+      right.appendChild(el('small', null, '見積 ' + mine.length + '件'));
+      row.appendChild(right);
+      row.addEventListener('click', function () { openSiteId = s.id; renderList(); });
+      box.appendChild(row);
+    });
+  }
+
+  function renderSiteDetail() {
+    var s = findSite(openSiteId);
+    var box = $('#site-detail');
+    box.innerHTML = '';
+
+    var head = el('div', 'site-head');
+    head.appendChild(el('h2', 'card-title', s.name));
+    var sub = [s.customer, s.address, s.tel].filter(Boolean).join('　/　');
+    if (sub) head.appendChild(el('p', 'hint', sub));
+    box.appendChild(head);
+
+    var acts = el('div', 'card-actions site-acts');
+    var mk = el('button', 'btn btn-primary', '＋ この現場で見積を作る'); mk.type = 'button';
+    mk.addEventListener('click', function () { newEstimateForSite(s); });
+    acts.appendChild(mk);
+    box.appendChild(acts);
+
+    box.appendChild(renderSurveyBlock(s));
+
+    var mine = estimatesOf(s.id).sort(function (a, b) {
+      return String(b.savedAt).localeCompare(String(a.savedAt));
+    });
+    box.appendChild(el('div', 'site-sec-label', '見積（' + mine.length + '件）'));
+    if (!mine.length) {
+      box.appendChild(el('p', 'empty-note', 'まだ見積がありません。'));
+      return;
+    }
+    mine.forEach(function (e) {
       var row = el('div', 'est-row');
       var main = el('div', 'est-main');
-      main.appendChild(el('b', null, (e.customer || '（宛名なし）') + '　' + (e.subject || '')));
-      main.appendChild(el('small', null, e.no + '　/　' + jpDate(e.date)));
+      main.appendChild(el('b', null, e.no + '　' + (e.subject || s.name)));
+      main.appendChild(el('small', null, jpDate(e.date) + '　/　' + (e.customer || '')));
       row.appendChild(main);
       row.appendChild(el('div', 'est-amount', yen(e.total || 0)));
 
       var open = el('button', 'btn btn-ghost', '開く'); open.type = 'button';
-      open.addEventListener('click', function () {
-        st = clone(e);
-        delete st.total; delete st.savedAt;
-        fillMeta(); renderLines(); save(KEY_DRAFT, st);
-        $('.tab[data-view="edit"]').click();
-        toast('読み込みました');
-      });
+      open.addEventListener('click', function () { openEstimate(e); });
 
       var dup = el('button', 'btn btn-ghost', '複製'); dup.type = 'button';
       dup.addEventListener('click', function () {
-        st = clone(e);
-        delete st.total; delete st.savedAt;
-        st.id = 'e' + Date.now();
-        st.no = nextNo();
-        st.date = todayISO();
-        fillMeta(); renderLines(); save(KEY_DRAFT, st);
-        $('.tab[data-view="edit"]').click();
-        toast('複製しました');
+        var c = clone(e);
+        delete c.total; delete c.savedAt;
+        c.id = 'e' + Date.now();
+        c.no = nextNo();
+        c.date = todayISO();
+        openEstimate(c, '複製しました');
       });
 
       var del = el('button', 'btn btn-ghost btn-danger', '削除'); del.type = 'button';
       del.addEventListener('click', function () {
         if (!confirm('この見積を削除します。よろしいですか？\n' + e.no + '　' + (e.customer || ''))) return;
-        var cur = load(KEY_EST, []).filter(function (x) { return x.id !== e.id; });
-        save(KEY_EST, cur);
+        save(KEY_EST, load(KEY_EST, []).filter(function (x) { return x.id !== e.id; }));
         renderList();
         toast('削除しました');
       });
 
-      row.appendChild(open); row.appendChild(dup); row.appendChild(del);
+      var bill = el('button', 'btn btn-ghost', '請求書'); bill.type = 'button';
+      bill.title = 'この見積の金額で請求書を作ります';
+      bill.addEventListener('click', function () { makeInvoice(e, s); });
+
+      row.appendChild(open); row.appendChild(dup); row.appendChild(bill); row.appendChild(del);
       box.appendChild(row);
     });
+
+    box.appendChild(renderInvoiceBlock(s));
+  }
+
+  /* ======================================================================
+     請求書
+     ----------------------------------------------------------------------
+     見積の金額をそのまま引き継いで作る。見積は書き換えないので、
+     あとから見積を直しても、出した請求書はそのまま残る。
+     ====================================================================== */
+  function loadInvoices() { return load(KEY_INV, []); }
+  function invoicesOf(siteId) {
+    return loadInvoices().filter(function (v) { return v.siteId === siteId; });
+  }
+
+  function nextInvoiceNo() {
+    var d = todayISO().replace(/-/g, '');
+    var n = 1;
+    loadInvoices().forEach(function (v) {
+      var m = String(v.no || '').match(new RegExp('^' + d + '-(\\d+)$'));
+      if (m) n = Math.max(n, Number(m[1]) + 1);
+    });
+    return d + '-' + ('0' + n).slice(-2);
+  }
+
+  function makeInvoice(est, site) {
+    if (!(pb.company.name || '').trim()) {
+      toast('先に［自社情報］で会社名を登録してください');
+      $('.tab[data-view="settings"]').click();
+      return;
+    }
+    var days = prompt('お支払期限を、今日から何日後にしますか？\n（空欄なら期限なし）', '30');
+    if (days === null) return;
+
+    var v = clone(est);
+    delete v.savedAt;
+    v.id = 'v' + Date.now();
+    v.no = nextInvoiceNo();
+    v.date = todayISO();
+    v.doneDate = todayISO();
+    v.dueDate = String(days).trim() ? addDays(todayISO(), num(days)) : '';
+    v.estimateId = est.id;
+    v.estimateNo = est.no;
+    // 見積の「※本見積は…」という但し書きは請求書には合わないので引き継がない。
+    // 振込先は自社情報から自動で入るので、備考は空でよい。
+    v.note = '';
+    v.siteId = site.id;
+    v.total = calcOf(v).total;
+    v.savedAt = new Date().toISOString();
+
+    var list = loadInvoices();
+    list.push(v);
+    if (save(KEY_INV, list) === false) return;
+    renderList();
+    toast('請求書 ' + v.no + ' を作りました');
+  }
+
+  function renderInvoiceBlock(site) {
+    var wrap = el('div', 'inv-block');
+    var mine = invoicesOf(site.id).sort(function (a, b) {
+      return String(b.savedAt).localeCompare(String(a.savedAt));
+    });
+    wrap.appendChild(el('div', 'site-sec-label', '請求書（' + mine.length + '件）'));
+    if (!mine.length) {
+      wrap.appendChild(el('p', 'empty-note', 'まだ請求書はありません。上の見積の［請求書］から作れます。'));
+      return wrap;
+    }
+    mine.forEach(function (v) {
+      var row = el('div', 'est-row');
+      var main = el('div', 'est-main');
+      main.appendChild(el('b', null, v.no + '　' + (v.subject || site.name)));
+      main.appendChild(el('small', null,
+        '請求日 ' + jpDate(v.date) +
+        (v.dueDate ? '　/　支払期限 ' + jpDate(v.dueDate) : '') +
+        (v.estimateNo ? '　/　見積 ' + v.estimateNo + ' より' : '')));
+      row.appendChild(main);
+      row.appendChild(el('div', 'est-amount', yen(v.total || 0)));
+
+      var pr = el('button', 'btn btn-primary', '印刷 / PDF'); pr.type = 'button';
+      pr.addEventListener('click', function () { printInvoice(v); });
+
+      var ed = el('button', 'btn btn-ghost', '日付を直す'); ed.type = 'button';
+      ed.addEventListener('click', function () { editInvoiceDates(v); });
+
+      var del = el('button', 'btn btn-ghost btn-danger', '削除'); del.type = 'button';
+      del.addEventListener('click', function () {
+        if (!confirm('請求書 ' + v.no + ' を削除します。よろしいですか？')) return;
+        save(KEY_INV, loadInvoices().filter(function (x) { return x.id !== v.id; }));
+        renderList();
+        toast('削除しました');
+      });
+
+      row.appendChild(pr); row.appendChild(ed); row.appendChild(del);
+      wrap.appendChild(row);
+    });
+    return wrap;
+  }
+
+  function editInvoiceDates(v) {
+    var d1 = prompt('請求日（YYYY-MM-DD）', v.date);
+    if (d1 === null) return;
+    var d2 = prompt('工事完了日（YYYY-MM-DD／空欄可）', v.doneDate || '');
+    if (d2 === null) return;
+    var d3 = prompt('お支払期限（YYYY-MM-DD／空欄可）', v.dueDate || '');
+    if (d3 === null) return;
+    var list = loadInvoices();
+    list.forEach(function (x) {
+      if (x.id !== v.id) return;
+      x.date = d1.trim(); x.doneDate = d2.trim(); x.dueDate = d3.trim();
+    });
+    save(KEY_INV, list);
+    renderList();
+    toast('日付を直しました');
+  }
+
+  /* ======================================================================
+     全データのバックアップ（端末を移すとき用）
+     ====================================================================== */
+  $('#btn-export-all').addEventListener('click', function () {
+    var all = {
+      type: 'airtec-all',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      pricebook: pb,
+      models: load(KEY_MDL, null),
+      sites: loadSites(),
+      estimates: load(KEY_EST, []),
+      invoices: loadInvoices()
+    };
+    download('空調王-全データ-' + todayISO() + '.json', JSON.stringify(all));
+    toast('書き出しました');
+  });
+
+  $('#file-import-all').addEventListener('change', function (ev) {
+    readJSON(ev.target, function (data) {
+      if (!data || data.type !== 'airtec-all' || !data.pricebook) {
+        toast('「全部まとめて書き出す」で作ったファイルを選んでください');
+        return;
+      }
+      var n = {
+        単価: (data.pricebook.categories || []).reduce(function (a, c) { return a + (c.items || []).length; }, 0),
+        機種: data.models && data.models.rows ? data.models.rows.length : 0,
+        現場: (data.sites || []).length,
+        見積: (data.estimates || []).length,
+        請求書: (data.invoices || []).length
+      };
+      if (!confirm('この端末の内容を、読み込んだファイルで置き換えます。\n\n' +
+        '　単価　：' + n.単価 + '件\n' +
+        '　機種　：' + n.機種 + '件\n' +
+        '　現場　：' + n.現場 + '件\n' +
+        '　見積　：' + n.見積 + '件\n' +
+        '　請求書：' + n.請求書 + '件\n\n' +
+        'いまの内容は消えます。よろしいですか？')) return;
+
+      pb = data.pricebook;
+      pb.company  = Object.assign({}, DEFAULT_PRICEBOOK.company, pb.company || {});
+      pb.defaults = Object.assign({}, DEFAULT_PRICEBOOK.defaults, pb.defaults || {});
+      if (!Array.isArray(pb.categories)) pb.categories = [];
+      activeCat = pb.categories.length ? pb.categories[0].id : null;
+      if (savePB() === false) return;
+
+      if (data.models) save(KEY_MDL, data.models); else localStorage.removeItem(KEY_MDL);
+      saveSites(data.sites || []);
+      save(KEY_EST, data.estimates || []);
+      save(KEY_INV, data.invoices || []);
+
+      openSiteId = null;
+      chooserSel = {};
+      loadModels();
+      renderMaster(); renderPicker(); fillCompany(); renderList();
+      toast('読み込みました');
+    });
+  });
+
+  function printInvoice(v) {
+    buildSheet('invoice', v);
+    document.title = '請求書_' + (v.customer || '無題') + '_' + v.no;
+    setTimeout(function () { window.print(); }, 60);
+  }
+
+  /* ======================================================================
+     現地調査チェックシート
+     ----------------------------------------------------------------------
+     項目の中身は survey.js の SURVEY / SURVEY_HEAD。
+     入力した内容は、その現場の中（site.survey）に保存する。
+     ====================================================================== */
+
+  /** 現場に保存されている調査内容を取り出す（無ければ空） */
+  function surveyOf(site) { return site.survey || {}; }
+
+  /** 調査内容を書き戻して保存する */
+  function saveSurvey(siteId, data) {
+    var sites = loadSites();
+    var hit = null;
+    sites.forEach(function (s) { if (s.id === siteId) hit = s; });
+    if (!hit) return;
+    hit.survey = data;
+    hit.surveyAt = new Date().toISOString();
+    saveSites(sites);
+  }
+
+  /** 入力済みの項目数を数える（進み具合の表示用） */
+  function surveyFilled(data) {
+    var n = 0;
+    Object.keys(data || {}).forEach(function (k) {
+      var v = data[k];
+      if (Array.isArray(v)) { if (v.length) n++; }
+      else if (String(v || '').trim()) n++;
+    });
+    return n;
+  }
+
+  function surveyTotalFields() {
+    var n = SURVEY_HEAD.length;
+    SURVEY.forEach(function (s) { s.pairs.forEach(function (p) { n += p.length; }); });
+    return n;
+  }
+
+  function renderSurveyBlock(site) {
+    var wrap = el('div', 'survey-block');
+    var data = surveyOf(site);
+
+    // 現場に入っている情報は、調査シートにも先に入れておく（数える前にやる）
+    var pre = { '案件名': site.name, 'お客様名': site.customer, '現場住所': site.address, '連絡先': site.tel };
+    var filledFromSite = false;
+    Object.keys(pre).forEach(function (k) {
+      if (!String(data[k] || '').trim() && String(pre[k] || '').trim()) { data[k] = pre[k]; filledFromSite = true; }
+    });
+    if (filledFromSite) saveSurvey(site.id, data);
+
+    var head = el('div', 'survey-head');
+    head.appendChild(el('span', 'site-sec-label', '現地調査チェックシート'));
+    var cnt = el('span', 'survey-count', surveyFilled(data) + ' / ' + surveyTotalFields() + ' 項目');
+    head.appendChild(cnt);
+
+    var cp = el('button', 'btn btn-ghost btn-sm', 'コピー'); cp.type = 'button';
+    cp.title = '現場で入力した内容を文字にします。LINEなどで事務所に送ってください';
+    cp.addEventListener('click', function () { copySurvey(site); });
+    var ps = el('button', 'btn btn-ghost btn-sm', '貼り付け'); ps.type = 'button';
+    ps.title = '送られてきた文字を貼り付けて、このシートに取り込みます';
+    ps.addEventListener('click', function () { pasteSurvey(site); });
+    head.appendChild(cp); head.appendChild(ps);
+
+    var pr = el('button', 'btn btn-ghost btn-sm', '印刷 / PDF'); pr.type = 'button';
+    pr.addEventListener('click', function () { printSurvey(site, false); });
+    var bl = el('button', 'btn btn-ghost btn-sm', '白紙で印刷'); bl.type = 'button';
+    bl.title = '現場に持っていく用。何も記入されていない状態で印刷します';
+    bl.addEventListener('click', function () { printSurvey(site, true); });
+    head.appendChild(pr); head.appendChild(bl);
+    wrap.appendChild(head);
+
+    function touch() {
+      saveSurvey(site.id, data);
+      cnt.textContent = surveyFilled(data) + ' / ' + surveyTotalFields() + ' 項目';
+    }
+
+    var hd = el('details', 'survey-sec');
+    var hs = el('summary', null, '基本情報');
+    hd.appendChild(hs);
+    var hgrid = el('div', 'survey-grid');
+    SURVEY_HEAD.forEach(function (f) {
+      hgrid.appendChild(surveyField(f, data, touch));
+    });
+    hd.appendChild(hgrid);
+    wrap.appendChild(hd);
+
+    SURVEY.forEach(function (sec) {
+      var d = el('details', 'survey-sec');
+      d.appendChild(el('summary', null, sec.sec));
+      var grid = el('div', 'survey-grid');
+      sec.pairs.forEach(function (pair) {
+        pair.forEach(function (f) { grid.appendChild(surveyField(f, data, touch)); });
+      });
+      d.appendChild(grid);
+      wrap.appendChild(d);
+    });
+    return wrap;
+  }
+
+  /** 1項目分の入力欄を作る */
+  function surveyField(f, data, touch) {
+    var box = el('div', 'survey-f' + (f.t === 'memo' ? ' survey-f-wide' : ''));
+    box.appendChild(el('span', 'survey-k', f.k));
+
+    if (f.t === 'check' || f.t === 'checktext') {
+      if (!Array.isArray(data[f.k])) data[f.k] = [];
+      var opts = el('div', 'survey-opts');
+      f.o.forEach(function (o) {
+        var lab = el('label', 'survey-chk');
+        var cb = el('input'); cb.type = 'checkbox';
+        cb.checked = data[f.k].indexOf(o) >= 0;
+        cb.addEventListener('change', function () {
+          var i = data[f.k].indexOf(o);
+          if (cb.checked && i < 0) data[f.k].push(o);
+          if (!cb.checked && i >= 0) data[f.k].splice(i, 1);
+          touch();
+        });
+        lab.appendChild(cb);
+        lab.appendChild(el('span', null, o));
+        opts.appendChild(lab);
+      });
+      box.appendChild(opts);
+      if (f.t === 'checktext') {
+        var k2 = f.k + '_memo';
+        var ti = el('input', 'survey-sub'); ti.type = 'text';
+        ti.placeholder = f.ph || ''; ti.value = data[k2] || '';
+        ti.addEventListener('input', function () { data[k2] = ti.value; touch(); });
+        box.appendChild(ti);
+      }
+      return box;
+    }
+
+    if (f.t === 'memo') {
+      var ta = el('textarea'); ta.rows = 2; ta.value = data[f.k] || '';
+      ta.addEventListener('input', function () { data[f.k] = ta.value; touch(); });
+      box.appendChild(ta);
+      return box;
+    }
+
+    var inp = el('input'); inp.type = (f.t === 'date' ? 'date' : 'text');
+    inp.placeholder = f.ph || ''; inp.value = data[f.k] || '';
+    inp.addEventListener('input', function () { data[f.k] = inp.value; touch(); });
+    box.appendChild(inp);
+    return box;
+  }
+
+  /* ---------- 現調シートの受け渡し（現場のスマホ → 事務所のPC） ----------
+     LINEなどに貼れるよう、読んで分かる文字にする。
+     同じ形式をそのまま読み戻せるので、ファイルのやりとりが要らない。 */
+
+  /** 項目名から定義を引けるようにした一覧を作る */
+  function surveyFieldMap() {
+    var map = {};
+    SURVEY_HEAD.forEach(function (f) { map[f.k] = f; });
+    SURVEY.forEach(function (s) {
+      s.pairs.forEach(function (p) { p.forEach(function (f) { map[f.k] = f; }); });
+    });
+    return map;
+  }
+
+  var SURVEY_MARK = '【空調王】現調シート';
+
+  function surveyToText(site) {
+    var live = findSite(site.id) || site;
+    var data = surveyOf(live);
+    var out = [SURVEY_MARK, '現場: ' + (live.name || ''), ''];
+
+    function push(f) {
+      var v = data[f.k];
+      if (f.t === 'check' || f.t === 'checktext') {
+        if (Array.isArray(v) && v.length) out.push(f.k + ': ' + v.join(', '));
+        var m = data[f.k + '_memo'];
+        if (String(m || '').trim()) out.push(f.k + '(記入): ' + m);
+      } else if (String(v || '').trim()) {
+        out.push(f.k + ': ' + v);
+      }
+    }
+    out.push('■ 基本情報');
+    SURVEY_HEAD.forEach(push);
+    SURVEY.forEach(function (s) {
+      var before = out.length;
+      out.push('', '■ ' + s.sec);
+      s.pairs.forEach(function (p) { p.forEach(push); });
+      if (out.length === before + 2) out.length = before;   // 何も無いセクションは出さない
+    });
+    return out.join('\n');
+  }
+
+  function textToSurvey(text) {
+    if (String(text).indexOf(SURVEY_MARK) < 0) return null;
+    var map = surveyFieldMap();
+    var data = {};
+    var lastKey = null;
+    String(text).split(/\r?\n/).forEach(function (line) {
+      var m = line.match(/^([^:：]+)[:：][ 　]?(.*)$/);
+      var key = m ? m[1].trim() : null;
+      var memo = key && /\(記入\)$/.test(key);
+      var base = memo ? key.replace(/\(記入\)$/, '') : key;
+
+      if (key && map[base]) {
+        var f = map[base];
+        if (memo) { data[base + '_memo'] = m[2]; lastKey = base + '_memo'; }
+        else if (f.t === 'check' || f.t === 'checktext') {
+          data[base] = m[2].split(/[,、]/).map(function (x) { return x.trim(); })
+            .filter(function (x) { return f.o.indexOf(x) >= 0; });
+          lastKey = null;
+        } else { data[base] = m[2]; lastKey = base; }
+        return;
+      }
+      // 「見出し: 値」の形でない行は、直前の自由記入の続きとみなす（複数行メモ用）
+      if (lastKey && line.trim() && !/^■/.test(line) && !/^現場: /.test(line) && line !== SURVEY_MARK) {
+        data[lastKey] = (data[lastKey] || '') + '\n' + line;
+      }
+    });
+    return data;
+  }
+
+  function copySurvey(site) {
+    var txt = surveyToText(site);
+    function done() { toast('コピーしました。LINEなどに貼り付けて送ってください'); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(done, function () { fallbackCopy(txt, done); });
+    } else fallbackCopy(txt, done);
+  }
+
+  function fallbackCopy(txt, done) {
+    var ta = document.createElement('textarea');
+    ta.value = txt;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); done(); }
+    catch (e) { prompt('この文字をコピーして送ってください', txt); }
+    document.body.removeChild(ta);
+  }
+
+  function pasteSurvey(site) {
+    var txt = prompt('送られてきた文字を貼り付けて OK を押してください。\n' +
+      '（このシートの内容は置き換わります）');
+    if (txt === null) return;
+    var data = textToSurvey(txt);
+    if (!data) { toast('現調シートの文字ではないようです'); return; }
+    var n = surveyFilled(data);
+    if (!n) { toast('中身が読み取れませんでした'); return; }
+    if (!confirm(n + '項目を読み取りました。\nこの現場の現調シートを置き換えます。よろしいですか？')) return;
+    saveSurvey(site.id, data);
+    renderList();
+    toast(n + '項目を取り込みました');
+  }
+
+  /** 調査シートを紙と同じ形で印刷する。blank=true なら何も記入しない状態で出す */
+  function printSurvey(site, blank) {
+    // 画面が持っている現場は入力前の写しのことがあるので、保存済みを読み直す
+    var live = findSite(site.id) || site;
+    var data = blank ? {} : surveyOf(live);
+    site = live;
+    var esc2 = function (v) { return esc(String(v == null ? '' : v)); };
+
+    function cell(f) {
+      if (!f) return '<th class="sv-k"></th><td class="sv-v"></td>';
+      var v = '';
+      if (f.t === 'check' || f.t === 'checktext') {
+        var picked = Array.isArray(data[f.k]) ? data[f.k] : [];
+        v = f.o.map(function (o) {
+          return '<span class="sv-o">' + (picked.indexOf(o) >= 0 ? '☑' : '☐') + esc2(o) + '</span>';
+        }).join('');
+        if (f.t === 'checktext') v += '<span class="sv-sub">' + esc2(data[f.k + '_memo'] || (blank ? f.ph : '')) + '</span>';
+      } else {
+        var raw = data[f.k];
+        v = raw ? esc2(raw).replace(/\n/g, '<br>') : (blank && f.ph ? '<span class="sv-ph">' + esc2(f.ph) + '</span>' : '');
+      }
+      return '<th class="sv-k">' + esc2(f.k) + '</th><td class="sv-v">' + v + '</td>';
+    }
+
+    var html = '<div class="sheet-page sv-page">';
+    html += '<div class="sv-title">店舗・事務所・工場用　空調設備現場調査確認表</div>';
+
+    html += '<table class="sv-tbl sv-head">';
+    for (var i = 0; i < SURVEY_HEAD.length; i += 2) {
+      html += '<tr>' + cell(SURVEY_HEAD[i]) + cell(SURVEY_HEAD[i + 1]) + '</tr>';
+    }
+    html += '</table>';
+
+    SURVEY.forEach(function (sec) {
+      html += '<div class="sv-sec">' + esc2(sec.sec) + '</div>';
+      html += '<table class="sv-tbl">';
+      sec.pairs.forEach(function (p) {
+        html += '<tr>' + cell(p[0]) + cell(p[1]) + '</tr>';
+      });
+      html += '</table>';
+    });
+    html += '</div>';
+
+    $('#sheet').innerHTML = html;
+    document.title = '現場調査確認表_' + (site.name || '');
+    setTimeout(function () { window.print(); }, 60);
+  }
+
+  function openEstimate(e, msg) {
+    st = clone(e);
+    delete st.total; delete st.savedAt;
+    fillMeta(); renderLines(); save(KEY_DRAFT, st);
+    $('.tab[data-view="edit"]').click();
+    toast(msg || '読み込みました');
+  }
+
+  /** その現場の情報を引き継いで、新しい見積を始める */
+  function newEstimateForSite(s) {
+    st = newState();
+    st.siteId = s.id;
+    st.customer = s.customer;
+    st.honorific = s.honorific || '御中';
+    st.subject = s.name;
+    st.site = s.address;
+    fillMeta(); renderLines(); save(KEY_DRAFT, st);
+    $('.tab[data-view="edit"]').click();
+    toast('「' + s.name + '」の見積を作ります');
   }
 
   $('#btn-export-estimates').addEventListener('click', function () {
-    download('50airtec-見積データ-' + todayISO() + '.json', JSON.stringify(load(KEY_EST, []), null, 2));
+    // 現場と見積はセットでないと意味がないので、1つのファイルにまとめて出す
+    var bundle = { type: 'airtec-sites', sites: loadSites(), estimates: load(KEY_EST, []), invoices: loadInvoices() };
+    download('50airtec-現場データ-' + todayISO() + '.json', JSON.stringify(bundle, null, 2));
   });
   $('#file-import-estimates').addEventListener('change', function (ev) {
     readJSON(ev.target, function (data) {
-      if (!Array.isArray(data)) { toast('見積データの形式が違います'); return; }
-      if (!confirm('保存済みの見積を、読み込んだファイルの内容で置き換えます。よろしいですか？')) return;
-      save(KEY_EST, data);
-      renderList();
+      // 昔のバックアップは見積だけの配列。どちらでも読めるようにしておく
+      var sites = null, ests = null, invs = null;
+      if (Array.isArray(data)) { ests = data; }
+      else if (data && Array.isArray(data.estimates)) { ests = data.estimates; sites = data.sites || []; invs = data.invoices || []; }
+      if (!ests) { toast('見積データの形式が違います'); return; }
+
+      if (!confirm('保存済みの現場と見積を、読み込んだファイルの内容で置き換えます。よろしいですか？\n\n' +
+        '　現場：' + (sites ? sites.length + '件' : '（入っていません。件名から作り直します）') + '\n' +
+        '　見積：' + ests.length + '件\n' +
+        '　請求書：' + (invs ? invs.length + '件' : '（入っていません）'))) return;
+
+      save(KEY_EST, ests);
+      if (sites) saveSites(sites);
+      if (invs) save(KEY_INV, invs);
+      openSiteId = null;
+      renderList();              // 現場が無い古いデータは、ここで自動的にふり分けられる
       toast('読み込みました');
     });
   });
@@ -1624,15 +2400,18 @@
   /* ======================================================================
      見積書の印刷
      ====================================================================== */
-  function buildSheet() {
-    var t = calc();
+  function buildSheet(mode, doc) {
+    var d = doc || st;
+    mode = mode || 'estimate';
+    var inv = (mode === 'invoice');
+    var t = calcOf(d);
     var c = pb.company;
-    var to = (st.customer || '').trim();
-    var hon = st.honorific === '（なし）' ? '' : ('　' + st.honorific);
-    var validUntil = st.validDays ? jpDate(addDays(st.date, st.validDays)) + 'まで' : '';
+    var to = (d.customer || '').trim();
+    var hon = d.honorific === '（なし）' ? '' : ('　' + d.honorific);
+    var validUntil = d.validDays ? jpDate(addDays(d.date, d.validDays)) + 'まで' : '';
 
     var rowsHTML = '';
-    st.lines.forEach(function (l, i) {
+    d.lines.forEach(function (l, i) {
       rowsHTML +=
         '<tr>' +
           '<td class="t-no">' + (i + 1) + '</td>' +
@@ -1644,26 +2423,40 @@
         '</tr>';
     });
     // 見た目を整えるため最低12行になるよう空行を足す
-    for (var k = st.lines.length; k < 12; k++) {
+    for (var k = d.lines.length; k < 12; k++) {
       rowsHTML += '<tr><td class="t-no">&nbsp;</td><td></td><td class="t-qty"></td><td class="t-unit"></td><td class="t-price"></td><td class="t-amount"></td></tr>';
     }
 
     var sumHTML = '<tr><th>小計</th><td>' + Math.round(t.subtotal).toLocaleString('ja-JP') + '</td></tr>';
     if (t.overhead) sumHTML += '<tr><th>諸経費</th><td>' + t.overhead.toLocaleString('ja-JP') + '</td></tr>';
     if (t.discount) sumHTML += '<tr><th>値引き</th><td>-' + t.discount.toLocaleString('ja-JP') + '</td></tr>';
-    sumHTML += '<tr><th>消費税（' + st.tax + '%）</th><td>' + t.tax.toLocaleString('ja-JP') + '</td></tr>';
+    sumHTML += '<tr><th>消費税（' + d.tax + '%）</th><td>' + t.tax.toLocaleString('ja-JP') + '</td></tr>';
     sumHTML += '<tr class="grand"><th>合計</th><td>' + Math.round(t.total).toLocaleString('ja-JP') + '</td></tr>';
+    // 適格請求書は「税率ごとに区分した対価の額と消費税額」を書くことが決まっている。
+    // 空調工事は軽減税率の対象外なので、区分は1つ（標準税率）だけになる。
+    if (inv) {
+      sumHTML += '<tr class="tax-break"><th>' + d.tax + '%対象</th><td>' +
+        Math.round(t.taxable).toLocaleString('ja-JP') + '</td></tr>';
+      sumHTML += '<tr class="tax-break"><th>　うち消費税</th><td>' +
+        t.tax.toLocaleString('ja-JP') + '</td></tr>';
+    }
 
     var termsHTML = '';
     function term(k, v) {
       if (!v) return '';
       return '<div><span class="k">' + esc(k) + '</span><span class="v">' + esc(v) + '</span></div>';
     }
-    termsHTML += term('件　　名', st.subject);
-    termsHTML += term('工事場所', st.site);
-    termsHTML += term('工　　期', st.delivery);
-    termsHTML += term('お支払条件', st.payment);
-    termsHTML += term('有効期限', validUntil);
+    termsHTML += term('件　　名', d.subject);
+    termsHTML += term('工事場所', d.site);
+    if (inv) {
+      termsHTML += term('工事完了日', d.doneDate ? jpDate(d.doneDate) : '');
+      termsHTML += term('お支払期限', d.dueDate ? jpDate(d.dueDate) : '');
+      termsHTML += term('お支払条件', d.payment);
+    } else {
+      termsHTML += term('工　　期', d.delivery);
+      termsHTML += term('お支払条件', d.payment);
+      termsHTML += term('有効期限', validUntil);
+    }
 
     var sealMm = Math.min(45, Math.max(8, num(c.sealSizeMm) || 18));
     var sealHTML = c.sealImage
@@ -1690,18 +2483,23 @@
         '</div>' +
       '</div>';
 
-    var remarks = (st.note || '') + (c.bank ? '\n\n【お振込先】' + c.bank : '');
+    var remarks = (d.note || '') + (c.bank ? '\n\n【お振込先】' + c.bank : '');
 
     $('#sheet').innerHTML =
       '<div class="sheet-page">' +
-        '<div class="sheet-title">御見積書</div>' +
-        '<div class="sheet-meta">見積番号：' + esc(st.no) + '<br>発行日：' + esc(jpDate(st.date)) + '</div>' +
+        '<div class="sheet-title">' + (inv ? '御請求書' : '御見積書') + '</div>' +
+        '<div class="sheet-meta">' +
+          (inv ? '請求番号：' : '見積番号：') + esc(d.no) + '<br>' +
+          (inv ? '請求日：' : '発行日：') + esc(jpDate(d.date)) +
+        '</div>' +
         '<div class="sheet-head">' +
           '<div class="sheet-head-left">' +
             '<div class="sheet-to">' + esc(to || '　') + esc(hon) + '</div>' +
-            '<p class="sheet-lead">下記の通りお見積り申し上げます。</p>' +
+            '<p class="sheet-lead">' +
+              (inv ? '下記の通りご請求申し上げます。' : '下記の通りお見積り申し上げます。') +
+            '</p>' +
             '<div class="sheet-total-box">' +
-              '<span class="label">御見積金額</span>' +
+              '<span class="label">' + (inv ? 'ご請求金額' : '御見積金額') + '</span>' +
               '<span class="value">' + Math.round(t.total).toLocaleString('ja-JP') + ' 円</span>' +
               '<span class="tax-note">（消費税込）</span>' +
             '</div>' +
