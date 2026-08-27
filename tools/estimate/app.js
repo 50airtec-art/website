@@ -357,7 +357,15 @@
         savePBQuiet();
         toast('「' + r.item.name + '」を追加しました');
       });
-      box.appendChild(b);
+
+      // 選ぶ前に「これどんな材料だっけ」を確かめられるように、
+      // ボタンの右上に製品ページへのリンクを重ねておく。
+      // button の中に button は置けないので、外側の箱で包む。
+      var cell = el('div', 'item-cell');
+      cell.appendChild(b);
+      var pref = refButton(r.item.url, r.item.name);
+      if (pref) { pref.classList.add('item-ref'); b.classList.add('has-ref'); cell.appendChild(pref); }
+      box.appendChild(cell);
     });
 
     if (results.length > LIMIT) {
@@ -384,6 +392,76 @@
   /* 明細行の「掛率」プルダウンの選択肢（定価の何%で出すか） */
   var RATES = [100, 95, 90, 85, 80, 75, 70, 65, 60, 55, 50];
 
+  /* ------------------------------------------------------------------
+     明細行を「つかんで動かす」並び替え。
+     マウスでも指でも同じように動くよう pointer イベントで扱う。
+     動かしている間は見た目（DOM）だけ入れ替え、指を離したときに
+     はじめてデータの順番を入れ替えて、行を作り直す。
+     ------------------------------------------------------------------ */
+  var drag = null;
+
+  function startDrag(ev, tr, from) {
+    if (ev.button != null && ev.button !== 0) return;   // 左ボタンと指だけ
+    ev.preventDefault();
+    var handle = ev.currentTarget, tb = $('#lines-body');
+    drag = { tb: tb, tr: tr, from: from, handle: handle, pid: ev.pointerId };
+    tr.classList.add('is-dragging');
+    tb.classList.add('is-reordering');
+    // 監視は書類全体に付ける。
+    // つまみは動かす行の中にあるので、行を入れ替えた瞬間につまみも
+    // いったん外れてしまい、つまみに付けた監視では「指を離した」を
+    // 取り逃す。書類全体で見ていればそれが起きない。
+    document.addEventListener('pointermove', onDragMove);
+    document.addEventListener('pointerup', endDrag);
+    document.addEventListener('pointercancel', endDrag);
+    window.addEventListener('blur', endDrag);
+  }
+
+  function onDragMove(ev) {
+    if (!drag) return;
+    ev.preventDefault();
+    var rows = Array.prototype.slice.call(drag.tb.children);
+    var cur = rows.indexOf(drag.tr);
+    if (cur < 0 || !rows.length) return;
+
+    var y = ev.clientY, target = null;
+    for (var k = 0; k < rows.length; k++) {
+      var r = rows[k].getBoundingClientRect();
+      if (y >= r.top && y <= r.bottom) { target = k; break; }
+    }
+    if (target === null) {
+      // 表からはみ出したら、いちばん上／いちばん下に寄せる
+      if (y < rows[0].getBoundingClientRect().top) target = 0;
+      else if (y > rows[rows.length - 1].getBoundingClientRect().bottom) target = rows.length - 1;
+      else return;
+    }
+    if (target === cur) return;
+
+    var ref = rows[target];
+    if (target < cur) drag.tb.insertBefore(drag.tr, ref);
+    else drag.tb.insertBefore(drag.tr, ref.nextSibling);
+  }
+
+  function endDrag() {
+    if (!drag) return;
+    var d = drag; drag = null;
+
+    document.removeEventListener('pointermove', onDragMove);
+    document.removeEventListener('pointerup', endDrag);
+    document.removeEventListener('pointercancel', endDrag);
+    window.removeEventListener('blur', endDrag);
+    d.tr.classList.remove('is-dragging');
+    d.tb.classList.remove('is-reordering');
+
+    var to = Array.prototype.indexOf.call(d.tb.children, d.tr);
+    if (to >= 0 && to !== d.from) {
+      st.lines.splice(to, 0, st.lines.splice(d.from, 1)[0]);
+      persistDraft();
+    }
+    // 各行が覚えている「自分は何行目か」がずれるので、必ず作り直す
+    renderLines();
+  }
+
   function renderLines() {
     var tb = $('#lines-body');
     tb.innerHTML = '';
@@ -393,15 +471,31 @@
     st.lines.forEach(function (l, i) {
       var tr = el('tr');
 
-      // 並び替え
+      // 並び替え：つまみをつかんで動かす。矢印でも1つずつ動かせる
       var tdMove = el('td', 'c-move');
+      var mvWrap = el('div', 'move-wrap');
+
+      var grip = el('div', 'row-grip', '⠿');
+      grip.title = 'つかんで上下に動かすと、行の順番を入れ替えられます';
+      grip.tabIndex = 0;
+      grip.setAttribute('role', 'button');
+      grip.setAttribute('aria-label', (i + 1) + '行目をつかんで並び替える');
+      grip.addEventListener('pointerdown', function (ev) { startDrag(ev, tr, i); });
+      grip.addEventListener('keydown', function (ev) {
+        // マウスが使いにくいときのために、上下キーでも動かせるようにしておく
+        if (ev.key === 'ArrowUp') { ev.preventDefault(); moveLine(i, -1, true); }
+        else if (ev.key === 'ArrowDown') { ev.preventDefault(); moveLine(i, 1, true); }
+      });
+      mvWrap.appendChild(grip);
+
       var mv = el('div', 'move-btns');
       var up = el('button', 'icon-btn', '▲'); up.type = 'button'; up.title = '上へ';
       var dn = el('button', 'icon-btn', '▼'); dn.type = 'button'; dn.title = '下へ';
       up.addEventListener('click', function () { moveLine(i, -1); });
       dn.addEventListener('click', function () { moveLine(i, 1); });
       mv.appendChild(up); mv.appendChild(dn);
-      tdMove.appendChild(mv);
+      mvWrap.appendChild(mv);
+      tdMove.appendChild(mvWrap);
       tr.appendChild(tdMove);
 
       // 品名・仕様
@@ -569,7 +663,7 @@
     toast('「' + cat.name + '」に登録しました');
   }
 
-  function moveLine(i, dir) {
+  function moveLine(i, dir, keepFocus) {
     var j = i + dir;
     if (j < 0 || j >= st.lines.length) return;
     var tmp = st.lines[i];
@@ -577,6 +671,12 @@
     st.lines[j] = tmp;
     renderLines();
     persistDraft();
+    // 上下キーで動かしたときは、動いた行のつまみに焦点を戻して続けて押せるようにする
+    if (keepFocus) {
+      var row = $('#lines-body').children[j];
+      var g = row && row.querySelector('.row-grip');
+      if (g) g.focus();
+    }
   }
 
   function renderTotals() {

@@ -161,6 +161,12 @@ input:focus, select:focus, textarea:focus {
 .item-btn b { display: block; font-size: 13px; font-weight: 600; }
 .item-btn em { display: block; font-style: normal; font-size: 11px; color: var(--text-light); }
 .item-btn span { display: block; font-size: 12px; color: var(--accent); font-weight: 600; margin-top: 2px; }
+/* 単価の一覧：ボタンの右上に製品ページへのリンクを重ねる */
+.item-cell { position: relative; display: flex; }
+.item-cell .item-btn { flex: 1 1 auto; min-width: 0; }
+.item-btn.has-ref { padding-right: 30px; }
+.item-ref { position: absolute; top: 4px; right: 4px; margin: 0; }
+
 .picker-empty { grid-column: 1 / -1; font-size: 13px; color: var(--text-light); padding: 10px; }
 
 /* ---------- 明細テーブル ---------- */
@@ -174,7 +180,7 @@ table.lines td { padding: 4px; border-bottom: 1px solid #f0f2f4; vertical-align:
 table.lines input { border-color: transparent; background: transparent; padding: 6px 8px; }
 table.lines input:hover { border-color: var(--border); background: #fff; }
 table.lines input:focus { background: #fff; }
-.c-move { width: 34px; }
+.c-move { width: 48px; }
 .c-qty { width: 84px; }
 .c-unit { width: 70px; }
 .c-rate { width: 78px; }
@@ -206,6 +212,21 @@ td.c-qty input, td.c-price input { text-align: right; font-variant-numeric: tabu
   font-family: var(--font-mono, ui-monospace, "SFMono-Regular", Consolas, monospace);
 }
 .paste-box .csv-btns { margin-top: 8px; }
+/* ---------- 並び替え（つかんで動かす） ---------- */
+.move-wrap { display: flex; align-items: center; gap: 1px; }
+.row-grip {
+  cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
+  color: var(--text-light); font-size: 15px; line-height: 1; letter-spacing: -1px;
+  padding: 7px 3px; border-radius: 5px;
+}
+.row-grip:hover { background: var(--accent-soft); color: var(--accent); }
+.row-grip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.row-grip:active, tbody.is-reordering .row-grip { cursor: grabbing; }
+tbody.is-reordering { cursor: grabbing; }
+tr.is-dragging {
+  background: var(--accent-soft); opacity: .8;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .16);
+}
 .move-btns { display: flex; flex-direction: column; }
 .move-btns .icon-btn { padding: 0 4px; font-size: 11px; }
 .move-btns .icon-btn:hover { color: var(--accent); }
