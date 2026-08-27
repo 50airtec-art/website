@@ -1432,6 +1432,49 @@
     document.body.removeChild(ta);
   }
 
+  /* 現場一覧から貼り付けたとき。文字の中の「現場: ○○」を見て、
+     同じ名前の現場が無ければ作ってから取り込む（スマホで作った現場をPCに持ってくる用） */
+  $('#btn-paste-survey').addEventListener('click', function () {
+    var txt = prompt('現場から送られてきた文字を貼り付けて OK を押してください。\n' +
+      '同じ名前の現場が無ければ、新しく作ります。');
+    if (txt === null) return;
+    var data = textToSurvey(txt);
+    if (!data) { toast('現調シートの文字ではないようです'); return; }
+    var n = surveyFilled(data);
+    if (!n) { toast('中身が読み取れませんでした'); return; }
+
+    var m = String(txt).match(/^現場:[ 　]?(.+)$/m);
+    var name = (m ? m[1] : '').trim() || String(data['案件名'] || '').trim();
+    if (!name) { toast('現場名が読み取れませんでした'); return; }
+
+    var sites = loadSites();
+    var hit = null;
+    sites.forEach(function (s) { if (s.name === name) hit = s; });
+
+    if (!confirm(hit
+      ? '現場「' + name + '」の現調シートを、' + n + '項目の内容で置き換えます。よろしいですか？'
+      : '現場「' + name + '」を新しく作って、' + n + '項目の現調シートを入れます。よろしいですか？')) return;
+
+    if (!hit) {
+      hit = {
+        id: 's' + Date.now() + Math.floor(Math.random() * 1000),
+        name: name,
+        customer: String(data['お客様名'] || '').trim(),
+        honorific: '御中',
+        address: String(data['現場住所'] || '').trim(),
+        tel: String(data['連絡先'] || '').trim(),
+        memo: '',
+        createdAt: new Date().toISOString()
+      };
+      sites.push(hit);
+      if (saveSites(sites) === false) return;
+    }
+    saveSurvey(hit.id, data);
+    openSiteId = hit.id;
+    renderList();
+    toast(n + '項目を取り込みました（' + name + '）');
+  });
+
   function pasteSurvey(site) {
     var txt = prompt('送られてきた文字を貼り付けて OK を押してください。\n' +
       '（このシートの内容は置き換わります）');
