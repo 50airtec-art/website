@@ -30,6 +30,12 @@
     </div>
   </header>
 
+  <div class="bk-warn" id="bk-warn" style="display:none">
+    <span id="bk-warn-text"></span>
+    <button class="btn btn-primary btn-sm" id="btn-bk-warn-save">いますぐ保存</button>
+    <button class="btn btn-ghost btn-sm" id="btn-bk-warn-hide">あとで</button>
+  </div>
+
   <main class="wrap">
 
     <!-- ============ 見積作成 ============ -->
@@ -279,6 +285,24 @@
         <div class="csv-btns">
           <button class="btn btn-primary" id="btn-export-all">全部まとめて書き出す</button>
           <label class="btn btn-ghost file-btn">まとめて読み込む<input type="file" id="file-import-all" accept="application/json"></label>
+        </div>
+
+        <div class="bk-box" id="bk-box">
+          <div class="bk-head">
+            <strong>かんたんバックアップ</strong>
+            <span>保存先を1回決めておけば、次からはボタン1つで上書き保存できます。
+              <b>OneDrive の中に置くと、そのままクラウドにも残ります。</b></span>
+          </div>
+          <div class="bk-row">
+            <div class="bk-info">
+              <div>保存先：<span id="bk-target">まだ決めていません</span></div>
+              <div>最終バックアップ：<span id="bk-last">まだ</span></div>
+            </div>
+            <div class="csv-btns">
+              <button class="btn btn-primary" id="btn-bk-save">いますぐ保存</button>
+              <button class="btn btn-ghost" id="btn-bk-pick">保存先を決める</button>
+            </div>
+          </div>
         </div>
       </div>
 

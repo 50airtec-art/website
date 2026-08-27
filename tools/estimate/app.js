@@ -993,8 +993,8 @@
   /* ======================================================================
      全データのバックアップ（端末を移すとき用）
      ====================================================================== */
-  $('#btn-export-all').addEventListener('click', function () {
-    var all = {
+  function buildAllData() {
+    return {
       type: 'airtec-all',
       version: 1,
       exportedAt: new Date().toISOString(),
@@ -1004,9 +1004,149 @@
       estimates: load(KEY_EST, []),
       invoices: loadInvoices()
     };
-    download('空調王-全データ-' + todayISO() + '.json', JSON.stringify(all));
+  }
+
+  $('#btn-export-all').addEventListener('click', function () {
+    download('空調王-全データ-' + todayISO() + '.json', JSON.stringify(buildAllData()));
+    markBackedUp('（ダウンロード）');
     toast('書き出しました');
   });
+
+  /* ---------- かんたんバックアップ ----------
+     保存先のファイルを1回決めておくと、次からは上書き保存できる。
+     OneDrive の中に置けば、そのままクラウドにも残る。
+     （この機能はパソコンのChrome/Edge向け。スマホでは通常のダウンロードになる） */
+  var KEY_BK = 'airtec_backup_meta_v1';
+  var BK_DAYS = 14;                       // 何日空いたら知らせるか
+  var canPickFile = (typeof window.showSaveFilePicker === 'function');
+  var bkHandle = null;
+
+  /* 保存先そのもの（ファイルハンドル）は localStorage に入れられないので IndexedDB に置く */
+  function idb(fn) {
+    return new Promise(function (res, rej) {
+      var q = indexedDB.open('airtec', 1);
+      q.onupgradeneeded = function () { q.result.createObjectStore('kv'); };
+      q.onerror = function () { rej(q.error); };
+      q.onsuccess = function () {
+        // put() などはその場でエラーを投げることがある。
+        // ここで受け止めないと、待っている側が永久に止まってしまう。
+        try {
+          var db = q.result;
+          var tx = db.transaction('kv', 'readwrite');
+          var r = fn(tx.objectStore('kv'));
+          r.onsuccess = function () { res(r.result); };
+          r.onerror = function () { rej(r.error); };
+          tx.onabort = function () { rej(tx.error); };
+        } catch (e) { rej(e); }
+      };
+    });
+  }
+  function idbSet(k, v) { return idb(function (s) { return s.put(v, k); }); }
+  function idbGet(k) { return idb(function (s) { return s.get(k); }); }
+
+  function bkMeta() { return load(KEY_BK, { lastAt: '', name: '' }); }
+  function markBackedUp(name) {
+    var m = bkMeta();
+    m.lastAt = new Date().toISOString();
+    if (name) m.name = name;
+    save(KEY_BK, m);
+    renderBackupState();
+  }
+  function daysSinceBackup() {
+    var m = bkMeta();
+    if (!m.lastAt) return Infinity;
+    return (Date.now() - new Date(m.lastAt).getTime()) / 86400000;
+  }
+
+  function renderBackupState() {
+    var m = bkMeta();
+    var t = $('#bk-target'), l = $('#bk-last');
+    if (!t) return;
+    t.textContent = bkHandle ? (bkHandle.name || m.name || '設定済み')
+      : (canPickFile ? 'まだ決めていません' : 'この端末ではダウンロード保存になります');
+    l.textContent = m.lastAt
+      ? jpDate(m.lastAt.slice(0, 10)) + '（' + Math.floor(daysSinceBackup()) + '日前）' + (m.name ? '　' + m.name : '')
+      : 'まだ';
+    $('#btn-bk-pick').style.display = canPickFile ? '' : 'none';
+
+    var d = daysSinceBackup();
+    var warn = $('#bk-warn');
+    if (d === Infinity || d >= BK_DAYS) {
+      $('#bk-warn-text').textContent = (d === Infinity)
+        ? 'まだ一度もバックアップしていません。ブラウザの閲覧データを消すと、入力した内容はすべて消えます。'
+        : Math.floor(d) + '日バックアップしていません。';
+      warn.style.display = '';
+    } else warn.style.display = 'none';
+  }
+
+  async function pickBackupFile() {
+    var h;
+    try {
+      h = await window.showSaveFilePicker({
+        suggestedName: '空調王-全データ.json',
+        types: [{ description: '空調王のバックアップ', accept: { 'application/json': ['.json'] } }]
+      });
+    } catch (e) { return; }          // 選ぶのをやめた場合。何もしない
+    if (!h) return;
+
+    bkHandle = h;
+    var m = bkMeta(); m.name = h.name; save(KEY_BK, m);
+    // 保存先の記憶に失敗しても、今回の保存は続ける（次回また選んでもらえばよい）
+    var remembered = true;
+    try { await idbSet('backupHandle', h); } catch (e) { remembered = false; }
+    renderBackupState();
+    if (await writeBackup(true)) {
+      toast(remembered
+        ? '保存先を決めました。次からは「いますぐ保存」だけでOKです'
+        : '保存しました（保存先を覚えられなかったので、次回もう一度選んでください）');
+    }
+  }
+
+  async function writeBackup(silent) {
+    if (!bkHandle) {
+      // 保存先が無いときは、いつものダウンロードで保存する
+      download('空調王-全データ-' + todayISO() + '.json', JSON.stringify(buildAllData()));
+      markBackedUp('（ダウンロード）');
+      if (!silent) toast('書き出しました');
+      return true;
+    }
+    try {
+      var p = await bkHandle.queryPermission({ mode: 'readwrite' });
+      if (p !== 'granted') p = await bkHandle.requestPermission({ mode: 'readwrite' });
+      if (p !== 'granted') { toast('保存先への書き込みが許可されませんでした'); return false; }
+      var w = await bkHandle.createWritable();
+      await w.write(JSON.stringify(buildAllData()));
+      await w.close();
+      markBackedUp(bkHandle.name);
+      if (!silent) toast('保存しました（' + bkHandle.name + '）');
+      return true;
+    } catch (e) {
+      toast('保存できませんでした。「保存先を決める」からやり直してください');
+      return false;
+    }
+  }
+
+  $('#btn-bk-pick').addEventListener('click', function () { pickBackupFile(); });
+  $('#btn-bk-save').addEventListener('click', function () { writeBackup(false); });
+  $('#btn-bk-warn-save').addEventListener('click', function () { writeBackup(false); });
+  $('#btn-bk-warn-hide').addEventListener('click', function () { $('#bk-warn').style.display = 'none'; });
+
+  /* 起動時：保存先が生きていて、しばらく保存していなければ静かに保存しておく */
+  async function initBackup() {
+    if (canPickFile) {
+      try {
+        var h = await idbGet('backupHandle');
+        if (h) {
+          bkHandle = h;
+          var p = await h.queryPermission({ mode: 'readwrite' });
+          if (p === 'granted' && daysSinceBackup() >= 1) {
+            if (await writeBackup(true)) toast('バックアップを保存しました');
+          }
+        }
+      } catch (e) { /* 使えなければ手動保存にまかせる */ }
+    }
+    renderBackupState();
+  }
 
   $('#file-import-all').addEventListener('change', function (ev) {
     readJSON(ev.target, function (data) {
@@ -1045,6 +1185,7 @@
       chooserSel = {};
       loadModels();
       renderMaster(); renderPicker(); fillCompany(); renderList();
+      renderBackupState();
       toast('読み込みました');
     });
   });
@@ -2547,6 +2688,7 @@
   renderLines();
   fillCompany();
   loadModels();
+  initBackup();
 
   // はじめて開いたときは、自社情報の登録から始めてもらう
   if (!(pb.company.name || '').trim()) {
