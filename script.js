@@ -162,12 +162,13 @@ function handleSubmit(e) {
   e.preventDefault();
   const form = e.target;
   const toast = document.getElementById('toast');
+  const selectedService = form.service ? form.service.value : '';
 
   const data = new FormData();
   data.append(GOOGLE_FORM.entries.name,    form.name.value || '');
   data.append(GOOGLE_FORM.entries.company, form.company.value || '');
   data.append(GOOGLE_FORM.entries.email,   form.email.value || '');
-  data.append(GOOGLE_FORM.entries.service, form.service.value || '');
+  data.append(GOOGLE_FORM.entries.service, selectedService);
   data.append(GOOGLE_FORM.entries.message, form.message.value || '');
 
   const url = `https://docs.google.com/forms/d/e/${GOOGLE_FORM.formId}/formResponse`;
@@ -178,8 +179,42 @@ function handleSubmit(e) {
     mode: 'no-cors',
     body: data
   }).finally(() => {
+    trackContactEvent('form', selectedService || 'contact_form');
     toast.classList.add('show');
     form.reset();
     setTimeout(() => toast.classList.remove('show'), 3500);
   });
 }
+
+// ---------- Contact conversion tracking (GA4) ----------
+// tel / LINE / メールフォームの問い合わせ行動を GA4 に記録
+function trackContactEvent(method, label, extra) {
+  if (typeof gtag !== 'function') return;
+  try {
+    const params = Object.assign({
+      method: method,
+      contact_method: method,
+      event_category: 'contact',
+      event_label: label || method,
+      page_path: location.pathname
+    }, extra || {});
+    // 標準推奨イベント名（GA4 で自動的にコンバージョン化しやすい）
+    gtag('event', 'generate_lead', params);
+    // 手法別の詳細イベント（フィルタリング用）
+    gtag('event', 'contact_' + method + '_click', params);
+  } catch (_) {
+    // no-op — 計測失敗はサイト機能を止めない
+  }
+}
+
+// クリック委譲: すべての a[href] を監視
+document.addEventListener('click', function (e) {
+  const a = e.target.closest && e.target.closest('a[href]');
+  if (!a) return;
+  const href = a.getAttribute('href') || '';
+  if (href.indexOf('tel:') === 0) {
+    trackContactEvent('tel', href.replace('tel:', '').trim());
+  } else if (/lin\.ee\//i.test(href) || /line\.me\//i.test(href)) {
+    trackContactEvent('line', 'friend_add');
+  }
+});
