@@ -2497,7 +2497,10 @@
      機種データは容量節約のため「辞書＋番号」で保存されているので、
      読み込むときに元の文字列に戻してから使う。
      ====================================================================== */
-  var models = null;        // { maker, brand, note, items:[...] }
+  // メーカーごとの「機種データ」をまとめて持つ。
+  // { packs:[各メーカー], items:[全メーカーぶんを1本にしたもの], seriesOrder, typeOrder }
+  var models = null;
+  var modelRaws = [];       // 保存されている生のデータ（削除するときに使う）
 
   /** 保存されている機種データを、使える形（配列）にほどく */
   function decodeModels(p) {
@@ -2522,22 +2525,81 @@
     };
   }
 
+  /** 同じメーカー・同じシリーズ群かどうかを見分ける鍵 */
+  function packKey(p) { return (p && p.maker || '') + '｜' + (p && p.brand || ''); }
+
+  /** 保存されている中身を「メーカーごとの配列」にそろえる。
+      以前は1メーカーぶんだけを直に入れていたので、その形も読めるようにしておく。 */
+  function rawPacks(raw) {
+    if (!raw) return [];
+    if (Array.isArray(raw.packs)) return raw.packs;
+    return [raw];
+  }
+
   function loadModels() {
-    models = decodeModels(load(KEY_MDL, null));
+    var packs = [];
+    modelRaws = [];
+    rawPacks(load(KEY_MDL, null)).forEach(function (r) {
+      var d = decodeModels(r);
+      if (d && d.items.length) { packs.push(d); modelRaws.push(r); }
+    });
+
+    if (!packs.length) {
+      models = null;
+    } else {
+      // 全メーカーぶんを1本の配列にまとめる。どのメーカーの機種かは mk に持たせる
+      var items = [], so = [], to = [];
+      packs.forEach(function (p) {
+        p.items.forEach(function (x) { x.mk = p.maker; items.push(x); });
+        p.seriesOrder.forEach(function (v) { if (so.indexOf(v) < 0) so.push(v); });
+        p.typeOrder.forEach(function (v) { if (to.indexOf(v) < 0) to.push(v); });
+      });
+      models = { packs: packs, items: items, seriesOrder: so, typeOrder: to };
+    }
     renderModelsStatus();
     renderChooser();
   }
 
   function renderModelsStatus() {
-    var el2 = $('#models-status');
-    if (!el2) return;
-    if (!models) { el2.textContent = 'まだ読み込まれていません。'; return; }
-    el2.textContent = models.maker + '　' + models.brand + '　' + models.items.length +
-      '機種　（取得日 ' + models.fetched + '）　' + models.note;
+    var box = $('#models-status');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!models) { box.textContent = 'まだ読み込まれていません。'; return; }
+
+    models.packs.forEach(function (p, i) {
+      var row = el('div', 'models-row');
+      row.appendChild(el('b', null, p.maker + '　' + p.brand));
+      row.appendChild(el('span', 'models-num', p.items.length + '機種'));
+      if (p.fetched) row.appendChild(el('span', null, '取得日 ' + p.fetched));
+      if (p.note) row.appendChild(el('span', 'models-note', p.note));
+
+      var del = el('button', 'icon-btn', '✕');
+      del.type = 'button';
+      del.title = p.maker + ' の機種データだけを削除';
+      del.addEventListener('click', function () { removePack(i); });
+      row.appendChild(del);
+      box.appendChild(row);
+    });
+  }
+
+  /** メーカー1つぶんだけ消す */
+  function removePack(i) {
+    var p = models && models.packs[i];
+    if (!p) return;
+    if (!confirm(p.maker + '　' + p.brand + ' の機種データを削除します。よろしいですか？\n\n' +
+                 '（ほかのメーカーは残ります。見積の明細に入れた機器もそのまま残ります）')) return;
+    var raws = modelRaws.slice();
+    raws.splice(i, 1);
+    if (raws.length) { if (save(KEY_MDL, { v: 2, packs: raws }) === false) return; }
+    else localStorage.removeItem(KEY_MDL);
+    chooserSel = {};
+    loadModels();
+    toast(p.maker + ' の機種データを削除しました');
   }
 
   /* 絞り込みの順番。ここの並びがそのまま画面の手順になる */
   var STEPS = [
+    { k: 'mk', label: 'メーカー' },
     { k: 's',  label: 'シリーズ' },
     { k: 'i',  label: '室内機タイプ' },
     { k: 'hp', label: '馬力', fmt: function (v) { return v + '馬力'; } },
@@ -2585,7 +2647,7 @@
         '機種データがまだありません。［単価マスタ］タブの「機種データを選ぶ」から読み込むと、ここでシリーズ・馬力・電源などから機器を選べるようになります。'));
       return;
     }
-    srcEl.textContent = models.maker + ' ' + models.brand;
+    srcEl.textContent = models.packs.map(function (p) { return p.maker + ' ' + p.brand; }).join('　／　');
 
     // 手順を上から順に出す。前の手順が決まっていない段階では、その先は出さない。
     for (var i = 0; i < STEPS.length; i++) {
@@ -2655,7 +2717,7 @@
       b.appendChild(el('small', null, '室外機 ' + x.om + '／室内機 ' + x.im + (x.pm ? '／パネル ' + x.pm : '') + (x.rm ? '／リモコン ' + x.rm : '')));
       b.addEventListener('click', function () {
         addLine({
-          name: models.maker + ' ' + x.s + ' ' + x.i,
+          name: (x.mk || '') + ' ' + x.s + ' ' + x.i,
           spec: [x.m, x.ab, x.tp, x.pw === '三相' ? '三相200V' : '単相200V', x.rc, x.opt].filter(Boolean).join('　'),
           qty: 1,
           unit: '台',
@@ -2686,17 +2748,24 @@
       catch (e) { toast('機種データの形式が違います（JSONではありません）'); return; }
       var decoded = decodeModels(data);
       if (!decoded || !decoded.items.length) { toast('機種データの中身が読み取れませんでした'); return; }
-      if (save(KEY_MDL, data) === false) return;
+      // 同じメーカー・同じシリーズ群のものがあれば入れ替え、無ければ足す
+      var raws = rawPacks(load(KEY_MDL, null));
+      var at = -1;
+      raws.forEach(function (r, i) { if (packKey(r) === packKey(data)) at = i; });
+      if (at >= 0) raws[at] = data; else raws.push(data);
+
+      if (save(KEY_MDL, { v: 2, packs: raws }) === false) return;
       chooserSel = {};
       loadModels();
-      toast(decoded.maker + ' の機種データ ' + decoded.items.length + '件を読み込みました');
+      toast(decoded.maker + '　' + decoded.brand + ' の機種データ ' + decoded.items.length + '件を' +
+            (at >= 0 ? '入れ替えました' : '追加しました'));
     };
     r.readAsText(f);
   });
 
   $('#btn-models-clear').addEventListener('click', function () {
     if (!models) return;
-    if (!confirm('機種データを削除します。よろしいですか？\n（見積の明細に入れた機器はそのまま残ります）')) return;
+    if (!confirm('読み込んだ機種データを、すべてのメーカーぶん削除します。よろしいですか？\n（見積の明細に入れた機器はそのまま残ります）')) return;
     localStorage.removeItem(KEY_MDL);
     chooserSel = {};
     loadModels();

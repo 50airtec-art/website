@@ -614,3 +614,14 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
 /* 単価表の色分け：入力欄も行の色を受け継ぐ */
 .mrow input { color: inherit; }
 .item-btn b, .item-btn .item-code { color: inherit; }
+
+/* ---------- 読み込んだ機種データ（メーカーごと） ---------- */
+.models-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 6px 0; border-bottom: 1px dashed var(--border);
+}
+.models-row:last-child { border-bottom: 0; }
+.models-row b { font-size: 13px; color: var(--text); }
+.models-num { font-weight: 600; color: var(--accent); }
+.models-note { color: var(--text-light); }
+.models-row .icon-btn { margin-left: auto; }
