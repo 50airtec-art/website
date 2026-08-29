@@ -2911,12 +2911,74 @@
       '</div>';
   }
 
+  /* ---------- プレビュー ----------
+     印刷用に組んだ #sheet を、そのまま画面にかぶせて見せる。
+     別に組み直しているわけではないので、
+     プレビューで見た形と印刷された形がずれることはない。 */
+
+  var pvDocTitle = '';   // 印刷するときの見出し（PDF保存のファイル名になる）
+
+  /** 会社名が未登録だと見積書の体裁にならないので、そこだけ先に確かめる */
+  function readyToPrint() {
+    if ((pb.company.name || '').trim()) return true;
+    toast('先に［自社情報］で会社名を登録してください');
+    $('.tab[data-view="settings"]').click();
+    return false;
+  }
+
+  function openPreview(headline, docTitle) {
+    pvDocTitle = docTitle || '';
+    $('#pv-title').textContent = headline || 'プレビュー';
+    $('#preview').hidden = false;
+    document.body.style.overflow = 'hidden';   // 後ろの画面が一緒に動かないようにする
+    fitPreview();
+  }
+
+  function closePreview() {
+    $('#preview').hidden = true;
+    document.body.style.overflow = '';
+  }
+
+  /** 画面の幅に合わせてA4を縮める（スマホでも紙1枚まるごと見えるように）。
+      縮めるのは見た目だけなので、印刷される中身は変わらない。 */
+  function fitPreview() {
+    if ($('#preview').hidden) return;
+    var scroll = $('#pv-scroll'), fit = $('#pv-fit'), stage = $('#pv-stage');
+    stage.style.transform = 'none';
+    fit.style.width = '';
+    fit.style.height = '';
+    var pageW = stage.offsetWidth;
+    if (!pageW) return;
+    var avail = scroll.clientWidth - 24;       // .preview-scroll の左右パディングぶん
+    var scale = Math.min(1, avail / pageW);
+    stage.style.transform = 'scale(' + scale + ')';
+    // 縮小しても余白が空きっぱなしにならないよう、入れ物の大きさも合わせる
+    fit.style.width = (pageW * scale) + 'px';
+    fit.style.height = (stage.offsetHeight * scale) + 'px';
+  }
+
+  window.addEventListener('resize', fitPreview);
+
+  $('#btn-preview').addEventListener('click', function () {
+    if (!readyToPrint()) return;
+    buildSheet();
+    openPreview('見積書　' + st.no + (st.customer ? '　' + st.customer : ''),
+                '見積書_' + (st.customer || '無題') + '_' + st.no);
+  });
+
+  $('#pv-close').addEventListener('click', closePreview);
+
+  $('#pv-print').addEventListener('click', function () {
+    if (pvDocTitle) document.title = pvDocTitle;
+    setTimeout(function () { window.print(); }, 60);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !$('#preview').hidden) closePreview();
+  });
+
   $('#btn-print').addEventListener('click', function () {
-    if (!(pb.company.name || '').trim()) {
-      toast('先に［自社情報］で会社名を登録してください');
-      $('.tab[data-view="settings"]').click();
-      return;
-    }
+    if (!readyToPrint()) return;
     if (!st.lines.length) {
       if (!confirm('明細が1行もありません。このまま印刷しますか？')) return;
     }

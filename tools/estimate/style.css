@@ -383,21 +383,68 @@ tr.is-dragging {
 /* ==========================================================================
    印刷用 見積書（A4縦）
    ========================================================================== */
-#sheet { display: none; }
+#sheet { display: block; color: #000; font-family: var(--font); }
+
+/* ---------- プレビュー（紙に出す前に画面で見た目を確かめる） ----------
+   印刷用の #sheet をそのまま画面にかぶせて出すだけなので、
+   ここで見えているものと印刷されるものは必ず同じになる。 */
+.preview {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; flex-direction: column;
+  background: #6b7178;
+}
+.preview[hidden] { display: none; }
+
+.preview-bar {
+  flex: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; background: var(--dark); color: #fff;
+}
+.preview-title { font-size: 14px; }
+/* バーの文字は白なので、ボタンだけは元の文字色に戻す。
+   「印刷 / PDF」は白ベタで目立たせ、「閉じる」は枠だけにして区別する。 */
+.preview-bar .btn { color: var(--text); font-weight: 600; }
+.preview-bar .btn-ghost {
+  background: transparent; color: #fff; border-color: #5a6068; font-weight: 400;
+}
+.preview-bar .btn-ghost:hover { background: #2f353c; }
+.preview-hint { color: #a8adb4; font-size: 12px; margin-right: auto; }
+
+.preview-scroll { flex: 1; overflow: auto; padding: 12px; -webkit-overflow-scrolling: touch; }
+.preview-fit { margin: 0 auto; }
+/* A4の幅そのままで組んでおき、画面が狭いときは JS が縮小する */
+.preview-stage { width: 210mm; transform-origin: top left; }
+
+.preview .sheet-page {
+  background: #fff;
+  padding: 14mm 14mm 12mm;
+  min-height: 297mm;
+  box-shadow: 0 2px 14px rgba(0,0,0,.35);
+  margin-bottom: 12px;
+}
 
 @media print {
   @page { size: A4 portrait; margin: 14mm 14mm 12mm; }
 
   body { background: #fff; font-size: 10.5pt; }
+  /* プレビュー中は body のスクロールを止めているが、
+     そのまま印刷すると1枚目しか出ないブラウザがあるので必ず戻す */
+  html, body { overflow: visible !important; height: auto !important; }
   #app { display: none !important; }
-  #sheet { display: block; }
+
+  /* プレビューを開いたまま印刷しても、閉じた状態で印刷しても、
+     紙には見積書だけが出るようにする */
+  .preview, .preview[hidden] { display: block !important; position: static; background: none; }
+  .preview-bar { display: none !important; }
+  .preview-scroll { overflow: visible; padding: 0; }
+  .preview-fit { width: auto !important; height: auto !important; }
+  .preview-stage { width: auto; transform: none !important; }
+  .preview .sheet-page {
+    background: none; padding: 0; min-height: 0; box-shadow: none; margin-bottom: 0;
+  }
 
   .sheet-page { page-break-after: always; }
   .sheet-page:last-child { page-break-after: auto; }
 }
-
-/* 画面プレビュー用にも同じ見た目を使えるようにしておく */
-#sheet { color: #000; font-family: var(--font); }
 
 .sheet-title {
   text-align: center; font-size: 20pt; font-weight: 700;

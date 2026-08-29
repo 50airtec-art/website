@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>空調王</title>
-<link rel="stylesheet" href="style.css?v=202608291910">
+<link rel="stylesheet" href="style.css?v=202608292130">
 </head>
 <body>
 
@@ -145,7 +145,8 @@
       <div class="actionbar">
         <button class="btn btn-ghost" id="btn-new">新規作成</button>
         <button class="btn btn-ghost" id="btn-save">保存</button>
-        <button class="btn btn-primary" id="btn-print">見積書を印刷 / PDF</button>
+        <button class="btn btn-ghost" id="btn-preview">プレビュー</button>
+        <button class="btn btn-primary" id="btn-print">印刷 / PDF</button>
       </div>
     </section>
 
@@ -429,13 +430,28 @@
   <div class="toast" id="toast"></div>
 </div>
 
-<!-- ====================== 印刷用 見積書（画面では非表示） ====================== -->
-<div id="sheet"></div>
+<!-- ====================== 見積書（プレビューと印刷で共用） ======================
+     画面で見ているものと印刷されるものが必ず同じになるよう、
+     #sheet は1つだけ作って、プレビューでも印刷でもこれを使う。
+     ========================================================================== -->
+<div class="preview" id="preview" hidden>
+  <div class="preview-bar">
+    <b class="preview-title" id="pv-title">プレビュー</b>
+    <small class="preview-hint">紙に出したときの見た目です</small>
+    <button class="btn btn-sm" type="button" id="pv-print">印刷 / PDF</button>
+    <button class="btn btn-sm btn-ghost" type="button" id="pv-close">閉じる</button>
+  </div>
+  <div class="preview-scroll" id="pv-scroll">
+    <div class="preview-fit" id="pv-fit">
+      <div class="preview-stage" id="pv-stage"><div id="sheet"></div></div>
+    </div>
+  </div>
+</div>
 
-<script src="pricebook.js?v=202608291910"></script>
-<script src="survey.js?v=202608291910"></script>
-<script src="firebase-config.js?v=202608291910"></script>
-<script src="app.js?v=202608291910"></script>
-<script src="sync.js?v=202608291910"></script>
+<script src="pricebook.js?v=202608292130"></script>
+<script src="survey.js?v=202608292130"></script>
+<script src="firebase-config.js?v=202608292130"></script>
+<script src="app.js?v=202608292130"></script>
+<script src="sync.js?v=202608292130"></script>
 </body>
 </html>
