@@ -1,0 +1,35 @@
+// ==========================================================================
+// 空調王の連動で使う Firestore のルール
+// --------------------------------------------------------------------------
+// Firebase コンソール → Firestore Database → ルール　に、これを丸ごと貼り付けて
+// 「公開」を押す。
+//
+// 何をしているか
+//   ・ログインしていない相手は、読むことも書くこともできない
+//   ・置き場所の名前は「64桁の16進数＋_work / _master」の形だけ許す
+//     （当てずっぽうで他人の置き場所を作られないようにする）
+//   ・1件に入れられるのは blob と at の2つだけ。大きさも制限する
+//   ・ここに書いていない場所は、すべて禁止（Firestore の初期状態）
+//
+// なお、ここを万一まちがえても、中身は端末の中で暗号にしてから預けているので
+// 読める文章にはなりません。守りは二重にしてあります。
+// ==========================================================================
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /airtec/{doc} {
+      allow read: if request.auth != null
+                  && doc.matches('^[0-9a-f]{64}_(work|master)$');
+
+      allow write: if request.auth != null
+                   && doc.matches('^[0-9a-f]{64}_(work|master)$')
+                   && request.resource.data.keys().hasOnly(['blob', 'at'])
+                   && request.resource.data.blob is string
+                   && request.resource.data.blob.size() <= 950000
+                   && request.resource.data.at is int;
+    }
+
+  }
+}

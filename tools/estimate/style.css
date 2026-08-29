@@ -611,6 +611,33 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
 .bk-warn span { flex: 1; min-width: 200px; }
 @media print { .bk-warn { display: none !important; } }
 
+/* ===== スマホ⇄パソコンの連動 ===== */
+.sync-warn { background: var(--accent-soft); border-bottom: 1px solid #b9d4ef; color: #0b4f96; }
+
+.sync-badge {
+  display: inline-block; font-size: 12px; font-weight: 700;
+  padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border);
+}
+.sync-badge.is-off { background: #f2f3f5; color: var(--text-sub); }
+.sync-badge.is-on  { background: #e7f5ed; color: var(--ok); border-color: #b8e0c8; }
+.sync-badge.is-err { background: #fdecea; color: var(--danger); border-color: #f2b8b1; }
+.sync-err { color: var(--danger); font-weight: 600; }
+
+#sync-code-view { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; letter-spacing: .04em; }
+
+.sync-code-box {
+  margin-top: 14px; padding: 14px; border-radius: 8px;
+  background: var(--accent-soft); border: 1px solid #b9d4ef;
+}
+.sync-code-box p { font-size: 13px; line-height: 1.8; white-space: pre-line; margin-bottom: 8px; }
+.sync-code-box small { display: block; margin-top: 8px; font-size: 11px; color: var(--text-sub); line-height: 1.7; }
+.sync-code-big {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: clamp(18px, 5vw, 26px); font-weight: 700; letter-spacing: .08em;
+  background: #fff; border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; margin-bottom: 10px; word-break: break-all; user-select: all;
+}
+
 /* 単価表の色分け：入力欄も行の色を受け継ぐ */
 .mrow input { color: inherit; }
 .item-btn b, .item-btn .item-code { color: inherit; }

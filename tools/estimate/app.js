@@ -1,6 +1,7 @@
 /* ==========================================================================
    50Airtec 見積作成ツール（社内用）
-   - 単価マスタ・保存した見積は、この端末のブラウザ（localStorage）にのみ保存されます
+   - 単価マスタ・保存した見積は、この端末のブラウザ（localStorage）に保存されます
+   - 連動（sync.js）を設定した場合だけ、暗号にしてクラウドにも預けます
    ========================================================================== */
 (function () {
   'use strict';
@@ -99,8 +100,22 @@
     } catch (e) { return fallback; }
   }
   function save(key, val) {
-    try { localStorage.setItem(key, JSON.stringify(val)); return true; }
+    try {
+      localStorage.setItem(key, JSON.stringify(val));
+      syncTouch(key);
+      return true;
+    }
     catch (e) { toast('保存できませんでした（ブラウザの容量不足かもしれません）'); return false; }
+  }
+  /** 保存キーをまるごと消す（消したことも連動先に伝える） */
+  function removeKey(key) {
+    localStorage.removeItem(key);
+    syncTouch(key);
+  }
+  /** 連動（sync.js）に「ここが変わった」と知らせる。連動していなければ何も起きない */
+  function syncTouch(key) {
+    if (key === KEY_DRAFT) return;                 // 下書きは端末ごとのものなので送らない
+    if (window.AirtecSync) window.AirtecSync.changed(key);
   }
   var toastTimer;
   function toast(msg) {
@@ -1296,7 +1311,7 @@
       activeCat = pb.categories.length ? pb.categories[0].id : null;
       if (savePB() === false) return;
 
-      if (data.models) save(KEY_MDL, data.models); else localStorage.removeItem(KEY_MDL);
+      if (data.models) save(KEY_MDL, data.models); else removeKey(KEY_MDL);
       saveSites(data.sites || []);
       save(KEY_EST, data.estimates || []);
       save(KEY_INV, data.invoices || []);
@@ -2591,7 +2606,7 @@
     var raws = modelRaws.slice();
     raws.splice(i, 1);
     if (raws.length) { if (save(KEY_MDL, { v: 2, packs: raws }) === false) return; }
-    else localStorage.removeItem(KEY_MDL);
+    else removeKey(KEY_MDL);
     chooserSel = {};
     loadModels();
     toast(p.maker + ' の機種データを削除しました');
@@ -2766,7 +2781,7 @@
   $('#btn-models-clear').addEventListener('click', function () {
     if (!models) return;
     if (!confirm('読み込んだ機種データを、すべてのメーカーぶん削除します。よろしいですか？\n（見積の明細に入れた機器はそのまま残ります）')) return;
-    localStorage.removeItem(KEY_MDL);
+    removeKey(KEY_MDL);
     chooserSel = {};
     loadModels();
     toast('機種データを削除しました');
