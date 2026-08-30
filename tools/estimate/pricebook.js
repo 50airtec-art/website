@@ -37,7 +37,7 @@ const DEFAULT_PRICEBOOK = {
       label: '50Airtec',
       name: '50Airtec（ゴーマルエアテック）',
       owner: '代表　五十嵐　透',
-      zip: '〒991-0031',
+      zip: '〒991-0065',
       address: '山形県寒河江市中郷683-9',
       tel: '070-8969-7724',
       email: 'info@50airtec.com',
