@@ -252,9 +252,53 @@
     return AUTO_BASES[autoBaseOf(x)].name + 'の' + num(x.autoPercent) + '%';
   }
 
-  /** その行が「作業費」かどうか（入れたときの分類で判断する） */
+  /**
+   * 単価マスタから同じ品名の項目を探す。
+   * 明細の「仕様」は［品番　規格］をつなげたものなので、同じ形にして見比べる。
+   */
+  function findMasterItem(name, spec) {
+    var nm = String(name || '').trim();
+    if (!nm) return null;
+    var loose = null;
+    for (var i = 0; i < pb.categories.length; i++) {
+      var c = pb.categories[i];
+      for (var j = 0; j < c.items.length; j++) {
+        var it = c.items[j];
+        if (String(it.name || '').trim() !== nm) continue;
+        var full = [it.code || '', it.spec || ''].filter(Boolean).join('　');
+        if (full === String(spec || '').trim()) return { cat: c, item: it };
+        if (!loose) loose = { cat: c, item: it };   // 品名だけ合う候補は控えにしておく
+      }
+    }
+    return loose;
+  }
+
+  /**
+   * この機能をつける前に作った見積の行は、どの分類から入れたかを持っていない。
+   * そのままだと作業費が0円になってしまうので、単価マスタと品名を突き合わせて補う。
+   */
+  function backfillLineCats(doc) {
+    ((doc || {}).lines || []).forEach(function (l) {
+      if (l.cat || num(l.autoPercent)) return;
+      var hit = findMasterItem(l.name, l.spec);
+      if (!hit) return;
+      l.cat = hit.cat.id;
+      // 単価0の「消耗品雑費」「諸経費」は、自動計算の行に切り替える
+      if (num(l.price) === 0 && num(hit.item.autoPercent)) {
+        l.autoPercent = num(hit.item.autoPercent);
+        l.autoBase = hit.item.autoBase || 'work';
+      }
+    });
+  }
+
+  /**
+   * その行が「作業費」かどうか。
+   * ふだんは入れたときの分類で決まるが、行の「工」ボタンで手動で決めることもできる。
+   */
   function isWorkLine(l) {
-    if (!l || l.autoPercent) return false;   // 自動計算の行どうしは数えない
+    if (!l || num(l.autoPercent)) return false;   // 自動計算の行どうしは数えない
+    if (l.work === true) return true;             // 手で「数える」にした行
+    if (l.work === false) return false;           // 手で「数えない」にした行
     var work = false;
     pb.categories.forEach(function (c) { if (c.id === l.cat && c.work) work = true; });
     return work;
@@ -281,6 +325,7 @@
 
   /** 自動計算の行の単価を計算し直して、画面にも反映する */
   function refreshAutoLines() {
+    backfillLineCats(st);
     ['work', 'work+auto'].forEach(function (base) {
       var total = autoBaseTotal(st, base);
       st.lines.forEach(function (l) {
@@ -599,6 +644,10 @@
   }
 
   function renderLines() {
+    // 古い見積の行に分類の印を補う。行を組み立てる前にやらないと、
+    // 自動計算の行なのに「ふつうの行」として描いてしまう
+    backfillLineCats(st);
+
     var tb = $('#lines-body');
     tb.innerHTML = '';
     autoRowUpdaters = [];
@@ -751,6 +800,19 @@
       if (ref) tdDel.appendChild(ref);
 
       if (!isAuto) {
+        // この行を作業費（消耗品雑費・諸経費のもと）に数えるかどうか
+        var wk = el('button', 'icon-btn icon-work', '工'); wk.type = 'button';
+        if (isWorkLine(l)) wk.classList.add('is-on');
+        wk.title = isWorkLine(l)
+          ? 'この行は作業費に数えています（押すと数えなくなります）'
+          : 'この行は作業費に数えていません（押すと数えます）';
+        wk.addEventListener('click', function () {
+          l.work = !isWorkLine(l);
+          renderLines();
+          persistDraft();
+        });
+        tdDel.appendChild(wk);
+
         var reg = el('button', 'icon-btn icon-reg', '＋表'); reg.type = 'button';
         reg.title = 'この行を単価表に登録して、次から選べるようにする';
         reg.addEventListener('click', function () {
@@ -843,9 +905,15 @@
   function renderTotals() {
     var t = calc();
     var box = $('#totals');
-    var rows = [
-      ['小計', yen(t.subtotal)]
-    ];
+    var rows = [];
+
+    // 消耗品雑費・諸経費を使っているときは、そのもとになる作業費も見えるようにしておく。
+    // これは画面だけの表示で、見積書には印刷されない。
+    var hasAuto = false;
+    st.lines.forEach(function (l) { if (num(l.autoPercent)) hasAuto = true; });
+    if (hasAuto) rows.push(['作業費（画面のみ）', yen(autoBaseTotal(st, 'work'))]);
+
+    rows.push(['小計', yen(t.subtotal)]);
     if (t.overhead) rows.push(['諸経費（' + st.overhead + '%）', yen(t.overhead)]);
     if (t.discount) rows.push(['値引き', '-' + yen(t.discount)]);
     rows.push(['課税対象額', yen(t.taxable)]);
