@@ -519,8 +519,11 @@
         }
         addLine({
           name: r.item.name,
-          // 品番は見積書の「仕様」欄に出したいので、ここで一緒にしておく
-          spec: [r.item.code || '', r.item.spec || ''].filter(Boolean).join('　'),
+          // 仕様欄はそのまま見積書に印刷される。単価マスタの規格には
+          // 「20m巻（1巻 ¥124,100）」のような仕入れの都合が入っているので、
+          // 品番のある材料は品番だけにする。
+          // 品番の無い工事（「3馬力」など）は規格がそのまま意味を持つので残す。
+          spec: r.item.code ? String(r.item.code).trim() : (r.item.spec || ''),
           qty: 1,
           unit: r.item.unit,
           price: r.item.price,
@@ -886,6 +889,38 @@
     toast('「' + cat.name + '」に登録しました');
   }
 
+  /** 仕様欄が「品番　つづき」の形になっているか */
+  var CODE_HEAD_RE = /^([0-9A-Za-z][0-9A-Za-z\-_\/.]{1,23})[　\s]+\S/;
+
+  /**
+   * 明細の1行の「仕様」を、品番だけに詰める。
+   * 「PC-3520-10H　20m巻（1巻 ¥124,100）」→「PC-3520-10H」
+   * 品番で始まっていない行（工事の「3馬力」など）は触らない。
+   */
+  function stripSpecToCode(l) {
+    var spec = String(l.spec || '').trim();
+    if (!spec) return false;
+
+    // まず単価マスタで品番を調べる。見つからないときは先頭のかたまりを品番とみなす
+    var hit = findMasterItem(l.name, l.spec);
+    var code = (hit && hit.item.code) ? String(hit.item.code).trim() : '';
+    if (!code) {
+      var m = spec.match(CODE_HEAD_RE);
+      code = m ? m[1] : '';
+    }
+    if (!code || spec === code) return false;
+    if (spec.indexOf(code) !== 0) return false;   // 品番で始まっていない行は触らない
+
+    l.spec = code;
+    return true;
+  }
+
+  /** 詰めたらどうなるかを、実際には書き換えずに調べる */
+  function strippedSpec(l) {
+    var probe = { name: l.name, spec: l.spec };
+    return stripSpecToCode(probe) ? probe.spec : null;
+  }
+
   function moveLine(i, dir, keepFocus) {
     var j = i + dir;
     if (j < 0 || j >= st.lines.length) return;
@@ -925,6 +960,25 @@
     html += '</dl>';
     box.innerHTML = html;
   }
+
+  $('#btn-strip-spec').addEventListener('click', function () {
+    var targets = st.lines.filter(function (l) { return strippedSpec(l) !== null; });
+    if (!targets.length) { toast('品番だけに詰められる行はありませんでした'); return; }
+
+    var sample = targets.slice(0, 5).map(function (l) {
+      return '　' + l.spec + '\n　　→ ' + strippedSpec(l);
+    }).join('\n');
+
+    if (!confirm(targets.length + '行の「仕様」を品番だけにします。よろしいですか？\n' +
+      '（見積書に梱包数や仕入れ値が出ないようにするためのものです）\n\n' + sample +
+      (targets.length > 5 ? '\n　…ほか ' + (targets.length - 5) + '行' : ''))) return;
+
+    var n = 0;
+    st.lines.forEach(function (l) { if (stripSpecToCode(l)) n++; });
+    renderLines();
+    persistDraft();
+    toast(n + '行の仕様を品番だけにしました');
+  });
 
   $('#btn-add-blank').addEventListener('click', function () { addLine(); });
   $('#btn-clear-lines').addEventListener('click', function () {
