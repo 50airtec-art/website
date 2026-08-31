@@ -143,8 +143,44 @@
   pb.company  = Object.assign({}, DEFAULT_PRICEBOOK.company, pb.company || {});
   pb.defaults = Object.assign({}, DEFAULT_PRICEBOOK.defaults, pb.defaults || {});
   if (!Array.isArray(pb.categories)) pb.categories = clone(DEFAULT_PRICEBOOK.categories);
+  migratePB();
 
   function savePB() { return save(KEY_PB, pb); }
+
+  /**
+   * 前に使っていた単価マスタを、いまのツールの決まりごとに合わせる。
+   * 端末のブラウザに保存してある単価は消さず、足りない印と項目だけを足す。
+   */
+  function migratePB() {
+    if (num(pb.version) >= 5) return;
+
+    DEFAULT_PRICEBOOK.categories.forEach(function (dc) {
+      pb.categories.forEach(function (c) {
+        if (c.id !== dc.id) return;
+        // どの分類を「作業費」として数えるかの印
+        if (dc.work && !c.work) c.work = true;
+        // 自動で単価が決まる項目（消耗品雑費・諸経費など）。
+        // 同じ品名がすでにあればその行を自動計算に変え、無ければ足す。
+        (dc.items || []).forEach(function (di) {
+          if (!di.autoPercent) return;
+          var found = null;
+          c.items.forEach(function (it) { if (it.name === di.name) found = it; });
+          if (found) {
+            if (!found.autoPercent) {
+              found.autoPercent = di.autoPercent;
+              found.autoBase = di.autoBase;
+              found.price = 0;
+            }
+          } else {
+            c.items.push(clone(di));
+          }
+        });
+      });
+    });
+
+    pb.version = 5;
+    save(KEY_PB, pb);
+  }
 
   /* ======================================================================
      見積データ（state）
@@ -187,6 +223,75 @@
      計算
      ====================================================================== */
   function calc() { return calcOf(st); }
+
+  /* ----------------------------------------------------------------------
+     単価が自動で決まる行（消耗品雑費・諸経費）の計算。
+
+     作業費＝家庭用・業務用・移設のように work: true をつけた分類から入れた行。
+     機器本体・材料（因幡などのCSV）・その他値引きは作業費に数えない。
+
+       作業費の合計         ×  5%  →  消耗品雑費
+       作業費＋消耗品雑費   × 15%  →  諸経費
+
+     という順番なので、'work' の行を先に計算してから 'work+auto' の行を計算する。
+     ---------------------------------------------------------------------- */
+
+  // 何の合計をもとにするか。画面に出す呼び名も一緒に持たせる
+  var AUTO_BASES = {
+    'work':      { name: '作業費', short: '作業費' },
+    'work+auto': { name: '作業費＋消耗品雑費', short: '作業費＋雑費' }
+  };
+
+  /** その項目（または行）が、何の合計をもとにするか */
+  function autoBaseOf(x) {
+    return (x && AUTO_BASES[x.autoBase]) ? x.autoBase : 'work';
+  }
+
+  /** 「作業費の5%」のような、割合の呼び名 */
+  function autoLabel(x) {
+    return AUTO_BASES[autoBaseOf(x)].name + 'の' + num(x.autoPercent) + '%';
+  }
+
+  /** その行が「作業費」かどうか（入れたときの分類で判断する） */
+  function isWorkLine(l) {
+    if (!l || l.autoPercent) return false;   // 自動計算の行どうしは数えない
+    var work = false;
+    pb.categories.forEach(function (c) { if (c.id === l.cat && c.work) work = true; });
+    return work;
+  }
+
+  /** 自動計算の行のもとになる合計（base ごと） */
+  function autoBaseTotal(doc, base) {
+    var lines = ((doc || {}).lines || []);
+    var sum = 0;
+    lines.forEach(function (l) {
+      if (isWorkLine(l)) sum += num(l.qty) * num(l.price);
+    });
+    if (base === 'work+auto') {
+      // 諸経費は、先に決まった消耗品雑費も含めた金額に掛ける
+      lines.forEach(function (l) {
+        if (num(l.autoPercent) && autoBaseOf(l) === 'work') sum += num(l.qty) * num(l.price);
+      });
+    }
+    return sum;
+  }
+
+  // 自動計算の行の画面表示を書き換える関数（renderLines が行ごとに入れる）
+  var autoRowUpdaters = [];
+
+  /** 自動計算の行の単価を計算し直して、画面にも反映する */
+  function refreshAutoLines() {
+    ['work', 'work+auto'].forEach(function (base) {
+      var total = autoBaseTotal(st, base);
+      st.lines.forEach(function (l) {
+        if (!num(l.autoPercent) || autoBaseOf(l) !== base) return;
+        l.price = Math.round(total * num(l.autoPercent) / 100);
+        l.base  = l.price;   // 掛率は使わない行なので、元値も同じにしておく
+        l.rate  = 100;
+      });
+    });
+    autoRowUpdaters.forEach(function (fn) { fn(); });
+  }
 
   /** 見積でも請求書でも使えるように、対象の書類を受け取って計算する */
   function calcOf(st) {
@@ -354,8 +459,19 @@
       if (r.item.code) b.appendChild(el('i', 'item-code', r.item.code));
       b.appendChild(el('b', null, r.item.name));
       if (r.item.spec) b.appendChild(el('em', null, r.item.spec));
-      b.appendChild(el('span', null, yen(r.item.price) + ' / ' + r.item.unit));
+      b.appendChild(el('span', null, num(r.item.autoPercent)
+        ? autoLabel(r.item)
+        : yen(r.item.price) + ' / ' + r.item.unit));
       b.addEventListener('click', function () {
+        // 自動計算の項目（消耗品雑費・諸経費）は、2回入れると二重に乗ってしまう。
+        // 家庭用と業務用の両方に消耗品雑費を置いてあるので、うっかり両方押せてしまう
+        if (num(r.item.autoPercent)) {
+          var already = false;
+          st.lines.forEach(function (l) {
+            if (num(l.autoPercent) && l.name === r.item.name) already = true;
+          });
+          if (already) { toast('「' + r.item.name + '」はもう明細に入っています'); return; }
+        }
         addLine({
           name: r.item.name,
           // 品番は見積書の「仕様」欄に出したいので、ここで一緒にしておく
@@ -363,6 +479,11 @@
           qty: 1,
           unit: r.item.unit,
           price: r.item.price,
+          // どの分類から入れたか。作業費の合計（消耗品雑費の計算のもと）に使う
+          cat: r.cat.id,
+          // 単価が自動で決まる項目は、割合と「何の合計をもとにするか」も持たせる
+          autoPercent: num(r.item.autoPercent) || 0,
+          autoBase: r.item.autoBase || '',
           // 見積を作りながら「これどんな材料だっけ」を確かめられるよう、製品ページも持たせる
           url: r.item.url || ''
         });
@@ -395,7 +516,7 @@
      明細
      ====================================================================== */
   function addLine(line) {
-    var l = Object.assign({ name: '', spec: '', qty: 1, unit: '式', price: 0, url: '' }, line || {});
+    var l = Object.assign({ name: '', spec: '', qty: 1, unit: '式', price: 0, url: '', cat: '', autoPercent: 0, autoBase: '' }, line || {});
     // base は掛率をかける前の元値（単価マスタの定価）。rate は「定価の何%で出すか」
     if (l.base == null) l.base = num(l.price);
     if (l.rate == null) l.rate = 100;
@@ -480,11 +601,15 @@
   function renderLines() {
     var tb = $('#lines-body');
     tb.innerHTML = '';
+    autoRowUpdaters = [];
     $('#lines-empty').style.display = st.lines.length ? 'none' : 'block';
     $('#lines-table').style.display = st.lines.length ? 'table' : 'none';
 
     st.lines.forEach(function (l, i) {
       var tr = el('tr');
+      // 消耗品雑費のように「作業費の◯%」で単価が決まる行
+      var isAuto = !!num(l.autoPercent);
+      if (isAuto) tr.classList.add('line-auto');
 
       // 並び替え：つまみをつかんで動かす。矢印でも1つずつ動かせる
       var tdMove = el('td', 'c-move');
@@ -556,12 +681,17 @@
         oX.value = l.rate; oX.selected = true;
         sRate.insertBefore(oX, sRate.firstChild);
       }
+      if (isAuto) {
+        sRate.disabled = true;
+        sRate.title = 'この行の単価は自動で決まるので、掛率は使いません';
+      }
       tdRate.appendChild(sRate);
       tr.appendChild(tdRate);
 
       // 単価
       var tdPrice = el('td', 'c-price');
       var iPrice = el('input'); iPrice.type = 'number'; iPrice.step = '1'; iPrice.value = l.price;
+      if (isAuto) iPrice.readOnly = true;
       tdPrice.appendChild(iPrice);
       tr.appendChild(tdPrice);
 
@@ -584,15 +714,28 @@
       var tdAmt = el('td', 'c-amount', yen(num(l.qty) * num(l.price)));
       tr.appendChild(tdAmt);
 
+      // 自動計算の行は、ほかの行をいじるたびに単価と金額を書き直す
+      if (isAuto) {
+        autoRowUpdaters.push(function () {
+          var bs = autoBaseOf(l);
+          iPrice.value = l.price;
+          iPrice.title = AUTO_BASES[bs].name + 'の合計 ' + yen(autoBaseTotal(st, bs)) +
+                         ' の ' + num(l.autoPercent) + '%';
+          tdAmt.textContent = yen(num(l.qty) * num(l.price));
+        });
+      }
+
       function recalc() {
         l.qty = num(iQty.value);
-        l.price = num(iPrice.value);
+        if (!isAuto) l.price = num(iPrice.value);
         tdAmt.textContent = yen(l.qty * l.price);
+        refreshAutoLines();
         renderTotals();
         persistDraft();
       }
       iQty.addEventListener('input', recalc);
       iPrice.addEventListener('input', function () {
+        if (isAuto) return;   // 作業費から自動で決まる行は書き換えさせない
         // 単価を手で書き換えたら、その金額が新しい元値。掛率は100%に戻す
         l.base = num(iPrice.value);
         l.rate = 100;
@@ -607,12 +750,14 @@
       var ref = refButton(l.url, l.name);
       if (ref) tdDel.appendChild(ref);
 
-      var reg = el('button', 'icon-btn icon-reg', '＋表'); reg.type = 'button';
-      reg.title = 'この行を単価表に登録して、次から選べるようにする';
-      reg.addEventListener('click', function () {
-        registerLineToMaster(l);
-      });
-      tdDel.appendChild(reg);
+      if (!isAuto) {
+        var reg = el('button', 'icon-btn icon-reg', '＋表'); reg.type = 'button';
+        reg.title = 'この行を単価表に登録して、次から選べるようにする';
+        reg.addEventListener('click', function () {
+          registerLineToMaster(l);
+        });
+        tdDel.appendChild(reg);
+      }
 
       var del = el('button', 'icon-btn', '✕'); del.type = 'button'; del.title = 'この行を削除';
       del.addEventListener('click', function () {
@@ -626,6 +771,7 @@
       tb.appendChild(tr);
     });
 
+    refreshAutoLines();
     renderTotals();
   }
 
@@ -1887,7 +2033,11 @@
     row.appendChild(inp(item.spec || '', null, 'text', function (v) { item.spec = v; }, '規格・仕様'));
     row.appendChild(inp(item.unit, null, 'text', function (v) { item.unit = v; }, '個'));
 
-    var priceInput = inp(item.price, 'm-price', 'number', function (v) { item.price = num(v); });
+    // 消耗品雑費のような「作業費の◯%」の項目は、金額ではなく割合を入れてもらう
+    var isAuto = !!num(item.autoPercent);
+    var priceInput = isAuto
+      ? inp(item.autoPercent, 'm-price', 'number', function (v) { item.autoPercent = num(v); })
+      : inp(item.price, 'm-price', 'number', function (v) { item.price = num(v); });
     // 単価まで打ったら Enter で次の行へ。続けて打ち込めるようにする
     priceInput.addEventListener('keydown', function (ev) {
       if (ev.key !== 'Enter') return;
@@ -1895,7 +2045,17 @@
       savePB();
       if (onEnterAtEnd) onEnterAtEnd();
     });
-    row.appendChild(priceInput);
+    if (isAuto) {
+      priceInput.title = autoBaseOf(item) === 'work'
+        ? '作業費（家庭用・業務用・移設から入れた行）の合計にかける割合です'
+        : '作業費と消耗品雑費を足した金額にかける割合です';
+      var pcell = el('span', 'm-auto');
+      pcell.appendChild(priceInput);
+      pcell.appendChild(el('i', null, '% ' + AUTO_BASES[autoBaseOf(item)].short));
+      row.appendChild(pcell);
+    } else {
+      row.appendChild(priceInput);
+    }
 
     // URLが無い行でも列がずれないよう、入れ物は必ず置く
     var refCell = el('span', 'm-ref');

@@ -12,7 +12,7 @@
    ========================================================================== */
 
 const DEFAULT_PRICEBOOK = {
-  version: 2,
+  version: 5,
 
   /* ---------- 自社情報（見積書に印刷される / ［自社情報］画面で設定） ---------- */
   company: {
@@ -70,6 +70,7 @@ const DEFAULT_PRICEBOOK = {
     {
       id: 'home',
       name: '家庭用｜取付・交換',
+      work: true,          // ここから入れた行は「作業費」として数える（消耗品雑費の計算のもと）
       items: [
         { name: '標準取付工事', spec: '〜4.0kW（6〜14畳）', unit: '台', price: 16000 },
         { name: '標準取付工事', spec: '4.0〜6.3kW（14〜20畳）', unit: '台', price: 22000 },
@@ -94,12 +95,16 @@ const DEFAULT_PRICEBOOK = {
         { name: '真空引き・ガスチャージ追加', spec: '', unit: '式', price: 6000 },
         { name: 'ドレンポンプ設置', spec: '', unit: '台', price: 18000 },
         { name: '防振ゴム・据付ブロック', spec: '', unit: '台', price: 3000 },
-        { name: '出張費', spec: '寒河江市から車で1時間圏外', unit: '式', price: 5000 }
+        { name: '出張費', spec: '寒河江市から車で1時間圏外', unit: '式', price: 5000 },
+        /* 業務用と同じ考え方。作業費の合計の5%をツールが自動で入れる。
+           作業費は家庭用・業務用・移設をまとめた合計なので、どちらの分類から入れても金額は同じ。 */
+        { name: '消耗品雑費', spec: '', unit: '式', price: 0, autoPercent: 5, autoBase: 'work' }
       ]
     },
     {
       id: 'biz',
       name: '業務用｜天カセ・パッケージ',
+      work: true,          // ここから入れた行は「作業費」として数える（消耗品雑費の計算のもと）
       items: [
         { name: '天井カセット4方向 取付', spec: '1.5馬力', unit: '台', price: 90000 },
         { name: '天井カセット4方向 取付', spec: '2.0馬力', unit: '台', price: 100000 },
@@ -126,12 +131,18 @@ const DEFAULT_PRICEBOOK = {
         { name: 'ユニック・クレーン 使用', spec: '', unit: '日', price: 50000 },
         { name: '足場設置・解体', spec: '', unit: '式', price: 60000 },
         { name: '試運転・調整・取扱説明', spec: '', unit: '式', price: 10000 },
-        { name: '養生・残材処分', spec: '', unit: '式', price: 15000 }
+        { name: '養生・残材処分', spec: '', unit: '式', price: 15000 },
+        /* 単価は決め打ちにせず、ツールが自動で計算して入れる項目。
+           autoBase … 何の合計をもとにするか　'work' ＝ 作業費（work: true の分類から入れた行）
+                                              'work+auto' ＝ 作業費 ＋ 上の 'work' の行（消耗品雑費）
+           autoPercent … そのもとに掛ける割合（%）。割合を変えたいときはこの数字を直す。 */
+        { name: '消耗品雑費', spec: '', unit: '式', price: 0, autoPercent: 5, autoBase: 'work' }
       ]
     },
     {
       id: 'move',
       name: '移設・取外し・処分',
+      work: true,          // ここから入れた行は「作業費」として数える（消耗品雑費の計算のもと）
       items: [
         { name: '家庭用 取外しのみ', spec: '', unit: '台', price: 8000 },
         { name: '家庭用 移設（同一建物内）', spec: '取外し＋再取付', unit: '台', price: 30000 },
@@ -155,7 +166,9 @@ const DEFAULT_PRICEBOOK = {
       id: 'other',
       name: 'その他・値引き',
       items: [
-        { name: '諸経費（現場管理費）', spec: '', unit: '式', price: 0 },
+        /* 作業費 ＋ 消耗品雑費 の合計の15%を、ツールが自動で計算して入れる。
+           この行を使うときは、見積画面の「諸経費（小計の%）」は0のままにしておく（二重取りになるため）。 */
+        { name: '諸経費（現場管理費）', spec: '', unit: '式', price: 0, autoPercent: 15, autoBase: 'work+auto' },
         { name: '駐車場代・通行料', spec: '', unit: '式', price: 0 },
         { name: '出精値引き', spec: '', unit: '式', price: 0 }
       ]

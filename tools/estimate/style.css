@@ -282,6 +282,13 @@ tr.is-dragging {
 .mrow input.m-price { text-align: right; font-variant-numeric: tabular-nums; }
 .mrow input.m-code { font-family: var(--font-mono, ui-monospace, "SFMono-Regular", Consolas, monospace); font-size: 12px; }
 
+/* 「作業費の◯%」で単価が決まる項目（消耗品雑費など） */
+.m-auto { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.m-auto input { flex: 1; min-width: 0; }
+.m-auto i { font-style: normal; font-size: 11px; color: var(--text-sub); white-space: nowrap; }
+tr.line-auto td.c-price input { background: var(--bg); color: var(--text-sub); }
+tr.line-auto td.c-rate .rate-sel { opacity: .4; }
+
 /* ---------- CSV取り込み ---------- */
 .csv-box {
   border: 1px solid var(--border); border-radius: 8px;
