@@ -73,6 +73,9 @@
         <div class="card-head">
           <h2 class="card-title">明細</h2>
           <div class="card-actions">
+            <label class="cost-toggle" title="原価と粗利を画面に出します。見積書には印刷されません">
+              <input type="checkbox" id="chk-cost"><span>原価・粗利を見る</span>
+            </label>
             <button class="btn btn-ghost" id="btn-add-blank">＋ 空の行</button>
             <button class="btn btn-ghost" id="btn-strip-spec">仕様を品番だけに</button>
             <button class="btn btn-ghost" id="btn-clear-lines">明細をクリア</button>
@@ -111,6 +114,8 @@
                 <th class="c-rate">掛率</th>
                 <th class="c-price">単価</th>
                 <th class="c-amount">金額</th>
+                <th class="c-cost">原価</th>
+                <th class="c-margin">粗利率</th>
                 <th class="c-del"></th>
               </tr>
             </thead>
@@ -284,6 +289,8 @@
           <label class="f"><span>登録番号（インボイス）</span><input type="text" id="c-invoice"></label>
           <label class="f f-wide"><span>振込先</span><input type="text" id="c-bank" placeholder="〇〇銀行 〇〇支店 普通 1234567 カ）〇〇〇〇"></label>
           <label class="f"><span>1人工の金額（円・新しい見積の初期値）</span><input type="number" id="c-manday" min="0" step="1000"></label>
+          <label class="f"><span>原価の1人工（円・社内用）</span><input type="number" id="c-manday-cost" min="0" step="500"></label>
+          <label class="f"><span>材料の仕入掛率（定価の%・社内用）</span><input type="number" id="c-material-cost" min="0" max="100" step="1"></label>
           <label class="f"><span>単価の端数（新しい見積の初期値）</span>
             <select id="c-unit-round">
               <option value="0">そのまま</option>

@@ -13,6 +13,7 @@
   var KEY_MDL   = 'airtec_models_v1';
   var KEY_SITE  = 'airtec_sites_v1';
   var KEY_INV   = 'airtec_invoices_v1';
+  var KEY_COST  = 'airtec_showcost_v1';   // 原価を画面に出すかどうか（端末ごと）
 
   /* ---------- 便利関数 ---------- */
   function $(sel, root) { return (root || document).querySelector(sel); }
@@ -378,6 +379,66 @@
     return changed;
   }
 
+  /* ----------------------------------------------------------------------
+     原価と粗利（社内用）。見積書には一切出さない。
+
+     1単位あたりの原価の決め方は、上から順に見て最初に当たったもの。
+       1. 項目・行に原価が入っていれば、その額
+       2. 人工の作業なら　人工 × 原価の1人工
+       3. 材料の仕入掛率が決めてあれば　定価 × 仕入掛率
+       4. どれも無ければ「原価未入力」。粗利は多めに見えるので、その旨を画面に出す
+     ---------------------------------------------------------------------- */
+
+  /** 原価を画面に出すかどうか（端末ごとの見た目の設定。見積には保存しない） */
+  var showCost = load(KEY_COST, false) === true;
+
+  /** 仕入掛率を当てにしてよいのは材料だけ。作業の分類には使わない */
+  function isMaterialCat(catId) {
+    var material = true;
+    pb.categories.forEach(function (c) { if (c.id === catId && c.work) material = false; });
+    return material;
+  }
+
+  /** 単価マスタの項目から、1単位あたりの原価を見積もる */
+  function itemCost(item, cat) {
+    if (!item) return 0;
+    if (num(item.cost) > 0) return num(item.cost);
+    if (num(item.manDay) > 0) return Math.round(num(item.manDay) * num(pb.defaults.manDayCostYen));
+    var pct = num(pb.defaults.materialCostPercent);
+    if (pct > 0 && (!cat || !cat.work)) return Math.round(num(item.price) * pct / 100);
+    return 0;
+  }
+
+  /** 明細1行の原価（1単位あたり）を、いまの設定から出し直す */
+  function lineCostFromSettings(l) {
+    if (num(l.manDay) > 0) return Math.round(num(l.manDay) * num(pb.defaults.manDayCostYen));
+    if (num(l.autoPercent) > 0) return 0;      // 消耗品雑費・諸経費は原価を持たない
+    var pct = num(pb.defaults.materialCostPercent);
+    if (pct > 0 && isMaterialCat(l.cat)) return Math.round(num(l.base) * pct / 100);
+    return 0;
+  }
+
+  /** その見積の原価と粗利 */
+  function profitOf(doc) {
+    var t = calcOf(doc);
+    var cost = 0, blank = 0;
+    (doc.lines || []).forEach(function (l) {
+      var c = num(l.cost);
+      cost += num(l.qty) * c;
+      // 金額があるのに原価が入っていない行は、粗利を多く見せてしまう。
+      // 消耗品雑費と諸経費はもともと原価を持たない行なので、数に入れない。
+      if (c <= 0 && !num(l.autoPercent) && num(l.qty) * num(l.price) > 0) blank++;
+    });
+    var sales = t.taxable;                       // 税抜の受取額（諸経費・値引き込み）
+    var gross = sales - cost;
+    return {
+      cost: cost,
+      gross: gross,
+      rate: sales > 0 ? (gross / sales) * 100 : 0,
+      blank: blank
+    };
+  }
+
   /** 元値（定価）と掛率から、その行の単価を出す。端数の繰り上げもここでかける */
   function priceFromBase(l) {
     return ceilYen(num(l.base) * num(l.rate) / 100, st.unitRound);
@@ -391,6 +452,14 @@
       if (l.rate == null) l.rate = 100;
       if (num(l.manDay)) l.base = manDayPrice(l.manDay);   // 人工の行は掛け算し直す
       l.price = priceFromBase(l);
+    });
+  }
+
+  /** 原価の設定を変えたときに、手で入れていない行の原価を出し直す */
+  function applyLineCosts() {
+    st.lines.forEach(function (l) {
+      if (l.costFixed) return;            // 手で打った原価は動かさない
+      l.cost = lineCostFromSettings(l);
     });
   }
 
@@ -610,6 +679,8 @@
           autoBase: r.item.autoBase || '',
           // 人工つきの作業は、1人工の金額を変えたときに計算し直せるよう覚えておく
           manDay: num(r.item.manDay) || 0,
+          // 原価（社内用）。見積書には出ない
+          cost: itemCost(r.item, r.cat),
           // 見積を作りながら「これどんな材料だっけ」を確かめられるよう、製品ページも持たせる
           url: r.item.url || ''
         });
@@ -642,12 +713,13 @@
      明細
      ====================================================================== */
   function addLine(line) {
-    var l = Object.assign({ name: '', spec: '', qty: 1, unit: '式', price: 0, url: '', cat: '', autoPercent: 0, autoBase: '', manDay: 0 }, line || {});
+    var l = Object.assign({ name: '', spec: '', qty: 1, unit: '式', price: 0, url: '', cat: '', autoPercent: 0, autoBase: '', manDay: 0, cost: 0 }, line || {});
     // base は掛率をかける前の元値（単価マスタの定価）。rate は「定価の何%で出すか」
     if (l.base == null) l.base = num(l.price);
     if (l.rate == null) l.rate = 100;
     if (num(l.manDay)) l.base = manDayPrice(l.manDay);
     l.price = priceFromBase(l);   // 端数の設定にしたがって繰り上げる
+    if (!num(l.cost)) l.cost = lineCostFromSettings(l);
     st.lines.push(l);
     renderLines();
     persistDraft();
@@ -854,6 +926,7 @@
           iPrice.title = AUTO_BASES[bs].name + 'の合計 ' + yen(autoBaseTotal(st, bs)) +
                          ' の ' + num(l.autoPercent) + '%';
           tdAmt.textContent = yen(lineAmount(l, st.unitRound));
+          showMargin();
         });
       }
 
@@ -861,6 +934,7 @@
         l.qty = num(iQty.value);
         if (!isAuto) l.price = num(iPrice.value);
         tdAmt.textContent = yen(lineAmount(l, st.unitRound));
+        showMargin();
         refreshAutoLines();
         renderTotals();
         persistDraft();
@@ -884,6 +958,37 @@
         if (rounded === num(iPrice.value)) return;
         iPrice.value = rounded;
         recalc();
+      });
+
+      // 原価と粗利率（社内用）。見積書には出ない
+      var tdCost = el('td', 'c-cost');
+      var tdMargin = el('td', 'c-margin');
+      var iCost = el('input'); iCost.type = 'number'; iCost.step = '1'; iCost.value = num(l.cost) || '';
+      iCost.placeholder = '—';
+      iCost.title = '1' + (l.unit || '個') + 'あたりの原価。空のままだと粗利を多めに見せてしまいます';
+      tdCost.appendChild(iCost);
+      tr.appendChild(tdCost);
+      tr.appendChild(tdMargin);
+
+      function showMargin() {
+        var amt = lineAmount(l, st.unitRound);
+        var cst = num(l.qty) * num(l.cost);
+        if (!amt || !num(l.cost)) {
+          tdMargin.textContent = num(l.cost) ? '—' : '未入力';
+          tdMargin.classList.remove('is-thin');
+          return;
+        }
+        var r = ((amt - cst) / amt) * 100;
+        tdMargin.textContent = r.toFixed(1) + '%';
+        tdMargin.classList.toggle('is-thin', r < 15);
+      }
+
+      iCost.addEventListener('input', function () {
+        l.cost = num(iCost.value);
+        l.costFixed = num(iCost.value) > 0;   // 手で入れた原価は設定変更で上書きしない
+        showMargin();
+        renderTotals();
+        persistDraft();
       });
 
       // 製品ページ ＋ 単価表に登録 ＋ 削除
@@ -923,9 +1028,11 @@
       tdDel.appendChild(del);
       tr.appendChild(tdDel);
 
+      showMargin();
       tb.appendChild(tr);
     });
 
+    applyCostVisibility();
     refreshAutoLines();
     renderTotals();
   }
@@ -1027,6 +1134,24 @@
     }
   }
 
+  /**
+   * 原価の列を出す／隠す。
+   * body にクラスを付けてCSSに任せる。そうしないと、あとから作られる
+   * 単価マスタの行や、足したばかりの明細の行に効かない。
+   */
+  function applyCostVisibility() {
+    document.body.classList.toggle('show-cost', showCost);
+    var chk = $('#chk-cost');
+    if (chk) chk.checked = showCost;
+  }
+
+  $('#chk-cost').addEventListener('change', function () {
+    showCost = $('#chk-cost').checked;
+    save(KEY_COST, showCost);
+    applyCostVisibility();
+    renderTotals();
+  });
+
   function renderTotals() {
     var t = calc();
     var box = $('#totals');
@@ -1047,6 +1172,18 @@
     var html = '<dl>';
     rows.forEach(function (r) { html += '<dt>' + esc(r[0]) + '</dt><dd>' + esc(r[1]) + '</dd>'; });
     html += '<dt class="row-total">御見積金額（税込）</dt><dd class="row-total">' + esc(yen(t.total)) + '</dd>';
+
+    // 原価と粗利（社内用）。画面だけで、見積書には印刷されない
+    if (showCost) {
+      var pf = profitOf(st);
+      html += '<dt class="row-cost">原価（画面のみ）</dt><dd class="row-cost">' + esc(yen(pf.cost)) + '</dd>';
+      html += '<dt class="row-cost">粗利（税抜）</dt><dd class="row-cost">' + esc(yen(pf.gross)) + '</dd>';
+      html += '<dt class="row-cost">粗利率</dt><dd class="row-cost">' + esc(pf.rate.toFixed(1) + '%') + '</dd>';
+      if (pf.blank) {
+        html += '<dt class="row-cost">原価未入力</dt><dd class="row-cost">' + pf.blank +
+                '行（粗利は多めに出ています）</dd>';
+      }
+    }
     html += '</dl>';
     box.innerHTML = html;
   }
@@ -2147,8 +2284,9 @@
 
     var head = el('div', 'mrow mrow-head');
     // 末尾の2つは「製品ページ」ボタンと「削除」ボタンの列（見出しは無し）
-    ['品番', '品名', '規格・仕様', '単位', '人工', '単価', '', ''].forEach(function (h) {
-      head.appendChild(el('div', null, h));
+    ['品番', '品名', '規格・仕様', '単位', '人工', '原価', '単価', '', ''].forEach(function (h, i) {
+      var c = el('div', i === 5 ? 'mcol-cost' : null, h);
+      head.appendChild(c);
     });
     body.appendChild(head);
     body.appendChild(rowsBox);
@@ -2267,6 +2405,16 @@
       mdCell.appendChild(mdInput);
     }
     row.appendChild(mdCell);
+
+    // 原価（社内用）。空なら人工や仕入掛率から見当をつける
+    var costCell = el('span', 'm-manday mcol-cost');
+    var costInput = inp(num(item.cost) || '', 'm-cost', 'number', function (v) {
+      item.cost = num(v);
+      if (!item.cost) delete item.cost;
+    }, String(itemCost(item, cat) || '—'));
+    costInput.title = '仕入れ値・原価。空なら人工や仕入掛率から見当をつけます';
+    costCell.appendChild(costInput);
+    row.appendChild(costCell);
     var priceInput = isAuto
       ? inp(item.autoPercent, 'm-price', 'number', function (v) { item.autoPercent = num(v); })
       : inp(item.price, 'm-price', 'number', function (v) { item.price = num(v); });
@@ -2289,6 +2437,8 @@
       } else {
         priceInput.title = '';
       }
+      // 原価の見当（うすい文字）も、人工に合わせて出し直す
+      costInput.placeholder = String(itemCost(item, cat) || '—');
     }
 
     if (isAuto) {
@@ -2639,6 +2789,8 @@
     $('#c-footer').value = pb.defaults.footerNote || '';
     $('#c-unit-round').value = num(pb.defaults.unitRoundYen) || 0;
     $('#c-manday').value = num(pb.defaults.manDayYen) || 0;
+    $('#c-manday-cost').value = num(pb.defaults.manDayCostYen) || 0;
+    $('#c-material-cost').value = num(pb.defaults.materialCostPercent) || 0;
     $('#seal-size').value = pb.company.sealSizeMm || 18;
     $('#logo-size').value = pb.company.logoHeightMm || 12;
     renderSealPreview();
@@ -2661,6 +2813,10 @@
     pb.defaults.footerNote = $('#c-footer').value;
     pb.defaults.unitRoundYen = num($('#c-unit-round').value);
     pb.defaults.manDayYen = num($('#c-manday').value);
+    pb.defaults.manDayCostYen = num($('#c-manday-cost').value);
+    pb.defaults.materialCostPercent = num($('#c-material-cost').value);
+    applyLineCosts();
+    renderLines();
     savePB();
     updateBrand();
     toast('保存しました');

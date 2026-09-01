@@ -189,6 +189,25 @@ table.lines input:focus { background: #fff; }
 td.c-rate.is-off .rate-sel { border-color: var(--accent); color: var(--accent); font-weight: 600; background: var(--accent-soft); }
 .c-amount { width: 120px; text-align: right; }
 .c-del { width: 140px; }
+/* 原価・粗利（社内用。見積書には出ない） */
+.c-cost { width: 110px; }
+.c-margin { width: 74px; text-align: right; }
+td.c-cost input { text-align: right; font-variant-numeric: tabular-nums; }
+td.c-margin { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-sub); }
+td.c-margin.is-thin { color: var(--danger); font-weight: 700; }
+th.c-cost, th.c-margin, td.c-cost, td.c-margin { background: var(--accent-soft); }
+.cost-toggle {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 13px; color: var(--text-sub); cursor: pointer;
+  padding: 6px 10px; border: 1px dashed var(--border); border-radius: 6px;
+}
+.cost-toggle input { margin: 0; }
+#totals dt.row-cost, #totals dd.row-cost { color: var(--accent); }
+/* 原価の列は、チェックを入れたときだけ出す */
+body:not(.show-cost) .c-cost,
+body:not(.show-cost) .c-margin,
+body:not(.show-cost) .mcol-cost { display: none; }
+.mrow input.m-cost { text-align: right; font-variant-numeric: tabular-nums; }
 td.c-amount { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; padding-right: 10px; }
 td.c-qty input, td.c-price input { text-align: right; font-variant-numeric: tabular-nums; }
 .line-name { display: flex; flex-direction: column; gap: 2px; }
@@ -281,6 +300,8 @@ tr.is-dragging {
 .cat-filter { margin-bottom: 10px; }
 .cat-filter input { max-width: 320px; background: #fff; }
 .mrow { display: grid; grid-template-columns: 110px 1.6fr 1.2fr 62px 62px 104px 32px 32px; gap: 6px; margin-bottom: 6px; align-items: center; }
+/* 原価の列を出しているときは1列ぶん広げる */
+body.show-cost .mrow { grid-template-columns: 110px 1.6fr 1.2fr 62px 62px 90px 104px 32px 32px; }
 .mrow input { padding: 6px 8px; font-size: 13px; }
 .mrow-head { font-size: 11px; color: var(--text-sub); font-weight: 700; }
 .mrow input.m-price { text-align: right; font-variant-numeric: tabular-nums; }
