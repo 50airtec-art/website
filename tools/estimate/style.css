@@ -208,6 +208,9 @@ body:not(.show-cost) .c-cost,
 body:not(.show-cost) .c-margin,
 body:not(.show-cost) .mcol-cost { display: none; }
 .mrow input.m-cost { text-align: right; font-variant-numeric: tabular-nums; }
+/* 色分けを選ぶ欄 */
+.m-color { width: 100%; padding: 5px 2px; font-size: 12px; font-weight: 700;
+  border: 1px solid var(--border); border-radius: 6px; background: #fff; }
 td.c-amount { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; padding-right: 10px; }
 td.c-qty input, td.c-price input { text-align: right; font-variant-numeric: tabular-nums; }
 .line-name { display: flex; flex-direction: column; gap: 2px; }
@@ -299,9 +302,9 @@ tr.is-dragging {
 .cat-count { color: var(--text-light); font-weight: 400; font-size: 12px; }
 .cat-filter { margin-bottom: 10px; }
 .cat-filter input { max-width: 320px; background: #fff; }
-.mrow { display: grid; grid-template-columns: 110px 1.6fr 1.2fr 62px 62px 104px 32px 32px; gap: 6px; margin-bottom: 6px; align-items: center; }
+.mrow { display: grid; grid-template-columns: 110px 1.6fr 1.2fr 62px 62px 104px 58px 32px 32px; gap: 6px; margin-bottom: 6px; align-items: center; }
 /* 原価の列を出しているときは1列ぶん広げる */
-body.show-cost .mrow { grid-template-columns: 110px 1.6fr 1.2fr 62px 62px 90px 104px 32px 32px; }
+body.show-cost .mrow { grid-template-columns: 110px 1.6fr 1.2fr 62px 62px 90px 104px 58px 32px 32px; }
 .mrow input { padding: 6px 8px; font-size: 13px; }
 .mrow-head { font-size: 11px; color: var(--text-sub); font-weight: 700; }
 .mrow input.m-price { text-align: right; font-variant-numeric: tabular-nums; }

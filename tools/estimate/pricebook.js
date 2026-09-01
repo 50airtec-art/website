@@ -12,7 +12,7 @@
    ========================================================================== */
 
 const DEFAULT_PRICEBOOK = {
-  version: 5,
+  version: 6,
 
   /* ---------- 自社情報（見積書に印刷される / ［自社情報］画面で設定） ---------- */
   company: {
@@ -118,17 +118,19 @@ const DEFAULT_PRICEBOOK = {
       name: '業務用｜天カセ・パッケージ',
       work: true,          // ここから入れた行は「作業費」として数える（消耗品雑費の計算のもと）
       items: [
-        { name: '天井カセット4方向 取付', spec: '1.5馬力', unit: '台', price: 90000 },
-        { name: '天井カセット4方向 取付', spec: '2.0馬力', unit: '台', price: 100000 },
-        { name: '天井カセット4方向 取付', spec: '2.5馬力', unit: '台', price: 110000 },
-        { name: '天井カセット4方向 取付', spec: '3馬力', unit: '台', price: 120000 },
-        { name: '天井カセット4方向 取付', spec: '4馬力', unit: '台', price: 140000 },
-        { name: '天井カセット4方向 取付', spec: '5馬力', unit: '台', price: 160000 },
-        { name: '天井カセット4方向 取付', spec: '6馬力', unit: '台', price: 180000 },
-        { name: '天井吊形 取付', spec: '2〜3馬力', unit: '台', price: 100000 },
-        { name: '天井吊形 取付', spec: '4〜6馬力', unit: '台', price: 140000 },
-        { name: '床置形 取付', spec: '2〜3馬力', unit: '台', price: 90000 },
-        { name: '壁掛形（業務用）取付', spec: '1.5〜2.5馬力', unit: '台', price: 70000 },
+        /* 取付は数が多いので、室内機の形ごとに色を分けてある。
+           色は［単価マスタ］の「色」欄でいつでも変えられる。 */
+        { name: '天井カセット4方向 取付', spec: '1.5馬力', unit: '台', price: 90000, color: '青' },
+        { name: '天井カセット4方向 取付', spec: '2.0馬力', unit: '台', price: 100000, color: '青' },
+        { name: '天井カセット4方向 取付', spec: '2.5馬力', unit: '台', price: 110000, color: '青' },
+        { name: '天井カセット4方向 取付', spec: '3馬力', unit: '台', price: 120000, color: '青' },
+        { name: '天井カセット4方向 取付', spec: '4馬力', unit: '台', price: 140000, color: '青' },
+        { name: '天井カセット4方向 取付', spec: '5馬力', unit: '台', price: 160000, color: '青' },
+        { name: '天井カセット4方向 取付', spec: '6馬力', unit: '台', price: 180000, color: '青' },
+        { name: '天井吊形 取付', spec: '2〜3馬力', unit: '台', price: 100000, color: '赤' },
+        { name: '天井吊形 取付', spec: '4〜6馬力', unit: '台', price: 140000, color: '赤' },
+        { name: '床置形 取付', spec: '2〜3馬力', unit: '台', price: 90000, color: '緑' },
+        { name: '壁掛形（業務用）取付', spec: '1.5〜2.5馬力', unit: '台', price: 70000, color: '橙' },
         { name: '冷媒配管 新設', spec: '被覆銅管・保温込み', unit: 'm', price: 6000 },
         { name: '冷媒配管 既設流用（洗浄・フラッシング）', spec: '', unit: '式', price: 25000 },
         { name: 'ドレン配管 新設', spec: '', unit: 'm', price: 3000 },
@@ -180,6 +182,9 @@ const DEFAULT_PRICEBOOK = {
       items: [
         /* 作業費 ＋ 消耗品雑費 の合計の15%を、ツールが自動で計算して入れる。
            この行を使うときは、見積画面の「諸経費（小計の%）」は0のままにしておく（二重取りになるため）。 */
+        /* 消耗品雑費は家庭用・業務用にも置いてあるが、諸経費と並べて選べたほうが早いので
+           ここにも置く。どこから入れても金額は同じ（作業費の合計の5%）。 */
+        { name: '消耗品雑費', spec: '', unit: '式', price: 0, autoPercent: 5, autoBase: 'work' },
         { name: '諸経費（現場管理費）', spec: '', unit: '式', price: 0, autoPercent: 15, autoBase: 'work+auto' },
         { name: '駐車場代・通行料', spec: '', unit: '式', price: 0 },
         { name: '出精値引き', spec: '', unit: '式', price: 0 }

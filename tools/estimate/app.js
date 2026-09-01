@@ -153,7 +153,7 @@
    * 端末のブラウザに保存してある単価は消さず、足りない印と項目だけを足す。
    */
   function migratePB() {
-    if (num(pb.version) >= 5) return;
+    if (num(pb.version) >= 6) return;
 
     DEFAULT_PRICEBOOK.categories.forEach(function (dc) {
       pb.categories.forEach(function (c) {
@@ -176,10 +176,19 @@
             c.items.push(clone(di));
           }
         });
+
+        // 色分けの初期設定を配る。すでに色を付けてある行はそのまま残す。
+        (dc.items || []).forEach(function (di) {
+          if (!di.color) return;
+          c.items.forEach(function (it) {
+            if (it.color) return;
+            if (it.name === di.name && (it.spec || '') === (di.spec || '')) it.color = di.color;
+          });
+        });
       });
     });
 
-    pb.version = 5;
+    pb.version = 6;
     save(KEY_PB, pb);
   }
 
@@ -2284,9 +2293,8 @@
 
     var head = el('div', 'mrow mrow-head');
     // 末尾の2つは「製品ページ」ボタンと「削除」ボタンの列（見出しは無し）
-    ['品番', '品名', '規格・仕様', '単位', '人工', '原価', '単価', '', ''].forEach(function (h, i) {
-      var c = el('div', i === 5 ? 'mcol-cost' : null, h);
-      head.appendChild(c);
+    ['品番', '品名', '規格・仕様', '単位', '人工', '原価', '単価', '色', '', ''].forEach(function (h, i) {
+      head.appendChild(el('div', i === 5 ? 'mcol-cost' : null, h));
     });
     body.appendChild(head);
     body.appendChild(rowsBox);
@@ -2377,9 +2385,6 @@
       return i;
     }
 
-    var mcol = itemColor(item.color);
-    if (mcol) row.style.color = mcol;    // シリーズごとの色分け（単価マスタ側）
-
     row.appendChild(inp(item.code || '', 'm-code', 'text', function (v) { item.code = v; }, '品番'));
     row.appendChild(inp(item.name, null, 'text', function (v) { item.name = v; }, '品名'));
     row.appendChild(inp(item.spec || '', null, 'text', function (v) { item.spec = v; }, '規格・仕様'));
@@ -2453,6 +2458,38 @@
       row.appendChild(priceInput);
       syncPrice();
     }
+
+    // 色分け。取付の形など、ぱっと見分けたいものに使う
+    var colSel = el('select', 'm-color');
+    colSel.title = 'この項目の文字色。取付の形などを見分けるのに使います';
+    var COLOR_ORDER = ['', '青', '水', '緑', '橙', '赤', '桃', '紫', '茶', '灰'];
+    COLOR_ORDER.forEach(function (name) {
+      var op = el('option', null, name || '—');
+      op.value = name;
+      var c = itemColor(name);
+      if (c) op.style.color = c;
+      if ((item.color || '') === name) op.selected = true;
+      colSel.appendChild(op);
+    });
+    // 選択肢に無い色（CSVで色コードを入れた場合など）も残す
+    if (item.color && COLOR_ORDER.indexOf(item.color) < 0) {
+      var opX = el('option', null, item.color);
+      opX.value = item.color; opX.selected = true;
+      colSel.insertBefore(opX, colSel.firstChild);
+    }
+    function paintRow() {
+      var c = itemColor(item.color);
+      row.style.color = c || '';
+      colSel.style.color = c || '';
+    }
+    colSel.addEventListener('change', function () {
+      item.color = colSel.value;
+      if (!item.color) delete item.color;
+      paintRow();
+      savePBDebounced();
+    });
+    paintRow();
+    row.appendChild(colSel);
 
     // URLが無い行でも列がずれないよう、入れ物は必ず置く
     var refCell = el('span', 'm-ref');
