@@ -311,12 +311,12 @@
     var lines = ((doc || {}).lines || []);
     var sum = 0;
     lines.forEach(function (l) {
-      if (isWorkLine(l)) sum += num(l.qty) * num(l.price);
+      if (isWorkLine(l)) sum += lineAmount(l, (doc || {}).unitRound);
     });
     if (base === 'work+auto') {
       // 諸経費は、先に決まった消耗品雑費も含めた金額に掛ける
       lines.forEach(function (l) {
-        if (num(l.autoPercent) && autoBaseOf(l) === 'work') sum += num(l.qty) * num(l.price);
+        if (num(l.autoPercent) && autoBaseOf(l) === 'work') sum += lineAmount(l, (doc || {}).unitRound);
       });
     }
     return sum;
@@ -366,10 +366,19 @@
     });
   }
 
+  /**
+   * その行の金額。ふつうは「数量 × 単価」だが、数量に小数がある行
+   * （フロン破壊処理費 3.2kg など）は、それでも端数が残ってしまう。
+   * そこで金額にも同じ繰り上げをかける。数量が整数の行では何も変わらない。
+   */
+  function lineAmount(l, step) {
+    return ceilYen(num(l.qty) * num(l.price), step);
+  }
+
   /** 見積でも請求書でも使えるように、対象の書類を受け取って計算する */
   function calcOf(st) {
     var subtotal = 0;
-    (st.lines || []).forEach(function (l) { subtotal += num(l.qty) * num(l.price); });
+    (st.lines || []).forEach(function (l) { subtotal += lineAmount(l, st.unitRound); });
 
     var overhead = subtotal * num(st.overhead) / 100;
     var discount = num(st.discount);
@@ -795,7 +804,7 @@
       });
 
       // 金額
-      var tdAmt = el('td', 'c-amount', yen(num(l.qty) * num(l.price)));
+      var tdAmt = el('td', 'c-amount', yen(lineAmount(l, st.unitRound)));
       tr.appendChild(tdAmt);
 
       // 自動計算の行は、ほかの行をいじるたびに単価と金額を書き直す
@@ -805,14 +814,14 @@
           iPrice.value = l.price;
           iPrice.title = AUTO_BASES[bs].name + 'の合計 ' + yen(autoBaseTotal(st, bs)) +
                          ' の ' + num(l.autoPercent) + '%';
-          tdAmt.textContent = yen(num(l.qty) * num(l.price));
+          tdAmt.textContent = yen(lineAmount(l, st.unitRound));
         });
       }
 
       function recalc() {
         l.qty = num(iQty.value);
         if (!isAuto) l.price = num(iPrice.value);
-        tdAmt.textContent = yen(l.qty * l.price);
+        tdAmt.textContent = yen(lineAmount(l, st.unitRound));
         refreshAutoLines();
         renderTotals();
         persistDraft();
@@ -2552,6 +2561,7 @@
       if (n) n.value = pb.company[companyMap[sel]] || '';
     });
     $('#c-footer').value = pb.defaults.footerNote || '';
+    $('#c-unit-round').value = num(pb.defaults.unitRoundYen) || 0;
     $('#seal-size').value = pb.company.sealSizeMm || 18;
     $('#logo-size').value = pb.company.logoHeightMm || 12;
     renderSealPreview();
@@ -2572,6 +2582,7 @@
       pb.company[companyMap[sel]] = $(sel).value;
     });
     pb.defaults.footerNote = $('#c-footer').value;
+    pb.defaults.unitRoundYen = num($('#c-unit-round').value);
     savePB();
     updateBrand();
     toast('保存しました');
@@ -3134,7 +3145,7 @@
           '<td class="t-qty">' + (num(l.qty) % 1 === 0 ? num(l.qty) : num(l.qty).toFixed(1)) + '</td>' +
           '<td class="t-unit">' + esc(l.unit) + '</td>' +
           '<td class="t-price">' + Math.round(num(l.price)).toLocaleString('ja-JP') + '</td>' +
-          '<td class="t-amount">' + Math.round(num(l.qty) * num(l.price)).toLocaleString('ja-JP') + '</td>' +
+          '<td class="t-amount">' + lineAmount(l, d.unitRound).toLocaleString('ja-JP') + '</td>' +
         '</tr>';
     });
     // 見た目を整えるため最低12行になるよう空行を足す

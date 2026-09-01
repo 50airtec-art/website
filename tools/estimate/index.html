@@ -282,6 +282,13 @@
           <label class="f"><span>ウェブサイト</span><input type="text" id="c-web"></label>
           <label class="f"><span>登録番号（インボイス）</span><input type="text" id="c-invoice"></label>
           <label class="f f-wide"><span>振込先</span><input type="text" id="c-bank" placeholder="〇〇銀行 〇〇支店 普通 1234567 カ）〇〇〇〇"></label>
+          <label class="f"><span>単価の端数（新しい見積の初期値）</span>
+            <select id="c-unit-round">
+              <option value="0">そのまま</option>
+              <option value="10">10円未満は繰り上げ</option>
+              <option value="100">100円未満は繰り上げ</option>
+            </select>
+          </label>
           <label class="f f-wide"><span>見積書の下部に入れる注意書き</span><textarea id="c-footer" rows="3"></textarea></label>
         </div>
         <div class="card-actions" style="margin-top:16px">
