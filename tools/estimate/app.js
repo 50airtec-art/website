@@ -153,7 +153,7 @@
    * 端末のブラウザに保存してある単価は消さず、足りない印と項目だけを足す。
    */
   function migratePB() {
-    if (num(pb.version) >= 6) return;
+    if (num(pb.version) >= 7) return;
 
     DEFAULT_PRICEBOOK.categories.forEach(function (dc) {
       pb.categories.forEach(function (c) {
@@ -188,7 +188,7 @@
       });
     });
 
-    pb.version = 6;
+    pb.version = 7;
     save(KEY_PB, pb);
   }
 
