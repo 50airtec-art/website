@@ -1,5 +1,6 @@
 User-agent: *
 Allow: /
 Disallow: /tools/
+Disallow: /rei3/
 
 Sitemap: https://50airtec.com/sitemap.xml
