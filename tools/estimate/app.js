@@ -2607,7 +2607,8 @@
     color:    ['色', '色分け', '文字色', 'カラー', 'color'],
     unit:     ['単位', 'unit'],
     price:    ['定価', '単価', '価格', '金額', '希望小売価格', '標準価格', 'price'],
-    manDay:   ['人工', '人工数', '作業人工', '歩掛', '歩掛り', 'manday']
+    manDay:   ['人工', '人工数', '作業人工', '歩掛', '歩掛り', 'manday'],
+    cost:     ['原価', '仕入', '仕入値', '仕入単価', '仕入価格', '仕切', '仕切価格', 'cost']
   };
 
   function normalizeHeader(s) {
@@ -2694,6 +2695,9 @@
       };
       // 人工の列があれば、単価は［人工 × 1人工の金額］で出す
       if (md > 0) { it.manDay = md; it.price = manDayPrice(md); }
+      // 仕入値（原価）の列があれば入れる。社内用なので見積書には出ない
+      var cst = toPrice(cell('cost'));
+      if (cst > 0) it.cost = cst;
       staged.push({ catName: catName, item: it });
       touched[catName] = (touched[catName] || 0) + 1;
     });
@@ -2715,7 +2719,8 @@
     var preview = staged.slice(0, 3).map(function (s) {
       var i = s.item;
       return '　' + [i.code || '（品番なし）', i.name, i.spec || '—', i.unit,
-                     (num(i.manDay) ? i.manDay + '人工 ' : '') + yen(i.price)].join(' ／ ');
+                     (num(i.manDay) ? i.manDay + '人工 ' : '') + yen(i.price) +
+                     (num(i.cost) ? '（原価 ' + yen(i.cost) + '）' : '')].join(' ／ ');
     }).join('\n');
 
     // 読み取り結果を先に出す。長くてブラウザに切られても、ここだけは必ず見えるようにする。
