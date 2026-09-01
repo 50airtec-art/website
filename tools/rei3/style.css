@@ -1,0 +1,222 @@
+/* ==========================================================================
+   冷凍王｜第三種冷凍機械 過去問（社内用・noindex）
+   現場の休憩中にスマホの片手で解けることを最優先にしている。
+   ボタンは大きく、文字は詰めすぎない。
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #eef2f4;
+  --surface:   #ffffff;
+  --surface-2: #f5f8f9;
+  --text:      #14201f;
+  --text-sub:  #566065;
+  --text-light:#8a9296;
+  --border:    #dde4e7;
+  --dark:      #14201f;
+  --accent:    #0f7b6c;      /* 冷えた緑。空調王の青と分ける */
+  --accent-d:  #0a5a4e;
+  --accent-soft:#e2f1ee;
+  --ok:        #14804a;
+  --ok-soft:   #e3f5ea;
+  --ng:        #c0392b;
+  --ng-soft:   #fbe9e7;
+  --radius:    12px;
+  --font: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.8;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+input, select, textarea, button { font-family: inherit; font-size: inherit; color: inherit; }
+
+#app { max-width: 720px; margin: 0 auto; }
+
+/* ---------- 上の帯 ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--dark); color: #fff;
+  padding: 10px 14px;
+  padding-top: calc(10px + env(safe-area-inset-top));
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.brand { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.brand .mark {
+  background: var(--accent); border-radius: 8px;
+  padding: 5px 7px; font-size: 12px; font-weight: 700; line-height: 1.2;
+  white-space: nowrap;
+}
+.brand strong { display: block; font-size: 15px; line-height: 1.3; }
+.brand small { display: block; font-size: 11px; color: #9fb4b0; }
+.countdown { font-size: 12px; color: #9fb4b0; text-align: right; white-space: nowrap; }
+.countdown b { display: block; font-size: 19px; color: #fff; line-height: 1.2; }
+
+/* ---------- 画面 ---------- */
+.view { display: none; padding: 14px 12px 40px; }
+.view.is-active { display: block; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 14px;
+  margin-bottom: 12px;
+}
+.card-title { font-size: 16px; font-weight: 700; margin-bottom: 10px; }
+.hint { font-size: 13px; color: var(--text-sub); line-height: 1.8; }
+
+.card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
+.btn {
+  border: 1px solid var(--border); background: var(--surface);
+  border-radius: 9px; padding: 11px 16px;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  line-height: 1.4;
+}
+.btn:active { transform: translateY(1px); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-ghost { color: var(--text-sub); }
+.btn-sm { padding: 8px 12px; font-size: 13px; font-weight: 400; }
+.file-btn { position: relative; overflow: hidden; display: inline-block; }
+.file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+/* ---------- 成績のならび ---------- */
+.stat-row { display: flex; gap: 8px; margin-bottom: 16px; }
+.stat {
+  flex: 1; background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 9px; padding: 10px 8px; text-align: center;
+}
+.stat b { display: block; font-size: 21px; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 11px; color: var(--text-sub); }
+.stat.warm b { color: var(--ng); }
+.stat.good b { color: var(--ok); }
+
+/* ---------- 出題モード ---------- */
+.mode-list { display: flex; flex-direction: column; gap: 9px; }
+.mode {
+  text-align: left; width: 100%;
+  border: 1px solid var(--border); background: var(--surface-2);
+  border-radius: 10px; padding: 13px 14px; cursor: pointer;
+  display: grid; grid-template-columns: 1fr auto; gap: 2px 10px;
+}
+.mode:active { transform: translateY(1px); }
+.mode b { font-size: 16px; }
+.mode em { font-style: normal; font-size: 13px; color: var(--accent); font-weight: 700; white-space: nowrap; }
+.mode span { grid-column: 1 / -1; font-size: 12px; color: var(--text-sub); line-height: 1.6; }
+#mode-weak { border-color: var(--accent); background: var(--accent-soft); }
+
+.filters { display: flex; gap: 8px; margin-top: 14px; }
+.f { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.f span { font-size: 11px; color: var(--text-sub); }
+.f select {
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 9px 8px; background: #fff; width: 100%;
+}
+
+.paste-wrap { margin-top: 14px; }
+.paste-wrap summary { font-size: 13px; color: var(--text-sub); cursor: pointer; }
+.paste-wrap textarea {
+  width: 100%; margin-top: 8px; padding: 9px;
+  border: 1px solid var(--border); border-radius: 8px; font-size: 12px;
+}
+.paste-wrap .btn { margin-top: 8px; }
+
+/* ---------- 出題画面 ---------- */
+.quizbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-bottom: 10px;
+}
+.icon-btn {
+  border: 0; background: transparent; color: var(--text-sub);
+  font-size: 14px; cursor: pointer; padding: 6px 2px;
+}
+.progress { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tag {
+  font-size: 11px; color: var(--accent-d); background: var(--accent-soft);
+  border-radius: 20px; padding: 3px 10px; white-space: nowrap;
+}
+
+.question .stem { font-size: 16px; font-weight: 700; line-height: 1.8; }
+.items { list-style: none; margin: 12px 0 0; display: flex; flex-direction: column; gap: 9px; }
+.items li {
+  font-size: 14.5px; line-height: 1.85; color: var(--text);
+  background: var(--surface-2); border-radius: 8px; padding: 10px 12px;
+}
+
+.choices { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.choice {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  border: 1.5px solid var(--border); background: #fff;
+  border-radius: 10px; padding: 13px 14px; cursor: pointer;
+  font-size: 15.5px; text-align: left; line-height: 1.6;
+}
+.choice .n {
+  flex: 0 0 auto; width: 27px; height: 27px; border-radius: 50%;
+  background: var(--surface-2); border: 1px solid var(--border);
+  display: grid; place-items: center; font-size: 13px; font-weight: 700;
+}
+.choice:active { transform: translateY(1px); }
+.choice.is-answer { border-color: var(--ok); background: var(--ok-soft); }
+.choice.is-answer .n { background: var(--ok); border-color: var(--ok); color: #fff; }
+.choice.is-wrong { border-color: var(--ng); background: var(--ng-soft); }
+.choice.is-wrong .n { background: var(--ng); border-color: var(--ng); color: #fff; }
+.choices.is-done .choice { cursor: default; }
+
+.verdict { margin-top: 14px; font-size: 15px; font-weight: 700; display: none; }
+.verdict.show { display: block; }
+.verdict.ok { color: var(--ok); }
+.verdict.ng { color: var(--ng); }
+.verdict small { display: block; font-weight: 400; font-size: 13px; color: var(--text-sub); margin-top: 3px; }
+
+.quiz-foot { position: sticky; bottom: 0; padding: 10px 0 14px; background: linear-gradient(to bottom, rgba(238,242,244,0), var(--bg) 40%); }
+.quiz-foot .btn { width: 100%; padding: 15px; font-size: 16px; }
+
+/* ---------- 結果 ---------- */
+.score { text-align: center; padding: 10px 0 16px; }
+.score b { display: block; font-size: 44px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.score span { font-size: 13px; color: var(--text-sub); }
+.score.pass b { color: var(--ok); }
+.score.fail b { color: var(--ng); }
+
+.rlist { list-style: none; display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.rlist li {
+  font-size: 13px; padding: 9px 11px; border-radius: 8px;
+  background: var(--surface-2); border-left: 3px solid var(--ng);
+  color: var(--text-sub); line-height: 1.7;
+}
+.rlist li b { color: var(--text); display: block; font-size: 13px; }
+.subject-score { display: flex; gap: 8px; margin-bottom: 14px; }
+.subject-score .s {
+  flex: 1; text-align: center; border-radius: 9px; padding: 9px;
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.subject-score .s b { display: block; font-size: 19px; font-variant-numeric: tabular-nums; }
+.subject-score .s span { font-size: 11px; color: var(--text-sub); }
+.subject-score .s.pass { background: var(--ok-soft); border-color: var(--ok); }
+.subject-score .s.pass b { color: var(--ok); }
+.subject-score .s.fail { background: var(--ng-soft); border-color: var(--ng); }
+.subject-score .s.fail b { color: var(--ng); }
+
+/* ---------- お知らせ ---------- */
+#toast {
+  position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+  background: var(--dark); color: #fff; padding: 11px 18px; border-radius: 24px;
+  font-size: 14px; opacity: 0; pointer-events: none; transition: .25s;
+  max-width: 90%; text-align: center;
+}
+#toast.is-show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media (min-width: 560px) {
+  .view { padding: 18px 16px 48px; }
+  .card { padding: 20px 18px; }
+}

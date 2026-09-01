@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>冷凍王｜第三種冷凍機械 過去問</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="mark">冷凍</span>
+      <div>
+        <strong>冷凍王</strong>
+        <small id="brand-sub">第三種冷凍機械責任者</small>
+      </div>
+    </div>
+    <div class="countdown" id="countdown"></div>
+  </header>
+
+  <!-- ================= ホーム ================= -->
+  <main class="view is-active" id="view-home">
+
+    <div class="card" id="card-empty" style="display:none">
+      <h2 class="card-title">まず問題を入れてください</h2>
+      <p class="hint">
+        問題データはこの端末の中だけに保存されます。サイトにも他の人にも渡りません。<br>
+        アスラーダから受け取ったファイルを、下から読み込んでください。
+      </p>
+      <div class="card-actions">
+        <label class="btn btn-primary file-btn">問題ファイルを選ぶ<input type="file" id="file-import" accept="application/json,.json"></label>
+      </div>
+      <details class="paste-wrap">
+        <summary>ファイルではなく、貼り付けで入れる</summary>
+        <textarea id="paste-area" rows="4" placeholder="ここに貼り付け"></textarea>
+        <button class="btn btn-ghost" id="btn-paste">貼り付けた内容を入れる</button>
+      </details>
+    </div>
+
+    <div class="card" id="card-start">
+      <div class="stat-row" id="stat-row"></div>
+
+      <h2 class="card-title">今日はどれをやりますか</h2>
+
+      <div class="mode-list">
+        <button class="mode" id="mode-weak" type="button">
+          <b>間違えた問題だけ</b>
+          <em id="mode-weak-n"></em>
+          <span>前に落とした問題と、まだ解いていない問題から出します。<b>2回続けて正解すると、ここから外れます</b>（まぐれ当たりを除くため）</span>
+        </button>
+        <button class="mode" id="mode-all" type="button">
+          <b>ぜんぶから出す</b>
+          <em id="mode-all-n"></em>
+          <span>順番はばらばらです</span>
+        </button>
+        <button class="mode" id="mode-exam" type="button">
+          <b>本番と同じ形</b>
+          <em>法令20問＋保安15問</em>
+          <span>1年ぶんを通しで。合格は各科目60%です</span>
+        </button>
+      </div>
+
+      <div class="filters">
+        <label class="f"><span>科目</span>
+          <select id="f-subject"><option value="">ぜんぶ</option></select>
+        </label>
+        <label class="f"><span>年度</span>
+          <select id="f-year"><option value="">ぜんぶ</option></select>
+        </label>
+      </div>
+
+      <div class="card-actions">
+        <button class="btn btn-ghost btn-sm" id="btn-reset">成績を消す</button>
+        <label class="btn btn-ghost btn-sm file-btn">問題を足す<input type="file" id="file-add" accept="application/json,.json"></label>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ================= 出題 ================= -->
+  <main class="view" id="view-quiz">
+    <div class="quizbar">
+      <button class="icon-btn" id="btn-quit" type="button">← やめる</button>
+      <div class="progress"><span id="q-pos"></span></div>
+      <div class="tag" id="q-tag"></div>
+    </div>
+
+    <div class="card question">
+      <p class="stem" id="q-stem"></p>
+      <ul class="items" id="q-items"></ul>
+      <div class="choices" id="q-choices"></div>
+      <div class="verdict" id="q-verdict"></div>
+    </div>
+
+    <div class="quiz-foot">
+      <button class="btn btn-primary" id="btn-next" style="display:none">次の問題へ</button>
+    </div>
+  </main>
+
+  <!-- ================= 結果 ================= -->
+  <main class="view" id="view-result">
+    <div class="card">
+      <h2 class="card-title">おつかれさまでした</h2>
+      <div class="score" id="r-score"></div>
+      <div id="r-detail"></div>
+      <div class="card-actions">
+        <button class="btn btn-primary" id="btn-again">間違えた問題をもう一度</button>
+        <button class="btn btn-ghost" id="btn-home">ホームへ</button>
+      </div>
+    </div>
+  </main>
+
+  <div id="toast"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
