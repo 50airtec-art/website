@@ -123,6 +123,17 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
   padding: 9px 8px; background: #fff; width: 100%;
 }
 
+/* 手引書（別ページ）への入口 */
+.plan-link {
+  display: block; margin-top: 0; padding: 13px 15px;
+  border: 1px solid var(--accent); border-radius: 10px;
+  background: var(--accent-soft); color: var(--accent-d);
+  text-decoration: none;
+}
+.plan-link:active { transform: translateY(1px); }
+.plan-link b { display: block; font-size: 15px; }
+.plan-link span { display: block; font-size: 12px; color: var(--text-sub); line-height: 1.6; }
+
 .paste-wrap { margin-top: 14px; }
 .paste-wrap summary { font-size: 13px; color: var(--text-sub); cursor: pointer; }
 .paste-wrap textarea {

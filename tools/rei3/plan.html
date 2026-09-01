@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#14201F">
+<title>三冷 合格の段取り</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+JP:wght@400;700&family=Shippori+Mincho:wght@600;700&display=swap">
+
+<style>
+  :root {
+    --ground:#EDF1F0; --surface:#FFFFFF; --surface-2:#F5F8F7;
+    --ink:#14201F; --ink-2:#475553; --muted:#6E7C7A;
+    --rule:#DCE4E2; --rule-2:#B3C0BD;
+    --accent:#0F7B6C; --accent-d:#0A5A4E; --accent-s:#E2F1EE;
+    --flag:#9C5B14; --flag-s:#F6ECDD;
+    --drop:#8A8F8D; --drop-s:#EDEFEE;
+    --s--1:0.8125rem; --s-0:1rem; --s-1:1.125rem; --s-2:1.4375rem; --s-4:2.5rem;
+    --head:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
+    --body:"Noto Sans JP","Hiragino Sans","Yu Gothic",Meiryo,sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:#0F1614; --surface:#17211F; --surface-2:#1D2926;
+      --ink:#E6EDEB; --ink-2:#B4C2BF; --muted:#85948F;
+      --rule:#2A3835; --rule-2:#445450;
+      --accent:#4FC0AC; --accent-d:#7ED6C4; --accent-s:#17332D;
+      --flag:#D9A05C; --flag-s:#322616;
+      --drop:#7C8583; --drop-s:#202827;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#0F1614; --surface:#17211F; --surface-2:#1D2926;
+    --ink:#E6EDEB; --ink-2:#B4C2BF; --muted:#85948F;
+    --rule:#2A3835; --rule-2:#445450;
+    --accent:#4FC0AC; --accent-d:#7ED6C4; --accent-s:#17332D;
+    --flag:#D9A05C; --flag-s:#322616; --drop:#7C8583; --drop-s:#202827;
+  }
+
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--ground); color:var(--ink);
+    font-family:var(--body); font-size:var(--s-0); line-height:1.85; -webkit-font-smoothing:antialiased; }
+  .sheet { max-width:46rem; margin:0 auto; background:var(--surface);
+    border-left:1px solid var(--rule); border-right:1px solid var(--rule); }
+
+  header { padding:3.25rem 2.25rem 2rem; border-bottom:2px solid var(--accent);
+    display:flex; flex-direction:column; gap:0.9rem; }
+  .kicker { font-family:var(--mono); font-size:0.6875rem; letter-spacing:0.2em; color:var(--accent); font-weight:600; }
+  h1 { font-family:var(--head); font-weight:700; font-size:var(--s-4); line-height:1.3; margin:0; text-wrap:balance; }
+  .lede { margin:0; color:var(--ink-2); max-width:34em; }
+
+  section { padding:2.25rem; border-bottom:1px solid var(--rule); }
+  section:last-of-type { border-bottom:0; }
+  .label { font-family:var(--mono); font-size:0.6875rem; font-weight:600; letter-spacing:0.18em;
+    color:var(--muted); display:flex; align-items:center; gap:0.7rem; margin-bottom:1rem; }
+  .label::after { content:""; flex:1; height:1px; background:var(--rule); }
+
+  h2 { font-family:var(--head); font-weight:700; font-size:var(--s-2); line-height:1.5;
+    margin:0 0 0.9rem; text-wrap:balance; }
+  h3 { font-family:var(--head); font-weight:600; font-size:var(--s-1); margin:1.5rem 0 0.55rem; }
+  p { margin:0 0 0.9rem; max-width:37em; color:var(--ink-2); }
+  p:last-child { margin-bottom:0; }
+  strong { color:var(--ink); font-weight:700; }
+
+  .cmp { display:grid; grid-template-columns:1fr; gap:0.8rem; margin:1.1rem 0; }
+  .cmp > div { border:1px solid var(--rule); border-radius:7px; padding:0.9rem 1.1rem; background:var(--surface-2); }
+  .cmp .y { border-left:3px solid var(--accent); }
+  .cmp .n { border-left:3px solid var(--flag); }
+  .cmp b { font-family:var(--mono); font-size:var(--s--1); display:block; margin-bottom:0.25rem; }
+  .cmp .y b { color:var(--accent-d); }
+  .cmp .n b { color:var(--flag); }
+  .cmp p { font-size:0.9375rem; margin:0; color:var(--ink); }
+
+  .table-wrap { overflow-x:auto; margin:0 -0.4rem; padding:0 0.4rem; }
+  table { width:100%; border-collapse:collapse; font-size:0.9375rem; }
+  caption { text-align:left; font-size:var(--s--1); color:var(--muted); padding-bottom:0.55rem; }
+  th,td { padding:0.55rem 0.7rem; border-bottom:1px solid var(--rule); text-align:left; vertical-align:top; }
+  thead th { font-family:var(--body); font-weight:700; font-size:var(--s--1); color:var(--muted);
+    border-bottom:1px solid var(--rule-2); white-space:nowrap; }
+  td.q { font-family:var(--mono); font-weight:600; white-space:nowrap; color:var(--accent-d); width:5.4rem; }
+  td.t { font-weight:700; color:var(--ink); }
+  td.w { font-size:var(--s--1); color:var(--ink-2); }
+  tr.take { background:var(--accent-s); }
+  tr.drop td { color:var(--drop); }
+  tr.drop td.t { font-weight:400; }
+  tr.drop td.q { color:var(--drop); }
+
+  .box { background:var(--surface-2); border:1px solid var(--rule); border-left:3px solid var(--accent);
+    border-radius:6px; padding:1.1rem 1.3rem; margin:1.2rem 0; }
+  .box.warn { background:var(--flag-s); border-left-color:var(--flag); }
+  .box.warn h3 { color:var(--flag); }
+  .box h3 { margin-top:0; }
+  .box p:last-child { margin-bottom:0; }
+
+  ol.plan { margin:0; padding:0; list-style:none; counter-reset:w;
+    display:flex; flex-direction:column; gap:1.1rem; }
+  ol.plan li { counter-increment:w; display:grid; grid-template-columns:5.5rem 1fr; gap:0.3rem 1rem; }
+  ol.plan li::before { content:"第" counter(w) "期"; font-family:var(--mono); font-size:var(--s--1);
+    font-weight:600; color:var(--accent); padding-top:0.15rem; }
+  ol.plan b { font-family:var(--head); font-size:var(--s-1); }
+  ol.plan p { grid-column:2; margin:0; font-size:0.9375rem; }
+  ol.plan .when { grid-column:2; font-family:var(--mono); font-size:0.75rem; color:var(--muted); }
+
+  ul.plain { margin:0; padding-left:1.2rem; display:flex; flex-direction:column; gap:0.4rem;
+    max-width:37em; color:var(--ink-2); }
+  ul.plain::marker { color:var(--muted); }
+  ul.plain b { color:var(--ink); }
+
+  .price { font-family:var(--mono); font-weight:600; color:var(--accent-d); white-space:nowrap; }
+  footer { padding:1.75rem 2.25rem 2.75rem; border-top:2px solid var(--accent);
+    font-size:var(--s--1); color:var(--muted); display:flex; flex-direction:column; gap:0.35rem; }
+
+  @media (max-width:640px) {
+    :root { --s-4:1.9rem; --s-2:1.25rem; }
+    header { padding:2.25rem 1.15rem 1.6rem; }
+    section { padding:1.75rem 1.15rem; }
+    footer { padding:1.4rem 1.15rem 2.25rem; }
+    th,td { padding:0.5rem 0.45rem; }
+    ol.plan li { grid-template-columns:1fr; }
+    ol.plan li::before { grid-column:1; }
+    ol.plan p, ol.plan .when { grid-column:1; }
+  }
+</style>
+<style>
+  html { -webkit-text-size-adjust:100%; }
+  body { padding-bottom:env(safe-area-inset-bottom); }
+  .navbar {
+    position:sticky; top:0; z-index:20;
+    background:var(--ink); color:var(--ground);
+    padding:10px 14px; padding-top:calc(10px + env(safe-area-inset-top));
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    font-size:0.8125rem; line-height:1.4;
+  }
+  .navbar-back { color:var(--ground); text-decoration:none; font-weight:700; }
+  .navbar-count { font-family:var(--mono); opacity:.75; white-space:nowrap; }
+  .tail { max-width:46rem; margin:0 auto; padding:1.25rem 1.15rem 2.5rem; }
+  .tail-btn {
+    display:block; text-align:center; text-decoration:none;
+    background:var(--accent); color:#fff; font-weight:700;
+    border-radius:10px; padding:15px; font-size:1rem;
+  }
+</style>
+</head>
+<body>
+  <nav class="navbar">
+    <a class="navbar-back" href="./">← 冷凍王にもどる</a>
+    <span class="navbar-count" id="days"></span>
+  </nav>
+<div class="sheet">
+
+  <header>
+    <div class="kicker">第三種冷凍機械責任者 / 令和8年11月8日</div>
+    <h1>三冷 合格の段取り</h1>
+    <p class="lede">
+      過去問107問の分析から作った、<strong>本番までに受かるための順番</strong>。
+      全部やる前提では書いていません。<strong>何を捨てるか</strong>から決めます。
+    </p>
+  </header>
+
+  <section>
+    <div class="label">まず前提</div>
+    <h2>満点は要りません。35問中21問です</h2>
+    <p>
+      合格は<strong>法令20問中12問、保安15問中9問</strong>。合わせて21問取れば受かります。
+      逆に言えば<strong>14問は落としてよい</strong>ということです。
+    </p>
+    <div class="box warn">
+      <h3>ただし、片方でも60%を切ると落ちます</h3>
+      <p>
+        法令20問・保安6問（合計26問）で全体74%でも、<strong>保安が9問に届かないので不合格</strong>です。
+        得意な方で稼ぐ作戦は通りません。<strong>両方それぞれ60%</strong>が条件です。
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="label">いちばん大事なこと</div>
+    <h2>文を丸暗記すると、逆に落ちます</h2>
+    <p>
+      過去問を並べていて分かりました。<strong>同じ内容を、肯定と否定でひっくり返して出してきます。</strong>
+      実際の例です。
+    </p>
+    <div class="cmp">
+      <div class="y">
+        <b>令和3年 法令 問1 ロ ── 正しい</b>
+        <p>常用の温度において圧力が0.9メガパスカルの圧縮ガスであっても、温度35度において圧力が1メガパスカル以上となるものは<strong>高圧ガスである</strong>。</p>
+      </div>
+      <div class="n">
+        <b>令和7年 法令 問1 ロ ── 誤り</b>
+        <p>常用の温度35度において圧力が1メガパスカルとなる圧縮ガスであって、現在の圧力が0.9メガパスカルのものは<strong>高圧ガスではない</strong>。</p>
+      </div>
+    </div>
+    <p>
+      <strong>中身はまったく同じ話で、答えは逆になります。</strong>
+      「35度で1メガパスカル以上になるなら、今の圧力が低くても高圧ガス」という<strong>決まりを分かっていれば、どちらでも解けます</strong>。
+      文を覚えていると、見た瞬間に間違えます。
+    </p>
+    <div class="box">
+      <h3>だから、こう勉強してください</h3>
+      <p>
+        冷凍王で間違えたら、<strong>「なぜそうなるか」を一言で言えるようになるまで</strong>参考書を読む。
+        言えるようになったら次へ。文を覚えるのではなく、<strong>決まりを覚える</strong>。
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="label">保安管理技術 15問</div>
+    <h2>ここは現場の人が有利です</h2>
+    <p>
+      9問取れば合格。<strong>取りにいく11問</strong>と<strong>捨ててよい4問</strong>に分けました。
+    </p>
+    <div class="table-wrap">
+      <table>
+        <caption>◯＝取りにいく　△＝余裕があれば</caption>
+        <thead><tr><th>問</th><th>テーマ</th><th>理由</th></tr></thead>
+        <tbody>
+          <tr class="take"><td class="q">◯ 問1</td><td class="t">冷凍の原理</td><td class="w">全部の土台。ここが分かると後ろが楽になる</td></tr>
+          <tr class="take"><td class="q">◯ 問2</td><td class="t">熱の移動</td><td class="w">同上。潜熱と顕熱の違いだけでも取れる</td></tr>
+          <tr class="take"><td class="q">◯ 問3</td><td class="t">冷凍能力・軸動力・成績係数</td><td class="w">式は3つだけ。計算より意味の理解</td></tr>
+          <tr class="take"><td class="q">◯ 問4</td><td class="t">冷媒・ブライン・冷凍機油</td><td class="w">毎日さわっているもの</td></tr>
+          <tr class="take"><td class="q">◯ 問5</td><td class="t">圧縮機</td><td class="w">現場感覚が効く</td></tr>
+          <tr class="take"><td class="q">◯ 問6</td><td class="t">凝縮器・冷却塔</td><td class="w">同上</td></tr>
+          <tr class="take"><td class="q">◯ 問7</td><td class="t">蒸発器・除霜</td><td class="w">同上</td></tr>
+          <tr class="drop"><td class="q">△ 問8</td><td class="t">自動制御機器</td><td class="w">細かい。後回しでよい</td></tr>
+          <tr class="take"><td class="q">◯ 問9</td><td class="t">附属機器</td><td class="w">受液器・油分離器。見たことがある</td></tr>
+          <tr class="take"><td class="q">◯ 問10</td><td class="t">冷媒配管</td><td class="w">本業そのもの。落とすともったいない</td></tr>
+          <tr class="drop"><td class="q">△ 問11</td><td class="t">安全装置</td><td class="w">数値が細かい</td></tr>
+          <tr class="drop"><td class="q">△ 問12</td><td class="t">材料の強さ・圧力容器</td><td class="w">計算が要る。ここは一番後</td></tr>
+          <tr class="take"><td class="q">◯ 問13</td><td class="t">据付け・圧力試験・試運転</td><td class="w">やっている作業そのもの</td></tr>
+          <tr class="take"><td class="q">◯ 問14</td><td class="t">運転</td><td class="w">同上</td></tr>
+          <tr class="drop"><td class="q">△ 問15</td><td class="t">保守管理</td><td class="w">範囲が広い。取れたら儲けもの</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:1rem">
+      ◯が<strong>11問</strong>。ここで9問取れれば合格です。
+      <strong>問1〜7と問9・10・13・14</strong>——現場で手を動かしている内容が中心です。
+    </p>
+  </section>
+
+  <section>
+    <div class="label">法令 20問</div>
+    <h2>覚えれば確実に取れます</h2>
+    <p>
+      12問取れば合格。法令は<strong>理解より暗記</strong>なので、現場帰りの疲れた頭でも進みます。
+      逆に保安は頭が動くときにやるほうがいい。
+    </p>
+    <div class="table-wrap">
+      <table>
+        <caption>◯＝取りにいく　△＝余裕があれば</caption>
+        <thead><tr><th>問</th><th>テーマ</th><th>理由</th></tr></thead>
+        <tbody>
+          <tr class="take"><td class="q">◯ 問1</td><td class="t">法の目的・高圧ガスの定義</td><td class="w">毎年ほぼ同じ。数字を覚えるだけ</td></tr>
+          <tr class="take"><td class="q">◯ 問2</td><td class="t">適用除外（3トン未満など）</td><td class="w">数字だけ</td></tr>
+          <tr class="take"><td class="q">◯ 問3</td><td class="t">製造の許可</td><td class="w">50トン・20トンの線引き</td></tr>
+          <tr class="take"><td class="q">◯ 問4</td><td class="t">容器による貯蔵</td><td class="w">パターンが決まっている</td></tr>
+          <tr class="take"><td class="q">◯ 問5</td><td class="t">車両での移動</td><td class="w">同上</td></tr>
+          <tr class="take"><td class="q">◯ 問6</td><td class="t">容器（刻印・塗色・再検査）</td><td class="w">アンモニア＝白。ここは覚えるだけ</td></tr>
+          <tr class="drop"><td class="q">△ 問7</td><td class="t">冷凍能力の算定基準</td><td class="w">式の中身を問われる。後回し</td></tr>
+          <tr class="drop"><td class="q">△ 問8</td><td class="t">第二種製造者</td><td class="w">紛らわしい。落としてよい</td></tr>
+          <tr class="take"><td class="q">◯ 問9</td><td class="t">冷凍保安責任者・代理者</td><td class="w">自分に関係する話。覚えやすい</td></tr>
+          <tr class="take"><td class="q">◯ 問10</td><td class="t">保安検査</td><td class="w">誰が・いつ・何を</td></tr>
+          <tr class="take"><td class="q">◯ 問11</td><td class="t">定期自主検査</td><td class="w">問10とセットで覚える</td></tr>
+          <tr class="take"><td class="q">◯ 問12</td><td class="t">危害予防規程・保安教育計画</td><td class="w">届出が要るか要らないかだけ</td></tr>
+          <tr class="take"><td class="q">◯ 問13</td><td class="t">届出・帳簿</td><td class="w">毎年ほぼ同じ文が出る</td></tr>
+          <tr class="drop"><td class="q">△ 問14</td><td class="t">変更の工事・完成検査</td><td class="w">軽微な変更の線引きが細かい</td></tr>
+          <tr class="take"><td class="q">◯ 問15</td><td class="t">アンモニア設備の基準 ①</td><td class="w">除害・警戒標・液面計</td></tr>
+          <tr class="take"><td class="q">◯ 問16</td><td class="t">アンモニア設備の基準 ②</td><td class="w">問15とまとめて覚える</td></tr>
+          <tr class="take"><td class="q">◯ 問17</td><td class="t">定置式設備の基準 ①</td><td class="w">耐圧1.5倍・気密は許容圧力以上</td></tr>
+          <tr class="take"><td class="q">◯ 問18</td><td class="t">定置式設備の基準 ②</td><td class="w">問17とまとめて</td></tr>
+          <tr class="drop"><td class="q">△ 問19</td><td class="t">製造の方法の基準</td><td class="w">状況判断もの。取りにくい</td></tr>
+          <tr class="drop"><td class="q">△ 問20</td><td class="t">認定指定設備</td><td class="w">出番が少ない割に細かい</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:1rem">
+      ◯が<strong>14問</strong>。12問取れば合格なので、少し余裕があります。
+    </p>
+    <div class="box">
+      <h3>アンモニアを捨てないでください</h3>
+      <p>
+        <strong>4問に1問はアンモニアの話</strong>です。フルオロカーボンより多いくらい。
+        現場では出会わないので手が伸びませんが、<strong>問15・16はまるごとアンモニア</strong>です。
+        ここを捨てると法令が苦しくなります。
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <div class="label">買うもの</div>
+    <h2>テキスト1冊だけで足ります</h2>
+    <p>
+      はじめは「テキスト＋過去問題集」の2冊を勧めるつもりでした。
+      ただ<strong>過去問はもう冷凍王に入っています</strong>。買う理由がありません。
+    </p>
+    <div class="box">
+      <h3>過去問題集が要らない理由</h3>
+      <p>
+        過去問題集の中身は「問題」と「解説」です。<strong>問題は冷凍王に107問</strong>あり、
+        これから増やせます。残る「解説」はテキストにも付いていますし、
+        <strong>出題地図があるので、落とした問番号からテキストの該当章を引けます</strong>。
+        解説を二重に買うことになります。
+      </p>
+    </div>
+
+    <h3>買うのはこの1冊</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>本</th><th>出版社</th><th class="w">価格</th></tr></thead>
+        <tbody>
+          <tr class="take">
+            <td class="t">ユーキャンの第3種冷凍機械責任者<br>合格テキスト＆問題集</td>
+            <td class="w">ユーキャン</td><td class="price">約2,900円</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:1rem">
+      <strong>図とイラストが多く、初めての人向け</strong>という評価が一番多かった本です。
+      赤シートと模擬試験2回分が付きます。<br>
+      教科書らしい書き方が好みなら、オーム社の<strong>『ゼロからはじめる3種冷凍試験』2,530円</strong>でも構いません。
+      どちらか1冊です。
+    </p>
+
+    <div class="box warn">
+      <h3>買わなくていいもの</h3>
+      <p>
+        <strong>過去問題集（3,000〜3,850円）</strong>──冷凍王で足ります。<br>
+        <strong>『上級冷凍受験テキスト』</strong>──一種・二種向けで、三種には重すぎます。<br>
+        <strong>通信講座（数万円）</strong>──この試験には要らないという評価が大半でした。
+      </p>
+    </div>
+
+    <h3>足りないと感じたら</h3>
+    <p>
+      通し練習の量が足りないと思ったときだけ、<strong>電気書院の模範解答集（9年分・約3,000円）</strong>を足せば十分です。
+      先に買う必要はありません。
+    </p>
+  </section>
+
+  <section>
+    <div class="label">のこり期間の割り振り</div>
+    <h2>やる順番</h2>
+    <ol class="plan">
+      <li>
+        <b>いまの実力を測る</b>
+        <div class="when">1〜2日</div>
+        <p>冷凍王の「本番と同じ形」で令和7年度を通しで解く。点数は気にしない。<strong>どの問番号を落としたか</strong>だけ記録する。同時に本を注文する。</p>
+      </li>
+      <li>
+        <b>法令を固める</b>
+        <div class="when">約3週間</div>
+        <p>法令の◯14問を上から潰す。現場帰りの30分でいい。<strong>覚えるだけなので疲れていてもできる</strong>。冷凍王の「間違えた問題だけ」を毎日回す。<strong>テキストで調べた「なぜ」は、その場でメモ欄に書く</strong>。次に同じ問題が出たとき、自分のメモが一緒に出ます。</p>
+      </li>
+      <li>
+        <b>保安の土台をつくる</b>
+        <div class="when">約3週間</div>
+        <p>保安の問1〜4（原理・熱の移動・成績係数・冷媒）を、休みの日にまとめて。<strong>ここは理解が要るので、頭が動くときに</strong>。その後、問5〜7・9・10・13・14へ。</p>
+      </li>
+      <li>
+        <b>通しで解く</b>
+        <div class="when">約2週間</div>
+        <p>冷凍王の「本番と同じ形」で、年度を変えて通しで。テキストの模擬試験も使う。時間も本番と同じで。<strong>科目ごとに60%を超えているか</strong>を毎回確認する。</p>
+      </li>
+      <li>
+        <b>間違えたものだけ</b>
+        <div class="when">最後の1週間</div>
+        <p>新しいことはやらない。冷凍王の「間違えた問題だけ」を回す。<strong>2回続けて正解するまで消えない</strong>ので、それが無くなったら仕上がり。</p>
+      </li>
+    </ol>
+    <div class="box">
+      <h3>1日にどれくらい</h3>
+      <p>
+        平日30分、休日2時間で、9週間なら<strong>およそ50時間</strong>。
+        この試験は<strong>過去問の繰り返しが効く</strong>と言われているので、時間より<strong>回した回数</strong>が効きます。
+        ただし<strong>始めるのが遅れるほど苦しくなります</strong>。
+      </p>
+    </div>
+  </section>
+
+  <footer>
+    <div>令和2・3・4・7年度の公式試験問題107問の分析にもとづく。優先順位は分析結果とBIGBOSSの現場経験を踏まえた判断であって、出題を保証するものではありません。</div>
+    <div>参考書の価格は2026年9月時点の調べ。</div>
+  </footer>
+
+</div>
+
+<div class="tail">
+  <a class="tail-btn" href="./">冷凍王をひらく</a>
+</div>
+<script>
+(function () {
+  /* 試験日までの残り。手引書の中の日数と食い違わないよう、ここで数え直す */
+  var exam = new Date(2026, 10, 8);
+  var t = new Date(); t.setHours(0, 0, 0, 0);
+  var d = Math.ceil((exam - t) / 86400000);
+  var el = document.getElementById("days");
+  el.textContent = d > 0 ? ("試験まで " + d + " 日") : (d === 0 ? "きょう本番" : "");
+}());
+</script>
+</body>
+</html>
