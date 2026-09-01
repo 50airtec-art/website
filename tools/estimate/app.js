@@ -421,6 +421,14 @@
     return Math.round(num(md) * num(st.manDayYen));
   }
 
+  /**
+   * 見積を切り替えたときに呼ぶ。見積ごとに1人工の金額が違うので、
+   * そろえ直さないと選ぶ画面が前の見積の金額を出したままになる。
+   */
+  function syncManDayToQuote() {
+    if (applyManDayToMaster()) renderPicker();
+  }
+
   /** 単価マスタの人工つきの項目の単価を、いまの1人工の金額で出し直す */
   function applyManDayToMaster() {
     var changed = false;
@@ -448,13 +456,6 @@
   /** 原価を画面に出すかどうか（端末ごとの見た目の設定。見積には保存しない） */
   var showCost = load(KEY_COST, false) === true;
 
-  /** 仕入掛率を当てにしてよいのは材料だけ。作業の分類には使わない */
-  function isMaterialCat(catId) {
-    var material = true;
-    pb.categories.forEach(function (c) { if (c.id === catId && c.work) material = false; });
-    return material;
-  }
-
   /** 単価マスタの項目から、1単位あたりの原価を見積もる */
   function itemCost(item, cat) {
     if (!item) return 0;
@@ -465,12 +466,22 @@
     return 0;
   }
 
-  /** 明細1行の原価（1単位あたり）を、いまの設定から出し直す */
+  /**
+   * 明細1行の原価（1単位あたり）を、いまの設定から出し直す。
+   * 単価マスタに実額の原価（仕入見積から取り込んだ値など）が入っていれば、
+   * それが最優先。ここを見落とすと、仕入掛率の推定値で本物の仕入値を潰してしまう。
+   */
   function lineCostFromSettings(l) {
-    if (num(l.manDay) > 0) return Math.round(num(l.manDay) * num(pb.defaults.manDayCostYen));
     if (num(l.autoPercent) > 0) return 0;      // 消耗品雑費・諸経費は原価を持たない
+
+    var hit = findMasterItem(l.name, l.spec);
+    if (hit && num(hit.item.cost) > 0) return num(hit.item.cost);
+
+    if (num(l.manDay) > 0) return Math.round(num(l.manDay) * num(pb.defaults.manDayCostYen));
+
+    // 仕入掛率は材料の話。「工」ボタンで作業費に数えている行には当てない
     var pct = num(pb.defaults.materialCostPercent);
-    if (pct > 0 && isMaterialCat(l.cat)) return Math.round(num(l.base) * pct / 100);
+    if (pct > 0 && !isWorkLine(l)) return Math.round(num(l.base) * pct / 100);
     return 0;
   }
 
@@ -1123,6 +1134,7 @@
         yen(dup.price) + ' → ' + yen(num(line.price)) + ' に更新しますか？')) return;
       dup.price = num(line.price);
       dup.unit = line.unit || dup.unit;
+      if (num(line.cost)) dup.cost = num(line.cost);
     } else {
       if (!confirm('この内容で「' + cat.name + '」に登録します。よろしいですか？\n\n' +
         '　品番：' + (code || '（なし）') + '\n' +
@@ -1130,11 +1142,17 @@
         '　規格：' + (spec || '（なし）') + '\n' +
         '　単位：' + (line.unit || '個') + '\n' +
         '　単価：' + yen(num(line.price)))) return;
-      cat.items.push({
+      var reg = {
         code: code, name: line.name, spec: spec,
         unit: line.unit || '個', price: num(line.price),
         url: safeUrl(line.url)
-      });
+      };
+      // 行が持っている原価・人工・色も一緒に持っていく。
+      // ここで落とすと、次に選んだとき原価が空のまま出てくる。
+      if (num(line.cost)) reg.cost = num(line.cost);
+      if (num(line.manDay)) reg.manDay = num(line.manDay);
+      if (line.color) reg.color = line.color;
+      cat.items.push(reg);
     }
 
     if (savePB() === false) return;
@@ -1285,6 +1303,7 @@
   $('#btn-new').addEventListener('click', function () {
     if (!confirm('新しい見積を作ります。今の内容は（保存していなければ）消えます。よろしいですか？')) return;
     st = newState();
+    syncManDayToQuote();
     fillMeta();
     renderLines();
     save(KEY_DRAFT, st);
@@ -2235,6 +2254,7 @@
     delete st.total; delete st.savedAt;
     if (st.unitRound == null) st.unitRound = 0;   // この設定より前に保存した見積
     if (st.manDayYen == null) st.manDayYen = num(pb.defaults.manDayYen);
+    syncManDayToQuote();
     fillMeta(); renderLines(); save(KEY_DRAFT, st);
     $('.tab[data-view="edit"]').click();
     toast(msg || '読み込みました');
@@ -2243,6 +2263,7 @@
   /** その現場の情報を引き継いで、新しい見積を始める */
   function newEstimateForSite(s) {
     st = newState();
+    syncManDayToQuote();
     st.siteId = s.id;
     st.customer = s.customer;
     st.honorific = s.honorific || '御中';
