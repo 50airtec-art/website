@@ -200,6 +200,9 @@
         <div class="card-head">
           <h2 class="card-title">単価マスタ</h2>
           <div class="card-actions">
+            <label class="cost-toggle" title="原価の列を出します。見積書には印刷されません">
+              <input type="checkbox" id="chk-cost-m"><span>原価を見る</span>
+            </label>
             <button class="btn btn-ghost" id="btn-export-pb">バックアップを書き出す</button>
             <label class="btn btn-ghost file-btn">読み込む<input type="file" id="file-import-pb" accept="application/json"></label>
             <button class="btn btn-ghost btn-danger" id="btn-reset-pb">初期値に戻す</button>

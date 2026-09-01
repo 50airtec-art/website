@@ -1197,15 +1197,22 @@
    */
   function applyCostVisibility() {
     document.body.classList.toggle('show-cost', showCost);
-    var chk = $('#chk-cost');
-    if (chk) chk.checked = showCost;
+    // 見積作成と単価マスタ、両方のチェックをそろえる
+    ['#chk-cost', '#chk-cost-m'].forEach(function (sel) {
+      var chk = $(sel);
+      if (chk) chk.checked = showCost;
+    });
   }
 
-  $('#chk-cost').addEventListener('change', function () {
-    showCost = $('#chk-cost').checked;
-    save(KEY_COST, showCost);
-    applyCostVisibility();
-    renderTotals();
+  ['#chk-cost', '#chk-cost-m'].forEach(function (sel) {
+    var chk = $(sel);
+    if (!chk) return;
+    chk.addEventListener('change', function () {
+      showCost = chk.checked;
+      save(KEY_COST, showCost);
+      applyCostVisibility();
+      renderTotals();
+    });
   });
 
   function renderTotals() {
