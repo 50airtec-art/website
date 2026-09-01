@@ -39,6 +39,26 @@
   }
 
   /**
+   * 社判・ロゴの画像。見積書のHTMLに src= として差し込むので、
+   * 画像そのものの形（data:image の base64）以外は受け付けない。
+   * 外から持ってきたバックアップに細工した文字列が入っていても、ここで落とす。
+   * SVGは中に命令を書けてしまうので通さない。
+   */
+  function safeImage(v) {
+    var s = String(v == null ? '' : v).trim();
+    if (!s) return '';
+    return /^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(s) ? s : '';
+  }
+
+  /** 取り込んだ自社情報を整える。足りない項目は初期値で埋め、画像は上の判定を通す */
+  function adoptCompany(src) {
+    var c = Object.assign({}, DEFAULT_PRICEBOOK.company, src || {});
+    c.sealImage = safeImage(c.sealImage);
+    c.logoImage = safeImage(c.logoImage);
+    return c;
+  }
+
+  /**
    * 単価表の項目につける文字色。
    * シリーズごとに色を変えて、単価表から選ぶときに見分けやすくするためのもの。
    * CSVは外から持ってくるファイルなので、決めた色の名前と #rrggbb 以外は受け付けない。
@@ -185,7 +205,7 @@
      ====================================================================== */
   var pb = load(KEY_PB, null) || clone(DEFAULT_PRICEBOOK);
   // 古い保存データに新しい項目が無い場合の補完
-  pb.company  = Object.assign({}, DEFAULT_PRICEBOOK.company, pb.company || {});
+  pb.company  = adoptCompany(pb.company);
   pb.defaults = Object.assign({}, DEFAULT_PRICEBOOK.defaults, pb.defaults || {});
   if (!Array.isArray(pb.categories)) pb.categories = clone(DEFAULT_PRICEBOOK.categories);
   migratePB();
@@ -1882,7 +1902,7 @@
         'いまの内容は消えます。よろしいですか？')) return;
 
       pb = data.pricebook;
-      pb.company  = Object.assign({}, DEFAULT_PRICEBOOK.company, pb.company || {});
+      pb.company  = adoptCompany(pb.company);
       pb.defaults = Object.assign({}, DEFAULT_PRICEBOOK.defaults, pb.defaults || {});
       if (!Array.isArray(pb.categories)) pb.categories = [];
       activeCat = pb.categories.length ? pb.categories[0].id : null;
@@ -2770,7 +2790,7 @@
       // 保存できなかったときは、取り込む前の状態に戻す
       toast('件数が多すぎて保存できませんでした。分けて取り込んでください');
       pb = load(KEY_PB, null) || clone(DEFAULT_PRICEBOOK);
-      pb.company  = Object.assign({}, DEFAULT_PRICEBOOK.company, pb.company || {});
+      pb.company  = adoptCompany(pb.company);
       pb.defaults = Object.assign({}, DEFAULT_PRICEBOOK.defaults, pb.defaults || {});
       if (!Array.isArray(pb.categories)) pb.categories = clone(DEFAULT_PRICEBOOK.categories);
       if (!pb.categories.some(function (c) { return c.id === activeCat; })) {
@@ -2902,7 +2922,7 @@
       if (!confirm(msg)) return;
       delete data._models;
       pb = data;
-      pb.company  = Object.assign({}, DEFAULT_PRICEBOOK.company, pb.company || {});
+      pb.company  = adoptCompany(pb.company);
       pb.defaults = Object.assign({}, DEFAULT_PRICEBOOK.defaults, pb.defaults || {});
       activeCat = pb.categories.length ? pb.categories[0].id : null;
       savePB(); renderMaster(); renderPicker(); fillCompany();
@@ -3564,13 +3584,15 @@
     }
 
     var sealMm = Math.min(45, Math.max(8, num(c.sealSizeMm) || 18));
-    var sealHTML = c.sealImage
-      ? '<img class="seal-img" src="' + c.sealImage + '" alt="" style="width:' + sealMm + 'mm">'
+    var sealSrc = safeImage(c.sealImage);
+    var sealHTML = sealSrc
+      ? '<img class="seal-img" src="' + esc(sealSrc) + '" alt="" style="width:' + sealMm + 'mm">'
       : '<span class="seal-fallback">㊞</span>';
 
     var logoMm = Math.min(40, Math.max(5, num(c.logoHeightMm) || 12));
-    var logoHTML = c.logoImage
-      ? '<img class="sheet-logo" src="' + c.logoImage + '" alt="" style="height:' + logoMm + 'mm">'
+    var logoSrc = safeImage(c.logoImage);
+    var logoHTML = logoSrc
+      ? '<img class="sheet-logo" src="' + esc(logoSrc) + '" alt="" style="height:' + logoMm + 'mm">'
       : '';
 
     var companyHTML =
