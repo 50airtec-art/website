@@ -48,6 +48,50 @@
     '紫': '#6a1b9a', '茶': '#5d4037', '水': '#0277bd', '桃': '#ad1457',
     '灰': '#546e7a', '黒': ''
   };
+  /**
+   * 品名から色を見当てる規則。上から順に見て、最初に当たったものを使う。
+   * 手で打った項目にも効くよう、完全一致ではなく品名に含まれる言葉で判断する。
+   * 順番が大事：「室外機 天吊り金具」は金具（紫）であって天吊形（赤）ではない。
+   */
+  var COLOR_RULES = [
+    [/金具|据付ブロック|防振|立ち下ろし|屋根置き|二段置き|高所|クレーン|ユニック|足場/, '紫'],
+    [/取外し|撤去|処分|リサイクル|収集運搬|フロン/, '灰'],
+    [/天吊|天井吊/, '赤'],
+    [/天カセ|天井カセット|カセット/, '青'],
+    [/床置/, '緑'],
+    [/壁掛/, '橙'],
+    [/ビルトイン|天井埋込|ダクト形/, '桃'],
+    [/冷媒配管|ドレン|配管|化粧カバー/, '水'],
+    [/電源|コンセント|電圧|ブレーカー/, '桃'],
+    [/穴|貫通|開口|点検口|下地|補修/, '茶'],
+    [/標準取付|入替|移設/, '緑']
+  ];
+
+  /** その品名なら何色か。当てはまらなければ空（色なし） */
+  function autoColorFor(name) {
+    var s = String(name || '');
+    for (var i = 0; i < COLOR_RULES.length; i++) {
+      if (COLOR_RULES[i][0].test(s)) return COLOR_RULES[i][1];
+    }
+    return '';
+  }
+
+  /**
+   * まだ色のついていない項目に、規則で色をつける。
+   * すでに色を決めてある項目には触らない。
+   */
+  function autoColorAll() {
+    var n = 0;
+    pb.categories.forEach(function (c) {
+      c.items.forEach(function (it) {
+        if (it.color) return;
+        var col = autoColorFor(it.name);
+        if (col) { it.color = col; n++; }
+      });
+    });
+    return n;
+  }
+
   function itemColor(v) {
     var s = String(v == null ? '' : v).trim();
     if (!s) return '';
@@ -153,7 +197,7 @@
    * 端末のブラウザに保存してある単価は消さず、足りない印と項目だけを足す。
    */
   function migratePB() {
-    if (num(pb.version) >= 7) return;
+    if (num(pb.version) >= 8) return;
 
     DEFAULT_PRICEBOOK.categories.forEach(function (dc) {
       pb.categories.forEach(function (c) {
@@ -188,7 +232,10 @@
       });
     });
 
-    pb.version = 7;
+    // 手で足した項目にも色がつくよう、品名の規則でも配る
+    autoColorAll();
+
+    pb.version = 8;
     save(KEY_PB, pb);
   }
 
@@ -2772,6 +2819,34 @@
     clearTimeout(pbQuietTimer);
     pbQuietTimer = setTimeout(function () { savePB(); }, 600);
   }
+
+  $('#btn-autocolor').addEventListener('click', function () {
+    // 何色になるかを先に見せる。すでに色のある項目には触らない
+    var plan = [];
+    pb.categories.forEach(function (c) {
+      c.items.forEach(function (it) {
+        if (it.color) return;
+        var col = autoColorFor(it.name);
+        if (col) plan.push({ name: it.name, spec: it.spec || '', color: col });
+      });
+    });
+    if (!plan.length) { toast('色をつけられる項目はありませんでした'); return; }
+
+    var NL = String.fromCharCode(10);
+    var sample = plan.slice(0, 6).map(function (x) {
+      return '　' + x.color + '　' + x.name + (x.spec ? '（' + x.spec + '）' : '');
+    }).join(NL);
+
+    if (!confirm(plan.length + '件に色をつけます。よろしいですか？' + NL +
+      '（すでに色をつけてある項目は、そのまま残します）' + NL + NL + sample +
+      (plan.length > 6 ? NL + '　…ほか ' + (plan.length - 6) + '件' : ''))) return;
+
+    var n = autoColorAll();
+    if (savePB() === false) return;
+    renderPicker();
+    renderMaster();
+    toast(n + '件に色をつけました');
+  });
 
   $('#btn-add-cat').addEventListener('click', function () {
     var v = prompt('新しいカテゴリ名');
