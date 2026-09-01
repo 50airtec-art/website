@@ -51,6 +51,10 @@ const DEFAULT_PRICEBOOK = {
     taxRatePercent: 10,
     // 行の単価の端数。0＝そのまま／10＝10円未満は繰り上げ／100＝100円未満は繰り上げ
     unitRoundYen: 0,
+    /* 1人工（1人が1日働く分）の金額。公共工事の考え方に合わせて、
+       作業の項目には「人工」を持たせ、単価は［人工 × この金額］で出す。
+       配管工でおおむね3万〜4万と言われる。実際の金額は［自社情報］で設定する。 */
+    manDayYen: 30000,
     overheadPercent: 0,
     paymentTerms: '工事完了後、月末締め翌月末払い',
     deliveryTerms: 'ご発注後、別途打合せ',

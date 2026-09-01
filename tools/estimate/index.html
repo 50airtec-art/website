@@ -126,6 +126,7 @@
           <label class="f"><span>諸経費（小計の%）</span><input type="number" id="m-overhead" min="0" step="0.1"></label>
           <label class="f"><span>値引き（円・プラス数値で入力）</span><input type="number" id="m-discount" min="0" step="1"></label>
           <label class="f"><span>消費税率（%）</span><input type="number" id="m-tax" min="0" step="0.1"></label>
+          <label class="f"><span>1人工の金額（円）</span><input type="number" id="m-manday" min="0" step="1000"></label>
           <label class="f"><span>単価の端数（行ごと）</span>
             <select id="m-unit-round">
               <option value="0">そのまま</option>
@@ -282,6 +283,7 @@
           <label class="f"><span>ウェブサイト</span><input type="text" id="c-web"></label>
           <label class="f"><span>登録番号（インボイス）</span><input type="text" id="c-invoice"></label>
           <label class="f f-wide"><span>振込先</span><input type="text" id="c-bank" placeholder="〇〇銀行 〇〇支店 普通 1234567 カ）〇〇〇〇"></label>
+          <label class="f"><span>1人工の金額（円・新しい見積の初期値）</span><input type="number" id="c-manday" min="0" step="1000"></label>
           <label class="f"><span>単価の端数（新しい見積の初期値）</span>
             <select id="c-unit-round">
               <option value="0">そのまま</option>

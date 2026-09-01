@@ -199,6 +199,7 @@
       payment: pb.defaults.paymentTerms,
       overhead: pb.defaults.overheadPercent,
       unitRound: pb.defaults.unitRoundYen,
+      manDayYen: pb.defaults.manDayYen,
       discount: 0,
       tax: pb.defaults.taxRatePercent,
       rounding: 'floor',
@@ -220,6 +221,8 @@
 
   var st = load(KEY_DRAFT, null) || newState();
   if (st.unitRound == null) st.unitRound = 0;   // この設定より前に作った見積
+  if (st.manDayYen == null) st.manDayYen = num(pb.defaults.manDayYen);
+  applyManDayToMaster();   // 1人工の金額を変えたあとに開き直したときのため
 
   /* ======================================================================
      計算
@@ -351,17 +354,42 @@
     return Math.ceil(n / st10) * st10;
   }
 
+  /**
+   * 人工（にんく）から単価を出す。
+   * 公共工事の考え方で、作業ごとに「この工事は0.5人工」と決めておき、
+   * 1人工の金額（配管工でおおむね3万〜4万）を掛けて単価にする。
+   * 1人工の金額は変わっても作業人工は変わらないので、掛け算だけで済む。
+   */
+  function manDayPrice(md) {
+    return Math.round(num(md) * num(st.manDayYen));
+  }
+
+  /** 単価マスタの人工つきの項目の単価を、いまの1人工の金額で出し直す */
+  function applyManDayToMaster() {
+    var changed = false;
+    pb.categories.forEach(function (c) {
+      c.items.forEach(function (it) {
+        if (!num(it.manDay)) return;
+        var v = manDayPrice(it.manDay);
+        if (num(it.price) !== v) { it.price = v; changed = true; }
+      });
+    });
+    if (changed) savePBQuiet();
+    return changed;
+  }
+
   /** 元値（定価）と掛率から、その行の単価を出す。端数の繰り上げもここでかける */
   function priceFromBase(l) {
     return ceilYen(num(l.base) * num(l.rate) / 100, st.unitRound);
   }
 
-  /** 端数の設定を変えたときに、すべての行の単価を計算し直す */
-  function applyUnitRound() {
+  /** 1人工の金額や端数の設定を変えたときに、すべての行の単価を計算し直す */
+  function applyLinePrices() {
     st.lines.forEach(function (l) {
       if (num(l.autoPercent)) return;   // 自動計算の行は refreshAutoLines がやる
       if (l.base == null) l.base = num(l.price);
       if (l.rate == null) l.rate = 100;
+      if (num(l.manDay)) l.base = manDayPrice(l.manDay);   // 人工の行は掛け算し直す
       l.price = priceFromBase(l);
     });
   }
@@ -424,9 +452,9 @@
     '#m-subject': 'subject', '#m-site': 'site', '#m-valid': 'validDays',
     '#m-delivery': 'delivery', '#m-payment': 'payment', '#m-overhead': 'overhead',
     '#m-discount': 'discount', '#m-tax': 'tax', '#m-rounding': 'rounding', '#m-note': 'note',
-    '#m-unit-round': 'unitRound'
+    '#m-unit-round': 'unitRound', '#m-manday': 'manDayYen'
   };
-  var numericFields = { validDays: 1, overhead: 1, discount: 1, tax: 1, unitRound: 1 };
+  var numericFields = { validDays: 1, overhead: 1, discount: 1, tax: 1, unitRound: 1, manDayYen: 1 };
 
   function fillMeta() {
     Object.keys(metaMap).forEach(function (sel) {
@@ -441,14 +469,22 @@
     node.addEventListener('input', function () {
       var key = metaMap[sel];
       st[key] = numericFields[key] ? num(node.value) : node.value;
-      if (key === 'unitRound') { applyUnitRound(); renderLines(); }
+      if (key === 'unitRound' || key === 'manDayYen') {
+        if (key === 'manDayYen') { applyManDayToMaster(); renderPicker(); }
+        applyLinePrices();
+        renderLines();
+      }
       else if (key === 'overhead' || key === 'discount' || key === 'tax' || key === 'rounding') renderTotals();
       persistDraft();
     });
     node.addEventListener('change', function () {
       var key = metaMap[sel];
       st[key] = numericFields[key] ? num(node.value) : node.value;
-      if (key === 'unitRound') { applyUnitRound(); renderLines(); }
+      if (key === 'unitRound' || key === 'manDayYen') {
+        if (key === 'manDayYen') { applyManDayToMaster(); renderPicker(); }
+        applyLinePrices();
+        renderLines();
+      }
       else renderTotals();
       persistDraft();
     });
@@ -546,7 +582,7 @@
       if (r.item.spec) b.appendChild(el('em', null, r.item.spec));
       b.appendChild(el('span', null, num(r.item.autoPercent)
         ? autoLabel(r.item)
-        : yen(r.item.price) + ' / ' + r.item.unit));
+        : (num(r.item.manDay) ? r.item.manDay + '人工　' : '') + yen(r.item.price) + ' / ' + r.item.unit));
       b.addEventListener('click', function () {
         // 自動計算の項目（消耗品雑費・諸経費）は、2回入れると二重に乗ってしまう。
         // 家庭用と業務用の両方に消耗品雑費を置いてあるので、うっかり両方押せてしまう
@@ -572,6 +608,8 @@
           // 単価が自動で決まる項目は、割合と「何の合計をもとにするか」も持たせる
           autoPercent: num(r.item.autoPercent) || 0,
           autoBase: r.item.autoBase || '',
+          // 人工つきの作業は、1人工の金額を変えたときに計算し直せるよう覚えておく
+          manDay: num(r.item.manDay) || 0,
           // 見積を作りながら「これどんな材料だっけ」を確かめられるよう、製品ページも持たせる
           url: r.item.url || ''
         });
@@ -604,10 +642,11 @@
      明細
      ====================================================================== */
   function addLine(line) {
-    var l = Object.assign({ name: '', spec: '', qty: 1, unit: '式', price: 0, url: '', cat: '', autoPercent: 0, autoBase: '' }, line || {});
+    var l = Object.assign({ name: '', spec: '', qty: 1, unit: '式', price: 0, url: '', cat: '', autoPercent: 0, autoBase: '', manDay: 0 }, line || {});
     // base は掛率をかける前の元値（単価マスタの定価）。rate は「定価の何%で出すか」
     if (l.base == null) l.base = num(l.price);
     if (l.rate == null) l.rate = 100;
+    if (num(l.manDay)) l.base = manDayPrice(l.manDay);
     l.price = priceFromBase(l);   // 端数の設定にしたがって繰り上げる
     st.lines.push(l);
     renderLines();
@@ -1995,6 +2034,7 @@
     st = clone(e);
     delete st.total; delete st.savedAt;
     if (st.unitRound == null) st.unitRound = 0;   // この設定より前に保存した見積
+    if (st.manDayYen == null) st.manDayYen = num(pb.defaults.manDayYen);
     fillMeta(); renderLines(); save(KEY_DRAFT, st);
     $('.tab[data-view="edit"]').click();
     toast(msg || '読み込みました');
@@ -2107,7 +2147,7 @@
 
     var head = el('div', 'mrow mrow-head');
     // 末尾の2つは「製品ページ」ボタンと「削除」ボタンの列（見出しは無し）
-    ['品番', '品名', '規格・仕様', '単位', '単価', '', ''].forEach(function (h) {
+    ['品番', '品名', '規格・仕様', '単位', '人工', '単価', '', ''].forEach(function (h) {
       head.appendChild(el('div', null, h));
     });
     body.appendChild(head);
@@ -2148,7 +2188,7 @@
 
     // 空の行を足して、すぐ品番から打ち始められるようにする
     function addBlankItem() {
-      cat.items.push({ code: '', name: '', spec: '', unit: '', price: 0 });
+      cat.items.push({ code: '', name: '', spec: '', unit: '', manDay: 0, price: 0 });
       savePB(); renderPicker();
       if (refreshCount) refreshCount();
       filter = '';
@@ -2209,6 +2249,24 @@
 
     // 消耗品雑費のような「作業費の◯%」の項目は、金額ではなく割合を入れてもらう
     var isAuto = !!num(item.autoPercent);
+
+    // 人工（にんく）。0.1きざみで入れると、単価は［人工 × 1人工の金額］で決まる
+    var mdCell = el('span', 'm-manday');
+    var mdInput = null;
+    if (isAuto) {
+      mdCell.appendChild(el('i', null, '—'));
+    } else {
+      mdInput = inp(num(item.manDay) || '', 'm-md', 'number', function (v) {
+        item.manDay = num(v);
+        if (!item.manDay) delete item.manDay;
+        syncPrice();
+      }, '0.0');
+      mdInput.step = '0.1';
+      mdInput.min = '0';
+      mdInput.title = 'この作業が何人工かを0.1きざみで入れます。空ならふつうの単価として扱います';
+      mdCell.appendChild(mdInput);
+    }
+    row.appendChild(mdCell);
     var priceInput = isAuto
       ? inp(item.autoPercent, 'm-price', 'number', function (v) { item.autoPercent = num(v); })
       : inp(item.price, 'm-price', 'number', function (v) { item.price = num(v); });
@@ -2219,6 +2277,20 @@
       savePB();
       if (onEnterAtEnd) onEnterAtEnd();
     });
+    /** 人工が入っているときは、単価は掛け算で決まるので手では打たせない */
+    function syncPrice() {
+      if (isAuto) return;
+      var md = num(item.manDay);
+      priceInput.readOnly = md > 0;
+      if (md > 0) {
+        item.price = manDayPrice(md);
+        priceInput.value = item.price;
+        priceInput.title = md + '人工 × ' + yen(num(st.manDayYen)) + ' ＝ ' + yen(item.price);
+      } else {
+        priceInput.title = '';
+      }
+    }
+
     if (isAuto) {
       priceInput.title = autoBaseOf(item) === 'work'
         ? '作業費（家庭用・業務用・移設から入れた行）の合計にかける割合です'
@@ -2229,6 +2301,7 @@
       row.appendChild(pcell);
     } else {
       row.appendChild(priceInput);
+      syncPrice();
     }
 
     // URLが無い行でも列がずれないよう、入れ物は必ず置く
@@ -2299,7 +2372,8 @@
     url:      ['URL', 'ＵＲＬ', 'リンク', '製品ページ', '参考URL', 'ページ', 'url', 'link'],
     color:    ['色', '色分け', '文字色', 'カラー', 'color'],
     unit:     ['単位', 'unit'],
-    price:    ['定価', '単価', '価格', '金額', '希望小売価格', '標準価格', 'price']
+    price:    ['定価', '単価', '価格', '金額', '希望小売価格', '標準価格', 'price'],
+    manDay:   ['人工', '人工数', '作業人工', '歩掛', '歩掛り', 'manday']
   };
 
   function normalizeHeader(s) {
@@ -2374,18 +2448,19 @@
       var code = cell('code');
       if (!name && !code) { skipped++; return; }
       var catName = cell('category') || fallbackName;
-      staged.push({
-        catName: catName,
-        item: {
-          code: code,
-          name: name || code,
-          spec: cell('spec'),
-          url: safeUrl(cell('url')),
-          color: cell('color'),
-          unit: cell('unit') || '個',
-          price: toPrice(cell('price'))
-        }
-      });
+      var md = toPrice(cell('manDay'));
+      var it = {
+        code: code,
+        name: name || code,
+        spec: cell('spec'),
+        url: safeUrl(cell('url')),
+        color: cell('color'),
+        unit: cell('unit') || '個',
+        price: toPrice(cell('price'))
+      };
+      // 人工の列があれば、単価は［人工 × 1人工の金額］で出す
+      if (md > 0) { it.manDay = md; it.price = manDayPrice(md); }
+      staged.push({ catName: catName, item: it });
       touched[catName] = (touched[catName] || 0) + 1;
     });
 
@@ -2405,7 +2480,8 @@
     // 読み違えていないか目で確かめてもらうため、最初の数件を見せる
     var preview = staged.slice(0, 3).map(function (s) {
       var i = s.item;
-      return '　' + [i.code || '（品番なし）', i.name, i.spec || '—', i.unit, yen(i.price)].join(' ／ ');
+      return '　' + [i.code || '（品番なし）', i.name, i.spec || '—', i.unit,
+                     (num(i.manDay) ? i.manDay + '人工 ' : '') + yen(i.price)].join(' ／ ');
     }).join('\n');
 
     // 読み取り結果を先に出す。長くてブラウザに切られても、ここだけは必ず見えるようにする。
@@ -2562,6 +2638,7 @@
     });
     $('#c-footer').value = pb.defaults.footerNote || '';
     $('#c-unit-round').value = num(pb.defaults.unitRoundYen) || 0;
+    $('#c-manday').value = num(pb.defaults.manDayYen) || 0;
     $('#seal-size').value = pb.company.sealSizeMm || 18;
     $('#logo-size').value = pb.company.logoHeightMm || 12;
     renderSealPreview();
@@ -2583,6 +2660,7 @@
     });
     pb.defaults.footerNote = $('#c-footer').value;
     pb.defaults.unitRoundYen = num($('#c-unit-round').value);
+    pb.defaults.manDayYen = num($('#c-manday').value);
     savePB();
     updateBrand();
     toast('保存しました');

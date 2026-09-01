@@ -280,7 +280,7 @@ tr.is-dragging {
 .cat-count { color: var(--text-light); font-weight: 400; font-size: 12px; }
 .cat-filter { margin-bottom: 10px; }
 .cat-filter input { max-width: 320px; background: #fff; }
-.mrow { display: grid; grid-template-columns: 110px 1.6fr 1.2fr 62px 104px 32px 32px; gap: 6px; margin-bottom: 6px; align-items: center; }
+.mrow { display: grid; grid-template-columns: 110px 1.6fr 1.2fr 62px 62px 104px 32px 32px; gap: 6px; margin-bottom: 6px; align-items: center; }
 .mrow input { padding: 6px 8px; font-size: 13px; }
 .mrow-head { font-size: 11px; color: var(--text-sub); font-weight: 700; }
 .mrow input.m-price { text-align: right; font-variant-numeric: tabular-nums; }
@@ -290,6 +290,11 @@ tr.is-dragging {
 .m-auto { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .m-auto input { flex: 1; min-width: 0; }
 .m-auto i { font-style: normal; font-size: 11px; color: var(--text-sub); white-space: nowrap; }
+/* 人工（にんく）。ここに数字を入れると単価は［人工 × 1人工の金額］で決まる */
+.m-manday { display: flex; align-items: center; gap: 3px; min-width: 0; }
+.m-manday input { flex: 1; min-width: 0; text-align: right; }
+.m-manday i { font-style: normal; font-size: 11px; color: var(--text-light); }
+.mrow input.m-price[readonly] { background: var(--bg); color: var(--text-sub); }
 tr.line-auto td.c-price input { background: var(--bg); color: var(--text-sub); }
 tr.line-auto td.c-rate .rate-sel { opacity: .4; }
 
