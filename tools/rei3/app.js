@@ -11,6 +11,7 @@
 
   var KEY_Q  = 'rei3_questions_v1';   // 問題そのもの
   var KEY_P  = 'rei3_progress_v1';    // 1問ごとの成績
+  var KEY_M  = 'rei3_memo_v1';        // 自分で書いたメモ
   var EXAM   = '2026-11-08';          // 試験日（残り日数の表示に使う）
 
   var $  = function (s) { return document.querySelector(s); };
@@ -46,6 +47,7 @@
      ====================================================================== */
   var questions = load(KEY_Q, []);
   var progress  = load(KEY_P, {});
+  var memos     = load(KEY_M, {});
 
   /** その問題の成績。無ければ空の形を返す */
   function prog(id) {
@@ -53,6 +55,12 @@
   }
 
   function saveProgress() { save(KEY_P, progress); }
+
+  var memoTimer;
+  function saveMemos() {
+    clearTimeout(memoTimer);
+    memoTimer = setTimeout(function () { save(KEY_M, memos); }, 400);
+  }
 
   /* ======================================================================
      残り日数
@@ -103,6 +111,7 @@
     box.appendChild(stat(questions.length, '問題', ''));
     box.appendChild(stat(seen, '解いた', seen === questions.length ? 'good' : ''));
     box.appendChild(stat(weak, '要復習', weak ? 'warm' : 'good'));
+    box.appendChild(stat(Object.keys(memos).length, 'メモ', ''));
 
     $('#mode-weak-n').textContent = weak + '問';
     $('#mode-all-n').textContent = questions.length + '問';
@@ -208,6 +217,8 @@
     var v = $('#q-verdict');
     v.className = 'verdict';
     v.innerHTML = '';
+    $('#q-memo').style.display = 'none';
+    $('#q-memo').innerHTML = '';
     $('#btn-next').style.display = 'none';
   }
 
@@ -243,9 +254,38 @@
       v.appendChild(s);
     }
 
+    renderMemo(q);
+
     var btn = $('#btn-next');
     btn.style.display = '';
     btn.textContent = (quiz.at + 1 >= quiz.list.length) ? '結果を見る' : '次の問題へ';
+  }
+
+  /**
+   * 自分メモ。答え合わせのあとだけ出す（先に見えると答えが分かってしまう）。
+   * 解説をこちらで書くと法令の読み違いを教えてしまう恐れがあるので、
+   * 自分の言葉で書いてもらう形にしている。書くこと自体が覚えることにもなる。
+   */
+  function renderMemo(q) {
+    var box = $('#q-memo');
+    box.innerHTML = '';
+    box.style.display = '';
+
+    var has = (memos[q.id] || '').trim();
+    var head = el('div', 'memo-head');
+    head.appendChild(el('span', null, has ? '前に書いたメモ' : 'メモ（なぜそうなるか、自分の言葉で）'));
+    box.appendChild(head);
+
+    var ta = el('textarea', 'memo-input');
+    ta.rows = has ? 3 : 2;
+    ta.value = memos[q.id] || '';
+    ta.placeholder = '例：35度で1MPa以上になるなら、今の圧力が低くても高圧ガス';
+    ta.addEventListener('input', function () {
+      var v = ta.value;
+      if (v.trim()) memos[q.id] = v; else delete memos[q.id];
+      saveMemos();
+    });
+    box.appendChild(ta);
   }
 
   $('#btn-next').addEventListener('click', function () {
@@ -409,7 +449,7 @@
     progress = {};
     saveProgress();
     renderHome();
-    toast('成績を消しました');
+    toast('成績を消しました（メモは残してあります）');
   });
 
   /* ======================================================================
