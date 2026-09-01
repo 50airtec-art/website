@@ -49,6 +49,8 @@ const DEFAULT_PRICEBOOK = {
   defaults: {
     validDays: 30,
     taxRatePercent: 10,
+    // 行の単価の端数。0＝そのまま／10＝10円未満は繰り上げ／100＝100円未満は繰り上げ
+    unitRoundYen: 0,
     overheadPercent: 0,
     paymentTerms: '工事完了後、月末締め翌月末払い',
     deliveryTerms: 'ご発注後、別途打合せ',

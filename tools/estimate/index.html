@@ -126,7 +126,14 @@
           <label class="f"><span>諸経費（小計の%）</span><input type="number" id="m-overhead" min="0" step="0.1"></label>
           <label class="f"><span>値引き（円・プラス数値で入力）</span><input type="number" id="m-discount" min="0" step="1"></label>
           <label class="f"><span>消費税率（%）</span><input type="number" id="m-tax" min="0" step="0.1"></label>
-          <label class="f"><span>端数処理</span>
+          <label class="f"><span>単価の端数（行ごと）</span>
+            <select id="m-unit-round">
+              <option value="0">そのまま</option>
+              <option value="10">10円未満は繰り上げ</option>
+              <option value="100">100円未満は繰り上げ</option>
+            </select>
+          </label>
+          <label class="f"><span>端数処理（諸経費・消費税）</span>
             <select id="m-rounding">
               <option value="floor">切り捨て</option>
               <option value="round">四捨五入</option>

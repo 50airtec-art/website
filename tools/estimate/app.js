@@ -198,6 +198,7 @@
       delivery: pb.defaults.deliveryTerms,
       payment: pb.defaults.paymentTerms,
       overhead: pb.defaults.overheadPercent,
+      unitRound: pb.defaults.unitRoundYen,
       discount: 0,
       tax: pb.defaults.taxRatePercent,
       rounding: 'floor',
@@ -218,6 +219,7 @@
   }
 
   var st = load(KEY_DRAFT, null) || newState();
+  if (st.unitRound == null) st.unitRound = 0;   // この設定より前に作った見積
 
   /* ======================================================================
      計算
@@ -330,12 +332,38 @@
       var total = autoBaseTotal(st, base);
       st.lines.forEach(function (l) {
         if (!num(l.autoPercent) || autoBaseOf(l) !== base) return;
-        l.price = Math.round(total * num(l.autoPercent) / 100);
+        l.price = ceilYen(total * num(l.autoPercent) / 100, st.unitRound);
         l.base  = l.price;   // 掛率は使わない行なので、元値も同じにしておく
         l.rate  = 100;
       });
     });
     autoRowUpdaters.forEach(function (fn) { fn(); });
+  }
+
+  /**
+   * 単価の端数を繰り上げる。step が 10 なら10円未満を、100 なら100円未満を切り上げる。
+   * 6,205円 → 10円繰り上げで 6,210円 ／ 100円繰り上げで 6,300円。
+   */
+  function ceilYen(v, step) {
+    var n = num(v);
+    var st10 = num(step);
+    if (st10 <= 1) return Math.round(n);
+    return Math.ceil(n / st10) * st10;
+  }
+
+  /** 元値（定価）と掛率から、その行の単価を出す。端数の繰り上げもここでかける */
+  function priceFromBase(l) {
+    return ceilYen(num(l.base) * num(l.rate) / 100, st.unitRound);
+  }
+
+  /** 端数の設定を変えたときに、すべての行の単価を計算し直す */
+  function applyUnitRound() {
+    st.lines.forEach(function (l) {
+      if (num(l.autoPercent)) return;   // 自動計算の行は refreshAutoLines がやる
+      if (l.base == null) l.base = num(l.price);
+      if (l.rate == null) l.rate = 100;
+      l.price = priceFromBase(l);
+    });
   }
 
   /** 見積でも請求書でも使えるように、対象の書類を受け取って計算する */
@@ -386,9 +414,10 @@
     '#m-no': 'no', '#m-date': 'date', '#m-customer': 'customer', '#m-honorific': 'honorific',
     '#m-subject': 'subject', '#m-site': 'site', '#m-valid': 'validDays',
     '#m-delivery': 'delivery', '#m-payment': 'payment', '#m-overhead': 'overhead',
-    '#m-discount': 'discount', '#m-tax': 'tax', '#m-rounding': 'rounding', '#m-note': 'note'
+    '#m-discount': 'discount', '#m-tax': 'tax', '#m-rounding': 'rounding', '#m-note': 'note',
+    '#m-unit-round': 'unitRound'
   };
-  var numericFields = { validDays: 1, overhead: 1, discount: 1, tax: 1 };
+  var numericFields = { validDays: 1, overhead: 1, discount: 1, tax: 1, unitRound: 1 };
 
   function fillMeta() {
     Object.keys(metaMap).forEach(function (sel) {
@@ -403,13 +432,15 @@
     node.addEventListener('input', function () {
       var key = metaMap[sel];
       st[key] = numericFields[key] ? num(node.value) : node.value;
-      if (key === 'overhead' || key === 'discount' || key === 'tax' || key === 'rounding') renderTotals();
+      if (key === 'unitRound') { applyUnitRound(); renderLines(); }
+      else if (key === 'overhead' || key === 'discount' || key === 'tax' || key === 'rounding') renderTotals();
       persistDraft();
     });
     node.addEventListener('change', function () {
       var key = metaMap[sel];
       st[key] = numericFields[key] ? num(node.value) : node.value;
-      renderTotals();
+      if (key === 'unitRound') { applyUnitRound(); renderLines(); }
+      else renderTotals();
       persistDraft();
     });
   });
@@ -568,6 +599,7 @@
     // base は掛率をかける前の元値（単価マスタの定価）。rate は「定価の何%で出すか」
     if (l.base == null) l.base = num(l.price);
     if (l.rate == null) l.rate = 100;
+    l.price = priceFromBase(l);   // 端数の設定にしたがって繰り上げる
     st.lines.push(l);
     renderLines();
     persistDraft();
@@ -756,7 +788,7 @@
 
       sRate.addEventListener('change', function () {
         l.rate = num(sRate.value);
-        l.price = Math.round(num(l.base) * l.rate / 100);
+        l.price = priceFromBase(l);
         iPrice.value = l.price;
         showBaseHint();
         recalc();
@@ -793,6 +825,16 @@
         l.rate = 100;
         sRate.value = '100';
         showBaseHint();
+        recalc();
+      });
+
+      // 打っている途中で数字が飛ぶと打ちにくいので、
+      // 端数の繰り上げは入力を終えたとき（欄から離れたとき）にかける
+      iPrice.addEventListener('change', function () {
+        if (isAuto) return;
+        var rounded = priceFromBase(l);
+        if (rounded === num(iPrice.value)) return;
+        iPrice.value = rounded;
         recalc();
       });
 
@@ -1943,6 +1985,7 @@
   function openEstimate(e, msg) {
     st = clone(e);
     delete st.total; delete st.savedAt;
+    if (st.unitRound == null) st.unitRound = 0;   // この設定より前に保存した見積
     fillMeta(); renderLines(); save(KEY_DRAFT, st);
     $('.tab[data-view="edit"]').click();
     toast(msg || '読み込みました');
