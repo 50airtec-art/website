@@ -202,6 +202,12 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
 .quiz-foot { position: sticky; bottom: 0; padding: 10px 0 14px; background: linear-gradient(to bottom, rgba(238,242,244,0), var(--bg) 40%); }
 .quiz-foot .btn { width: 100%; padding: 15px; font-size: 16px; }
 
+/* ---------- 買う本 ---------- */
+.book-card { margin-top: 14px; }
+.book-name { font-size: 16px; font-weight: 700; line-height: 1.6; margin: 2px 0 8px; }
+.book-note { font-size: 13px; color: var(--text-sub); line-height: 1.8; margin-bottom: 14px; }
+.book-card .card-actions a { text-decoration: none; text-align: center; }
+
 /* ---------- 結果 ---------- */
 .score { text-align: center; padding: 10px 0 16px; }
 .score b { display: block; font-size: 44px; line-height: 1.1; font-variant-numeric: tabular-nums; }
