@@ -3573,31 +3573,66 @@
     renderChooser();
   });
 
-  $('#file-models').addEventListener('change', function (ev) {
-    var f = ev.target.files && ev.target.files[0];
-    ev.target.value = '';
-    if (!f) return;
-    var r = new FileReader();
-    r.onerror = function () { toast('ファイルを読み込めませんでした'); };
-    r.onload = function () {
-      var data;
-      try { data = JSON.parse(r.result); }
-      catch (e) { toast('機種データの形式が違います（JSONではありません）'); return; }
-      var decoded = decodeModels(data);
-      if (!decoded || !decoded.items.length) { toast('機種データの中身が読み取れませんでした'); return; }
-      // 同じメーカー・同じシリーズ群のものがあれば入れ替え、無ければ足す
-      var raws = rawPacks(load(KEY_MDL, null));
-      var at = -1;
-      raws.forEach(function (r, i) { if (packKey(r) === packKey(data)) at = i; });
-      if (at >= 0) raws[at] = data; else raws.push(data);
+  /**
+   * 機種データ1つぶんを取り込む。
+   * 同じメーカー・同じシリーズ群のものがあれば入れ替え、無ければ足す。
+   * 戻り値は画面に出す一行（取り込めなければ null）。
+   */
+  function adoptModelPack(data) {
+    var decoded = decodeModels(data);
+    if (!decoded || !decoded.items.length) return null;
 
-      if (save(KEY_MDL, { v: 2, packs: raws }) === false) return;
-      chooserSel = {};
-      loadModels();
-      toast(decoded.maker + '　' + decoded.brand + ' の機種データ ' + decoded.items.length + '件を' +
-            (at >= 0 ? '入れ替えました' : '追加しました'));
+    var raws = rawPacks(load(KEY_MDL, null));
+    var at = -1;
+    raws.forEach(function (r, i) { if (packKey(r) === packKey(data)) at = i; });
+    if (at >= 0) raws[at] = data; else raws.push(data);
+
+    if (save(KEY_MDL, { v: 2, packs: raws }) === false) return null;
+    return decoded.maker + ' ' + decoded.items.length + '件' + (at >= 0 ? '（入れ替え）' : '');
+  }
+
+  /** ファイルを1つ読んでJSONにする。読めなければ null を渡す */
+  function readJsonFile(f, done) {
+    var r = new FileReader();
+    r.onerror = function () { done(null); };
+    r.onload = function () {
+      var data = null;
+      try { data = JSON.parse(r.result); } catch (e) { data = null; }
+      done(data);
     };
     r.readAsText(f);
+  }
+
+  $('#file-models').addEventListener('change', function (ev) {
+    var files = Array.prototype.slice.call(ev.target.files || []);
+    ev.target.value = '';
+    if (!files.length) return;
+
+    var done = [], failed = [], i = 0;
+
+    // 1つずつ順に読む（まとめて読むと、同じ保存先を取り合って上書きし合うため）
+    (function next() {
+      if (i >= files.length) { finish(); return; }
+      var f = files[i++];
+      readJsonFile(f, function (data) {
+        var line = data ? adoptModelPack(data) : null;
+        if (line) done.push(line); else failed.push(f.name);
+        next();
+      });
+    })();
+
+    function finish() {
+      chooserSel = {};
+      loadModels();
+      if (done.length && !failed.length) {
+        toast(done.length === 1 ? done[0] + ' を入れました'
+                                : done.length + 'メーカーを入れました（' + done.join('／') + '）');
+      } else if (done.length) {
+        toast(done.length + 'メーカーを入れました。読めなかったファイル: ' + failed.join('、'));
+      } else {
+        toast('機種データとして読めませんでした（' + failed.join('、') + '）');
+      }
+    }
   });
 
   $('#btn-models-clear').addEventListener('click', function () {

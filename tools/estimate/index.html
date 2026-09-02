@@ -252,11 +252,13 @@
         <div class="csv-box">
           <div class="csv-head">
             <strong>機器の機種データを読み込む（本体価格）</strong>
-            <span>メーカーの機種データを入れると、見積作成画面の「機器を選ぶ」でシリーズ・馬力・電源などから絞り込めるようになります。</span>
+            <span>メーカーの機種データを入れると、見積作成画面の「機器を選ぶ」でシリーズ・馬力・電源などから絞り込めるようになります。<br>
+              ファイルは<b>まとめて選べます</b>。スマホ⇄PCの連動を使っていれば、片方で入れればもう片方にも入るので、
+              スマホでファイルを探す必要はありません。</span>
           </div>
           <div class="csv-row">
             <div class="csv-btns">
-              <label class="btn btn-primary file-btn">機種データを選ぶ<input type="file" id="file-models" accept="application/json,.json"></label>
+              <label class="btn btn-primary file-btn">機種データを選ぶ<input type="file" id="file-models" accept="application/json,.json" multiple></label>
               <button class="btn btn-ghost btn-danger" id="btn-models-clear">機種データを削除</button>
             </div>
           </div>
