@@ -465,6 +465,15 @@ tr.line-auto td.c-rate .rate-sel { opacity: .4; }
 
 .preview .sheet-page {
   background: #fff;
+  /* 紙が変わるところに赤い線を引く（画面だけ。印刷には出ない）。
+     A4 297mm から上下の余白 14mm・12mm を引いた 271mm ごとに紙が変わる。
+     線の始まりを内側（padding の内）にそろえたいので background-origin を使う。 */
+  background-image: repeating-linear-gradient(to bottom,
+    transparent 0, transparent 270.5mm,
+    rgba(200, 40, 40, .5) 270.5mm, rgba(200, 40, 40, .5) 271mm);
+  background-origin: content-box;
+  background-clip: border-box;
+  background-repeat: repeat-y;
   padding: 14mm 14mm 12mm;
   min-height: 297mm;
   box-shadow: 0 2px 14px rgba(0,0,0,.35);
@@ -488,11 +497,31 @@ tr.line-auto td.c-rate .rate-sel { opacity: .4; }
   .preview-fit { width: auto !important; height: auto !important; }
   .preview-stage { width: auto; transform: none !important; }
   .preview .sheet-page {
-    background: none; padding: 0; min-height: 0; box-shadow: none; margin-bottom: 0;
+    background: none; background-image: none; padding: 0; min-height: 0;
+    box-shadow: none; margin-bottom: 0;
   }
 
   .sheet-page { page-break-after: always; }
   .sheet-page:last-child { page-break-after: auto; }
+
+  /* ------------------------------------------------------------------
+     どこで紙を変えるか。
+     指定しないとブラウザは高さだけを見て切るので、
+     「小計と消費税は2枚目、合計だけ3枚目」のような紙ができてしまう。
+     ------------------------------------------------------------------ */
+
+  /* 明細が次の紙に続くときは、見出し（No 品名 数量…）も一緒に出す */
+  table.sheet-lines thead { display: table-header-group; }
+
+  /* 1行の途中で切らない。品名と金額が別の紙に離れないように */
+  table.sheet-lines tr { page-break-inside: avoid; break-inside: avoid; }
+
+  /* 宛名・金額・工期の固まりと、備考・合計の固まりは、それぞれ丸ごと動かす */
+  .sheet-head,
+  .sheet-foot,
+  .sheet-remarks,
+  table.sheet-sum { page-break-inside: avoid; break-inside: avoid; }
+
 }
 
 .sheet-title {

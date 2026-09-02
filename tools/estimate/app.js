@@ -3971,8 +3971,10 @@
 
   /** 画面の幅に合わせてA4を縮める（スマホでも紙1枚まるごと見えるように）。
       縮めるのは見た目だけなので、印刷される中身は変わらない。 */
+  var fitRetry = 0;
+
   function fitPreview() {
-    if ($('#preview').hidden) return;
+    if ($('#preview').hidden) { fitRetry = 0; return; }
     var scroll = $('#pv-scroll'), fit = $('#pv-fit'), stage = $('#pv-stage');
     stage.style.transform = 'none';
     fit.style.width = '';
@@ -3980,6 +3982,14 @@
     var pageW = stage.offsetWidth;
     if (!pageW) return;
     var avail = scroll.clientWidth - 24;       // .preview-scroll の左右パディングぶん
+    // 開いた直後は入れ物の幅がまだ決まっていないことがある（スマホで起きやすい）。
+    // 幅を0のまま計算すると倍率がマイナスになり、紙が裏返って画面から消える。
+    // 次の描画まで待ってから測り直す。待ちすぎないよう回数を区切る。
+    if (avail <= 0) {
+      if (fitRetry < 30) { fitRetry++; requestAnimationFrame(fitPreview); }
+      return;
+    }
+    fitRetry = 0;
     var scale = Math.min(1, avail / pageW);
     stage.style.transform = 'scale(' + scale + ')';
     // 縮小しても余白が空きっぱなしにならないよう、入れ物の大きさも合わせる
