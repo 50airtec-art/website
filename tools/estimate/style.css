@@ -346,6 +346,15 @@ tr.line-auto td.c-rate .rate-sel { opacity: .4; }
   font-family: var(--font-mono, ui-monospace, "SFMono-Regular", Consolas, monospace);
 }
 
+/* ---------- メーカーごとの仕入掛率 ---------- */
+.rate-note { display: block; font-size: 11px; color: var(--text-sub); line-height: 1.6; margin: 2px 0 8px; }
+.rate-head, .rate-row { display: grid; grid-template-columns: 1fr 1.3fr 66px 30px; gap: 6px; align-items: center; }
+.rate-head { font-size: 11px; color: var(--text-sub); margin-bottom: 4px; }
+.rate-head i { display: block; }
+.rate-row { margin-bottom: 6px; }
+.rate-row input { width: 100%; padding: 8px 9px; font-size: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+.rate-row input:focus { background: #fff; outline: 2px solid var(--accent); outline-offset: -1px; }
+
 /* ---------- 社判の設定 ---------- */
 .seal-setup { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
 .seal-preview {

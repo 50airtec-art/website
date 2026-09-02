@@ -208,7 +208,13 @@
   pb.company  = adoptCompany(pb.company);
   pb.defaults = Object.assign({}, DEFAULT_PRICEBOOK.defaults, pb.defaults || {});
   if (!Array.isArray(pb.categories)) pb.categories = clone(DEFAULT_PRICEBOOK.categories);
+  ensureCostRates();
   migratePB();
+
+  /** 掛率の表は、初期値の配列をそのまま使うと、直したときに初期値まで書き換わる。必ず自分のものにする */
+  function ensureCostRates() {
+    pb.defaults.costRates = Array.isArray(pb.defaults.costRates) ? pb.defaults.costRates.slice() : [];
+  }
 
   function savePB() { return save(KEY_PB, pb); }
 
@@ -476,12 +482,33 @@
   /** 原価を画面に出すかどうか（端末ごとの見た目の設定。見積には保存しない） */
   var showCost = load(KEY_COST, false) === true;
 
+  /**
+   * その品名・仕様に当たる仕入掛率（%）を返す。当たらなければ 0。
+   * メーカーだけの指定より、シリーズまで書いてある指定のほうを優先する。
+   * （例：「日立 23%」と「日立の寒さ知らず 24%」があれば、寒冷地モデルには24%）
+   */
+  function costRateFor(text) {
+    var list = pb.defaults.costRates || [];
+    var best = 0, bestScore = -1;
+    for (var i = 0; i < list.length; i++) {
+      var maker  = String(list[i].maker  || '').trim();
+      var series = String(list[i].series || '').trim();
+      if (!maker && !series) continue;
+      if (maker  && text.indexOf(maker)  < 0) continue;
+      if (series && text.indexOf(series) < 0) continue;
+      var score = (maker ? 1 : 0) + (series ? 2 : 0);
+      if (score > bestScore) { bestScore = score; best = num(list[i].percent); }
+    }
+    return best;
+  }
+
   /** 単価マスタの項目から、1単位あたりの原価を見積もる */
   function itemCost(item, cat) {
     if (!item) return 0;
     if (num(item.cost) > 0) return num(item.cost);
     if (num(item.manDay) > 0) return Math.round(num(item.manDay) * num(pb.defaults.manDayCostYen));
-    var pct = num(pb.defaults.materialCostPercent);
+    var pct = costRateFor((item.name || '') + ' ' + (item.spec || '')) ||
+              num(pb.defaults.materialCostPercent);
     if (pct > 0 && (!cat || !cat.work)) return Math.round(num(item.price) * pct / 100);
     return 0;
   }
@@ -500,7 +527,8 @@
     if (num(l.manDay) > 0) return Math.round(num(l.manDay) * num(pb.defaults.manDayCostYen));
 
     // 仕入掛率は材料の話。「工」ボタンで作業費に数えている行には当てない
-    var pct = num(pb.defaults.materialCostPercent);
+    var pct = costRateFor((l.name || '') + ' ' + (l.spec || '')) ||
+              num(pb.defaults.materialCostPercent);
     if (pct > 0 && !isWorkLine(l)) return Math.round(num(l.base) * pct / 100);
     return 0;
   }
@@ -2956,6 +2984,7 @@
     $('#c-manday').value = num(pb.defaults.manDayYen) || 0;
     $('#c-manday-cost').value = num(pb.defaults.manDayCostYen) || 0;
     $('#c-material-cost').value = num(pb.defaults.materialCostPercent) || 0;
+    renderCostRates();
     $('#seal-size').value = pb.company.sealSizeMm || 18;
     $('#logo-size').value = pb.company.logoHeightMm || 12;
     renderSealPreview();
@@ -2964,12 +2993,65 @@
     updateBrand();
   }
 
+  /* ----------------------------------------------------------------------
+     メーカー・シリーズごとの仕入掛率
+     商社は「メーカーごと、寒冷地モデルかどうか」で掛率を変える。
+     （西方商店：日立の省エネの達人 23%／寒さ知らず 24%）
+     ---------------------------------------------------------------------- */
+  function renderCostRates() {
+    var box = $('#cost-rates');
+    if (!box) return;
+    box.innerHTML = '';
+    var list = pb.defaults.costRates || [];
+    if (!list.length) {
+      box.appendChild(el('p', 'picker-empty',
+        'まだありません。「＋ 行を足す」で、メーカーごとの掛率を決められます。'));
+      return;
+    }
+    list.forEach(function (r, i) { box.appendChild(costRateRow(r, i)); });
+  }
+
+  function costRateRow(r, i) {
+    var row = el('div', 'rate-row');
+
+    var mk = el('input');
+    mk.type = 'text'; mk.placeholder = '日立'; mk.value = r.maker || '';
+
+    var sr = el('input');
+    sr.type = 'text'; sr.placeholder = '空ならメーカー全部'; sr.value = r.series || '';
+
+    var pc = el('input');
+    pc.type = 'number'; pc.min = 0; pc.max = 100; pc.step = 1;
+    pc.placeholder = '%'; pc.value = num(r.percent) || '';
+
+    mk.addEventListener('input', function () { r.maker = mk.value; });
+    sr.addEventListener('input', function () { r.series = sr.value; });
+    pc.addEventListener('input', function () { r.percent = num(pc.value); });
+
+    var del = el('button', 'icon-btn', '✕');
+    del.type = 'button';
+    del.title = 'この行を消す';
+    del.addEventListener('click', function () {
+      pb.defaults.costRates.splice(i, 1);
+      renderCostRates();
+    });
+
+    row.appendChild(mk); row.appendChild(sr); row.appendChild(pc); row.appendChild(del);
+    return row;
+  }
+
   function updateBrand() {
     var name = (pb.company.name || '').trim();
     $('#brand-company').textContent = name || '自社情報が未設定です';
     var mark = name ? name.replace(/[（(].*$/, '').trim().slice(0, 2) : '空調';
     $('#brand-mark').textContent = mark || '空調';
   }
+
+  $('#btn-rate-add').addEventListener('click', function () {
+    ensureCostRates();
+    pb.defaults.costRates.push({ maker: '', series: '', percent: 0 });
+    renderCostRates();
+  });
 
   $('#btn-save-company').addEventListener('click', function () {
     Object.keys(companyMap).forEach(function (sel) {
@@ -2980,6 +3062,11 @@
     pb.defaults.manDayYen = num($('#c-manday').value);
     pb.defaults.manDayCostYen = num($('#c-manday-cost').value);
     pb.defaults.materialCostPercent = num($('#c-material-cost').value);
+    // メーカー名もシリーズ名も空、あるいは掛率0の行は捨てる
+    pb.defaults.costRates = (pb.defaults.costRates || []).filter(function (r) {
+      return (String(r.maker || '').trim() || String(r.series || '').trim()) && num(r.percent) > 0;
+    });
+    renderCostRates();
     applyLineCosts();
     renderLines();
     savePB();

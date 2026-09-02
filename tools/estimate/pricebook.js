@@ -61,6 +61,13 @@ const DEFAULT_PRICEBOOK = {
     /* 材料の仕入掛率（定価の何%で仕入れているか）。0なら未設定あつかい。
        項目ごとに原価を入れてあれば、そちらが優先される。 */
     materialCostPercent: 0,
+    /* メーカー・シリーズごとの仕入掛率。
+       商社は「メーカーごと、寒冷地モデルかどうか」で掛率を変えているので、
+       材料ぜんぶを1つの率でまとめられない。
+       { maker:'日立', series:'寒さ知らず', percent:24 } のように書く。
+       series を空にすると、そのメーカーの機器ぜんぶに当たる。
+       ここに当たらないものは、上の materialCostPercent を使う。 */
+    costRates: [],
     overheadPercent: 0,
     paymentTerms: '工事完了後、月末締め翌月末払い',
     deliveryTerms: 'ご発注後、別途打合せ',
