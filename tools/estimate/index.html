@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>空調王</title>
-<link rel="stylesheet" href="style.css?v=202609022220">
+<link rel="stylesheet" href="style.css?v=202609022300">
 </head>
 <body>
 
@@ -39,6 +39,11 @@
   <div class="bk-warn sync-warn" id="sync-warn" style="display:none">
     <span>もう一方の端末の変更を受け取りました。</span>
     <button class="btn btn-primary btn-sm" id="btn-sync-reload">画面を新しくする</button>
+  </div>
+
+  <div class="bk-warn new-warn" id="new-warn" style="display:none">
+    <span>空調王の<b>新しい版</b>が出ています。押すと入れ替わります（入力した内容は消えません）。</span>
+    <button class="btn btn-primary btn-sm" id="btn-new-reload">新しくする</button>
   </div>
 
   <main class="wrap">
@@ -319,6 +324,7 @@
         </div>
         <div class="card-actions" style="margin-top:16px">
           <button class="btn btn-primary" id="btn-save-company">保存</button>
+          <p class="app-ver" id="app-ver"></p>
         </div>
       </div>
 
@@ -489,10 +495,10 @@
   </div>
 </div>
 
-<script src="pricebook.js?v=202609022220"></script>
-<script src="survey.js?v=202609022220"></script>
-<script src="firebase-config.js?v=202609022220"></script>
-<script src="app.js?v=202609022220"></script>
-<script src="sync.js?v=202609022220"></script>
+<script src="pricebook.js?v=202609022300"></script>
+<script src="survey.js?v=202609022300"></script>
+<script src="firebase-config.js?v=202609022300"></script>
+<script src="app.js?v=202609022300"></script>
+<script src="sync.js?v=202609022300"></script>
 </body>
 </html>

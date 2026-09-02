@@ -742,6 +742,8 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
 
 /* ===== スマホ⇄パソコンの連動 ===== */
 .sync-warn { background: var(--accent-soft); border-bottom: 1px solid #b9d4ef; color: #0b4f96; }
+.new-warn  { background: #e9f7ee; border-bottom: 1px solid #a9d8ba; color: #14603a; }
+.app-ver { margin-top: 10px; font-size: 11px; color: var(--text-light); }
 
 .sync-badge {
   display: inline-block; font-size: 12px; font-weight: 700;

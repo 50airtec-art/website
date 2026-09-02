@@ -7,6 +7,10 @@
   'use strict';
 
   /* ---------- 保存キー ---------- */
+  /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
+     配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
+  var APP_VERSION = '202609022300';
+
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
   var KEY_DRAFT = 'airtec_draft_v1';
@@ -2036,6 +2040,36 @@
   $('#btn-bk-warn-save').addEventListener('click', function () { writeBackup(false); });
   $('#btn-bk-warn-hide').addEventListener('click', function () { $('#bk-warn').style.display = 'none'; });
 
+  /* --------------------------------------------------------------------
+     新しい版が出ていないか、見に行く。
+
+     版番号は app.js?v=… のように「中のファイル」にしか付いていない。
+     だから入口の index.html が端末に残っていると、その端末はいつまでも
+     古い番号のファイルを取りに行く。スマホでこれが起きると、
+     直したものが永久に届かない。気づく手立てが無いのがいちばん困る。
+
+     そこで version.txt（毎回サーバーから取り直す）と見比べて、ちがっていたら
+     知らせる。押すとURLに新しい番号を付けて開き直すので、入口ごと新しくなる。
+     入れた内容はURLではなくドメインごとに置いてあるので、消えない。
+     -------------------------------------------------------------------- */
+  var newVersion = '';
+
+  if (location.protocol !== 'file:') {
+    fetch('version.txt?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.text() : ''; })
+      .then(function (t) {
+        var v = String(t || '').trim();
+        if (!v || v === APP_VERSION) return;
+        newVersion = v;
+        $('#new-warn').style.display = '';
+      })
+      .catch(function () { /* 圏外などで取れなくても、いまの画面はそのまま使える */ });
+  }
+
+  $('#btn-new-reload').addEventListener('click', function () {
+    location.replace(location.pathname + '?v=' + encodeURIComponent(newVersion || Date.now()));
+  });
+
   /* 起動時：保存先が生きていて、しばらく保存していなければ静かに保存しておく */
   async function initBackup() {
     if (canPickFile) {
@@ -3131,6 +3165,8 @@
     $('#c-material-cost').value = num(pb.defaults.materialCostPercent) || 0;
     $('#c-model-div').value = num(pb.defaults.modelSellDivisor) || '';
     showModelDivNote();
+    // うまく動かないときに「どの版を使っているか」を言えるようにしておく
+    $('#app-ver').textContent = '空調王　版 ' + APP_VERSION;
     renderCostRates();
     $('#seal-size').value = pb.company.sealSizeMm || 18;
     $('#logo-size').value = pb.company.logoHeightMm || 12;
