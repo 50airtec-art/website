@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609030140';
+  var APP_VERSION = '202609030220';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -4171,10 +4171,11 @@
       .then(function () { pdfLibsReady = true; });
   }
 
-  function makePdf() {
-    var btn = $('#pv-pdf'), label = btn.textContent;
+  function makePdf(win, btn) {
+    btn = btn || $('#pv-pdf');
+    var label = btn.textContent;
     // 新しい画面は「押した流れの中」でしか開けない。あとから開くと止められる
-    var win = window.open('', '_blank');
+    if (win === undefined) win = window.open('', '_blank');
     btn.disabled = true;
     btn.textContent = '作っています…';
 
@@ -4233,7 +4234,18 @@
     });
   }
 
-  $('#pv-pdf').addEventListener('click', makePdf);
+  $('#pv-pdf').addEventListener('click', function () { makePdf(undefined, $('#pv-pdf')); });
+
+  // 下のバーからも一発で作れるようにする。
+  // プレビューを開いてからでないと紙が組み上がらないので、ここで開いてから渡す。
+  $('#btn-pdf').addEventListener('click', function () {
+    if (!readyToPrint()) return;
+    var win = window.open('', '_blank');   // 押した流れの中で開く
+    buildSheet();
+    openPreview('見積書　' + st.no + (st.customer ? '　' + st.customer : ''),
+                '見積書_' + (st.customer || '無題') + '_' + st.no);
+    makePdf(win, $('#pv-pdf'));
+  });
 
   $('#pv-print').addEventListener('click', function () {
     if (pvDocTitle) document.title = pvDocTitle;

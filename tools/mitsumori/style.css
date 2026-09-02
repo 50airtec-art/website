@@ -458,6 +458,15 @@ tr.line-auto td.c-rate .rate-sel { opacity: .4; }
 .preview-bar .btn-ghost:hover { background: #2f353c; }
 .preview-hint { color: #a8adb4; font-size: 12px; margin-right: auto; }
 
+/* PDFのボタン。プレビューの帯は黒いので、黒いボタンを置くと見えなくなる。
+   （2026-09-02、実機で気づいた）緑で塗って、どちらの場所でもはっきり見えるようにする。 */
+.btn-pdf,
+.preview-bar .btn-pdf {
+  background: #16a34a; border-color: #16a34a; color: #fff; font-weight: 600;
+}
+.btn-pdf:hover, .preview-bar .btn-pdf:hover { background: #12833b; border-color: #12833b; }
+.btn-pdf:disabled { background: #6b7280; border-color: #6b7280; color: #fff; }
+
 .preview-scroll { flex: 1; overflow: auto; padding: 12px; -webkit-overflow-scrolling: touch; }
 .preview-fit { margin: 0 auto; }
 /* A4の幅そのままで組んでおき、画面が狭いときは JS が縮小する */
