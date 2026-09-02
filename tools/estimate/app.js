@@ -223,6 +223,41 @@
    * 端末のブラウザに保存してある単価は消さず、足りない印と項目だけを足す。
    */
   function migratePB() {
+    migrateTo8();
+    migrateTo9();
+  }
+
+  /** 分類に、その品名＋規格の項目が無ければ足す。すでにある行の金額には触らない */
+  function addItemIfMissing(catId, item) {
+    var cat = null;
+    pb.categories.forEach(function (c) { if (c.id === catId) cat = c; });
+    if (!cat || !Array.isArray(cat.items)) return false;
+    var exists = false;
+    cat.items.forEach(function (it) {
+      if (it.name === item.name && (it.spec || '') === (item.spec || '')) exists = true;
+    });
+    if (exists) return false;
+    cat.items.push(clone(item));
+    return true;
+  }
+
+  /**
+   * 2026-09-02 以降に足した項目を、すでに使っている単価マスタにも届ける。
+   * 足りない行を入れるだけで、書き換えてある金額には一切触らない。
+   */
+  function migrateTo9() {
+    if (num(pb.version) >= 9) return;
+    var added = 0;
+    if (addItemIfMissing('biz', {
+      name: 'オートグリル 組み込み', spec: '天カセ4方向 昇降パネル',
+      unit: '台', price: 20000, color: '青'
+    })) added++;
+    pb.version = 9;
+    save(KEY_PB, pb);
+    if (added) console.log('単価マスタに ' + added + ' 項目を足しました');
+  }
+
+  function migrateTo8() {
     if (num(pb.version) >= 8) return;
 
     DEFAULT_PRICEBOOK.categories.forEach(function (dc) {
