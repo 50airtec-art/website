@@ -225,6 +225,7 @@
   function migratePB() {
     migrateTo8();
     migrateTo9();
+    migrateTo10();
   }
 
   /** 分類に、その品名＋規格の項目が無ければ足す。すでにある行の金額には触らない */
@@ -249,12 +250,28 @@
     if (num(pb.version) >= 9) return;
     var added = 0;
     if (addItemIfMissing('biz', {
-      name: 'オートグリル 組み込み', spec: '天カセ4方向 昇降パネル',
+      name: 'オートグリル 組み込み', spec: '',
       unit: '台', price: 20000, color: '青'
     })) added++;
     pb.version = 9;
     save(KEY_PB, pb);
     if (added) console.log('単価マスタに ' + added + ' 項目を足しました');
+  }
+
+  /**
+   * 版9で入れた「オートグリル 組み込み」に規格を書いてしまっていたので、空に戻す。
+   * 天カセだけでなく天吊形にも付くため、形を決め打ちにしない。
+   * 自分で規格を書き足した行は、そのまま残す。
+   */
+  function migrateTo10() {
+    if (num(pb.version) >= 10) return;
+    pb.categories.forEach(function (c) {
+      (c.items || []).forEach(function (it) {
+        if (it.name === 'オートグリル 組み込み' && it.spec === '天カセ4方向 昇降パネル') it.spec = '';
+      });
+    });
+    pb.version = 10;
+    save(KEY_PB, pb);
   }
 
   function migrateTo8() {
