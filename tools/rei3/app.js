@@ -351,7 +351,110 @@
     $('#btn-again').onclick = function () {
       start(shuffle(wrong.map(function (x) { return x.q; })), 'weak');
     };
+
+    var cb = $('#r-copybox');
+    cb.style.display = 'none';
+    cb.innerHTML = '';
   }
+
+  /* ----------------------------------------------------------------------
+     結果を持ち出せる形の文にする。
+     この文は端末の外へ出る（人に見せる・相談する）ので、
+     問題文と選択肢は入れない。年度・科目・問番号・選んだ番号だけにする。
+     ---------------------------------------------------------------------- */
+  var MODE_NAME = { exam: '本番と同じ通し', weak: '要復習', all: 'ぜんぶ' };
+
+  function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+  function today() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+
+  function resultText() {
+    if (!quiz || !quiz.answers.length) return '';
+    var a = quiz.answers;
+    var ok = a.filter(function (x) { return x.right; }).length;
+    var rate = Math.round((ok / a.length) * 100);
+
+    var years = [];
+    a.forEach(function (x) { if (years.indexOf(x.q.year) < 0) years.push(x.q.year); });
+    years.sort();
+
+    var lines = [];
+    lines.push('冷凍王　' + years.map(function (y) { return labelOf('year', y); }).join('・') +
+               (MODE_NAME[quiz.mode] ? '　' + MODE_NAME[quiz.mode] : ''));
+    lines.push(today() + '　全体 ' + ok + '/' + a.length + '（' + rate + '％）');
+
+    ['法令', '保安管理技術'].forEach(function (sub) {
+      var list = a.filter(function (x) { return x.q.subject === sub; });
+      if (!list.length) return;
+      var n = list.filter(function (x) { return x.right; }).length;
+      var r = Math.round((n / list.length) * 100);
+      lines.push(sub + ' ' + n + '/' + list.length + '（' + r + '％）' +
+                 (r >= 60 ? ' 合格ライン' : ' 60％に届かず'));
+    });
+
+    var wrong = a.filter(function (x) { return !x.right; });
+    lines.push('');
+    if (wrong.length) {
+      lines.push('間違えた ' + wrong.length + '問');
+      wrong.forEach(function (x) {
+        lines.push('・' + labelOf('year', x.q.year) + ' ' + x.q.subject + ' 問' + x.q.no +
+                   '　選んだ(' + x.picked + ') 正解(' + x.q.answer + ')');
+      });
+    } else {
+      lines.push('間違いなし');
+    }
+    lines.push('');
+    lines.push('※問題文は入れていません');
+    return lines.join('\n');
+  }
+
+  /** まずブラウザのコピー機能。だめなら古いやり方。それもだめなら画面に出す */
+  function copyText(text, onOk, onFail) {
+    function legacy() {
+      var ta = el('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      var done = false;
+      try { done = document.execCommand('copy'); } catch (e) { done = false; }
+      document.body.removeChild(ta);
+      if (done) onOk(); else onFail();
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(onOk, legacy);
+    } else {
+      legacy();
+    }
+  }
+
+  $('#btn-copy').addEventListener('click', function () {
+    var text = resultText();
+    if (!text) { toast('コピーする結果がありません'); return; }
+    copyText(text, function () {
+      toast('結果をコピーしました。そのまま貼り付けて送れます');
+    }, function () {
+      var cb = $('#r-copybox');
+      cb.innerHTML = '';
+      cb.style.display = '';
+      cb.appendChild(el('div', 'copybox-head', 'この端末では自動でコピーできませんでした。下の文を長押しして選び、コピーしてください'));
+      var ta = el('textarea', 'memo-input');
+      ta.rows = 10;
+      ta.value = text;
+      ta.readOnly = true;
+      cb.appendChild(ta);
+      ta.focus();
+      ta.select();
+      ta.scrollTop = 0;   // 選んだあと末尾に飛ぶので、点数の行から見えるように戻す
+    });
+  });
 
   $('#btn-home').addEventListener('click', function () {
     quiz = null;
@@ -426,7 +529,7 @@
       var data;
       try { data = JSON.parse(r.result); }
       catch (e) { toast('ファイルの形式が違います（JSONではありません）'); return; }
-      adopt(data, mode);
+      if (mode === 'restore') restore(data); else adopt(data, mode);
     };
     r.readAsText(f);
   }
@@ -443,6 +546,49 @@
     adopt(data, 'replace');
     $('#paste-area').value = '';
   });
+
+  /* ----------------------------------------------------------------------
+     成績の控え
+     成績もメモもこの端末のブラウザの中にしかない。
+     ブラウザのデータを消したり端末を替えたりすると、そこで全部消える。
+     試験は年に一度なので、ファイルにして手元に置けるようにしておく。
+     問題そのものは入れない（元のファイルが手元にあるはずのもの）。
+     ---------------------------------------------------------------------- */
+  function backup() {
+    if (!Object.keys(progress).length && !Object.keys(memos).length) {
+      toast('まだ控えを取る成績がありません'); return;
+    }
+    var data = {
+      kind: 'rei3-backup', v: 1, saved: today(),
+      progress: progress, memos: memos
+    };
+    var url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+    var a = el('a');
+    a.href = url;
+    a.download = 'rei3-seiseki-' + data.saved + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+    toast('成績の控えを書き出しました');
+  }
+
+  function restore(data) {
+    if (!data || data.kind !== 'rei3-backup') {
+      toast('成績の控えファイルではありません'); return;
+    }
+    var n = Object.keys(data.progress || {}).length;
+    if (!confirm('いまの成績を、控え（' + (data.saved || '日付なし') + '・' + n + '問ぶん）に置きかえます。よろしいですか？')) return;
+    progress = data.progress || {};
+    memos = data.memos || {};
+    if (!save(KEY_P, progress)) return;
+    save(KEY_M, memos);
+    renderHome();
+    toast('成績を戻しました');
+  }
+
+  $('#btn-backup').addEventListener('click', backup);
+  $('#file-restore').addEventListener('change', function (ev) { readFile(ev.target, 'restore'); });
 
   $('#btn-reset').addEventListener('click', function () {
     if (!confirm('成績を消します。問題そのものは残ります。よろしいですか？')) return;

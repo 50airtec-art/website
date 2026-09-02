@@ -216,6 +216,10 @@ input, select, textarea, button { font-family: inherit; font-size: inherit; colo
   color: var(--text-sub); line-height: 1.7;
 }
 .rlist li b { color: var(--text); display: block; font-size: 13px; }
+.copybox { margin-top: 14px; }
+.copybox-head { font-size: 12px; color: var(--text-sub); margin-bottom: 6px; line-height: 1.6; }
+.copybox textarea { font-size: 13px; line-height: 1.7; }
+
 .subject-score { display: flex; gap: 8px; margin-bottom: 14px; }
 .subject-score .s {
   flex: 1; text-align: center; border-radius: 9px; padding: 9px;

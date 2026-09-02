@@ -74,8 +74,10 @@
       </div>
 
       <div class="card-actions">
-        <button class="btn btn-ghost btn-sm" id="btn-reset">成績を消す</button>
+        <button class="btn btn-ghost btn-sm" id="btn-backup">成績を保存</button>
+        <label class="btn btn-ghost btn-sm file-btn">成績を戻す<input type="file" id="file-restore" accept="application/json,.json"></label>
         <label class="btn btn-ghost btn-sm file-btn">問題を足す<input type="file" id="file-add" accept="application/json,.json"></label>
+        <button class="btn btn-ghost btn-sm" id="btn-reset">成績を消す</button>
       </div>
     </div>
 
@@ -115,8 +117,10 @@
       <div id="r-detail"></div>
       <div class="card-actions">
         <button class="btn btn-primary" id="btn-again">間違えた問題をもう一度</button>
+        <button class="btn btn-ghost" id="btn-copy">結果をコピー</button>
         <button class="btn btn-ghost" id="btn-home">ホームへ</button>
       </div>
+      <div class="copybox" id="r-copybox" style="display:none"></div>
     </div>
   </main>
 
