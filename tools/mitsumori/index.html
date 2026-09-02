@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>空調王</title>
+<link rel="stylesheet" href="style.css?v=202609030140">
+</head>
+<body>
+
+<!-- ====================== アプリ画面（印刷時は非表示） ====================== -->
+<div id="app">
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-mark" id="brand-mark">空調</span>
+        <div>
+          <strong>空調王</strong>
+          <small id="brand-company">自社情報が未設定です</small>
+        </div>
+      </div>
+      <nav class="tabs">
+        <button class="tab is-active" data-view="edit">見積作成</button>
+        <button class="tab" data-view="list">現場</button>
+        <button class="tab" data-view="master">単価マスタ</button>
+        <button class="tab" data-view="settings">自社情報</button>
+      </nav>
+    </div>
+  </header>
+
+  <div class="bk-warn" id="bk-warn" style="display:none">
+    <span id="bk-warn-text"></span>
+    <button class="btn btn-primary btn-sm" id="btn-bk-warn-save">いますぐ保存</button>
+    <button class="btn btn-ghost btn-sm" id="btn-bk-warn-hide">あとで</button>
+  </div>
+
+  <div class="bk-warn sync-warn" id="sync-warn" style="display:none">
+    <span>もう一方の端末の変更を受け取りました。</span>
+    <button class="btn btn-primary btn-sm" id="btn-sync-reload">画面を新しくする</button>
+  </div>
+
+  <div class="bk-warn new-warn" id="new-warn" style="display:none">
+    <span>空調王の<b>新しい版</b>が出ています。押すと入れ替わります（入力した内容は消えません）。</span>
+    <button class="btn btn-primary btn-sm" id="btn-new-reload">新しくする</button>
+  </div>
+
+  <main class="wrap">
+
+    <!-- ============ 見積作成 ============ -->
+    <section class="view is-active" id="view-edit">
+
+      <div class="card">
+        <h2 class="card-title">基本情報</h2>
+        <div class="grid">
+          <label class="f"><span>見積番号</span><input type="text" id="m-no"></label>
+          <label class="f"><span>発行日</span><input type="date" id="m-date"></label>
+          <label class="f f-wide"><span>宛名（お客様名）</span>
+            <div class="f-row">
+              <input type="text" id="m-customer" placeholder="株式会社〇〇">
+              <select id="m-honorific">
+                <option>御中</option>
+                <option>様</option>
+                <option>（なし）</option>
+              </select>
+            </div>
+          </label>
+          <label class="f f-wide"><span>件名</span><input type="text" id="m-subject" placeholder="事務所 業務用エアコン更新工事"></label>
+          <label class="f f-wide"><span>工事場所</span><input type="text" id="m-site" placeholder="山形県〇〇市〇〇 1-2-3"></label>
+          <label class="f"><span>有効期限（日）</span><input type="number" id="m-valid" min="0" step="1"></label>
+          <label class="f"><span>工期・納期</span><input type="text" id="m-delivery"></label>
+          <label class="f f-wide"><span>お支払条件</span><input type="text" id="m-payment"></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">明細</h2>
+          <div class="card-actions">
+            <label class="cost-toggle" title="原価と粗利を画面に出します。見積書には印刷されません">
+              <input type="checkbox" id="chk-cost"><span>原価・粗利を見る</span>
+            </label>
+            <button class="btn btn-ghost" id="btn-add-blank">＋ 空の行</button>
+            <button class="btn btn-ghost" id="btn-strip-spec">仕様を品番だけに</button>
+            <button class="btn btn-ghost" id="btn-clear-lines">明細をクリア</button>
+          </div>
+        </div>
+
+        <!-- 単価表から追加 -->
+        <div class="picker">
+          <div class="picker-head">
+            <span class="picker-label">単価表から追加</span>
+            <input type="search" id="picker-search" placeholder="品名で検索（例：配管、天カセ、取外し）">
+          </div>
+          <div class="picker-cats" id="picker-cats"></div>
+          <div class="picker-items" id="picker-items"></div>
+        </div>
+
+        <!-- 機器を選ぶ（メーカーの機種データから絞り込んで明細に入れる） -->
+        <div class="chooser" id="chooser">
+          <div class="picker-head">
+            <span class="picker-label">機器を選ぶ</span>
+            <span class="chooser-src" id="chooser-src"></span>
+            <button class="btn btn-ghost btn-sm" id="btn-chooser-reset" type="button">最初から</button>
+          </div>
+          <div id="chooser-body"></div>
+        </div>
+
+        <!-- 明細テーブル -->
+        <div class="lines-wrap">
+          <table class="lines" id="lines-table">
+            <thead>
+              <tr>
+                <th class="c-move"></th>
+                <th class="c-name">品名・仕様</th>
+                <th class="c-qty">数量</th>
+                <th class="c-unit">単位</th>
+                <th class="c-rate">掛率</th>
+                <th class="c-price">単価</th>
+                <th class="c-amount">金額</th>
+                <th class="c-cost">原価</th>
+                <th class="c-margin">粗利率</th>
+                <th class="c-del"></th>
+              </tr>
+            </thead>
+            <tbody id="lines-body"></tbody>
+          </table>
+          <p class="empty-note" id="lines-empty">上の「単価表から追加」から項目をタップして明細を作ります。</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">金額の調整</h2>
+        <div class="grid">
+          <label class="f"><span>諸経費（小計の%）</span><input type="number" id="m-overhead" min="0" step="0.1"></label>
+          <label class="f"><span>値引き（円・プラス数値で入力）</span><input type="number" id="m-discount" min="0" step="1"></label>
+          <label class="f"><span>消費税率（%）</span><input type="number" id="m-tax" min="0" step="0.1"></label>
+          <label class="f"><span>1人工の金額（円）</span><input type="number" id="m-manday" min="0" step="1000"></label>
+          <label class="f"><span>単価の端数（行ごと）</span>
+            <select id="m-unit-round">
+              <option value="0">そのまま</option>
+              <option value="10">10円未満は繰り上げ</option>
+              <option value="100">100円未満は繰り上げ</option>
+            </select>
+          </label>
+          <label class="f"><span>端数処理（諸経費・消費税）</span>
+            <select id="m-rounding">
+              <option value="floor">切り捨て</option>
+              <option value="round">四捨五入</option>
+              <option value="ceil">切り上げ</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="totals" id="totals"></div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">備考</h2>
+        <textarea id="m-note" rows="4" placeholder="現地状況により変更となる場合があります など"></textarea>
+      </div>
+
+      <div class="actionbar">
+        <button class="btn btn-ghost" id="btn-new">新規作成</button>
+        <button class="btn btn-ghost" id="btn-save">保存</button>
+        <button class="btn btn-ghost" id="btn-preview">プレビュー</button>
+        <button class="btn btn-primary" id="btn-print">印刷 / PDF</button>
+      </div>
+    </section>
+
+    <!-- ============ 保存済み ============ -->
+    <section class="view" id="view-list">
+      <!-- 現場の一覧 -->
+      <div class="card" id="site-list-card">
+        <div class="card-head">
+          <h2 class="card-title">現場</h2>
+          <div class="card-actions">
+            <button class="btn btn-primary" id="btn-new-site">＋ 現場を追加</button>
+            <button class="btn btn-ghost" id="btn-paste-survey">現調シートを貼り付け</button>
+            <button class="btn btn-ghost" id="btn-export-estimates">バックアップを書き出す</button>
+            <label class="btn btn-ghost file-btn">読み込む<input type="file" id="file-import-estimates" accept="application/json"></label>
+          </div>
+        </div>
+        <input type="search" id="site-search" placeholder="現場名・お客様名で検索">
+        <div id="site-list"></div>
+      </div>
+
+      <!-- 現場の中身（見積・請求書・現調シート） -->
+      <div class="card" id="site-detail-card" style="display:none">
+        <div class="card-head">
+          <button class="btn btn-ghost btn-sm" id="btn-site-back">← 現場一覧</button>
+          <div class="card-actions">
+            <button class="btn btn-ghost" id="btn-site-edit">現場情報を編集</button>
+            <button class="btn btn-ghost btn-danger" id="btn-site-del">現場を削除</button>
+          </div>
+        </div>
+        <div id="site-detail"></div>
+      </div>
+    </section>
+
+    <!-- ============ 単価マスタ ============ -->
+    <section class="view" id="view-master">
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">単価マスタ</h2>
+          <div class="card-actions">
+            <label class="cost-toggle" title="原価の列を出します。見積書には印刷されません">
+              <input type="checkbox" id="chk-cost-m"><span>原価を見る</span>
+            </label>
+            <button class="btn btn-ghost" id="btn-export-pb">バックアップを書き出す</button>
+            <label class="btn btn-ghost file-btn">読み込む<input type="file" id="file-import-pb" accept="application/json"></label>
+            <button class="btn btn-ghost btn-danger" id="btn-reset-pb">初期値に戻す</button>
+          </div>
+        </div>
+        <p class="hint">
+          ここで書き換えた金額は<strong>この端末のブラウザの中だけ</strong>に保存されます。GitHubやサイトには出ません。<br>
+          スマホとパソコンの両方で使うときは、［バックアップを書き出す］でファイルを作り、もう一方の端末で［読み込む］してください。
+        </p>
+
+        <div class="csv-box">
+          <div class="csv-head">
+            <strong>CSVでまとめて取り込む</strong>
+            <span>因幡電工などメーカーの価格表を、Excelで CSV 形式にして読み込めます。</span>
+          </div>
+          <div class="csv-row">
+            <label class="f">
+              <span>カテゴリ列が無いときの入れ先</span>
+              <select id="csv-target"></select>
+            </label>
+            <div class="csv-btns">
+              <label class="btn btn-primary file-btn">CSVを選ぶ<input type="file" id="file-csv" accept=".csv,.txt,text/csv,text/plain"></label>
+              <button class="btn btn-ghost" id="btn-csv-template">テンプレートCSVを取得</button>
+            </div>
+          </div>
+          <label class="check">
+            <input type="checkbox" id="csv-replace">
+            <span>取り込む前に、そのカテゴリの中身をいったん空にする（入れ直したいとき用）</span>
+          </label>
+          <p class="csv-note">
+            見出し行は <code>カテゴリ / 品番 / 品名 / 規格 / 単位 / 定価</code>。並び順は自由で、無い列はとばせます。<br>
+            「型番」「希望小売価格」など、よくある別の言い方でも認識します。Excel から出した Shift_JIS のCSVもそのまま読めます。
+          </p>
+
+          <div class="paste-box">
+            <label class="f">
+              <span>Excel やメモ帳からそのまま貼り付ける（ファイルにしなくてOK）</span>
+              <textarea id="paste-area" rows="4" placeholder="Excelで範囲を選んでコピー → ここに貼り付け&#10;LD-70	スリムダクト LD ダクト	本	1200&#10;HPC-2320	ペアコイル 2分3分	巻	18000"></textarea>
+            </label>
+            <div class="csv-btns">
+              <button class="btn btn-primary" id="btn-paste-import">貼り付けた内容を取り込む</button>
+              <button class="btn btn-ghost" id="btn-paste-clear">消す</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="csv-box">
+          <div class="csv-head">
+            <strong>機器の機種データを読み込む（本体価格）</strong>
+            <span>メーカーの機種データを入れると、見積作成画面の「機器を選ぶ」でシリーズ・馬力・電源などから絞り込めるようになります。<br>
+              ファイルは<b>まとめて選べます</b>。スマホ⇄PCの連動を使っていれば、片方で入れればもう片方にも入るので、
+              スマホでファイルを探す必要はありません。</span>
+          </div>
+          <div class="csv-row">
+            <div class="csv-btns">
+              <label class="btn btn-primary file-btn">機種データを選ぶ<input type="file" id="file-models" accept="application/json,.json" multiple></label>
+              <button class="btn btn-ghost btn-danger" id="btn-models-clear">機種データを削除</button>
+            </div>
+          </div>
+          <div class="csv-note" id="models-status">まだ読み込まれていません。</div>
+        </div>
+
+        <div id="master-editor"></div>
+        <div class="card-actions" style="margin-top:16px">
+          <button class="btn btn-ghost" id="btn-add-cat">＋ カテゴリを追加</button>
+          <button class="btn btn-ghost" id="btn-autocolor">色がついていない項目に色をつける</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 自社情報 ============ -->
+    <section class="view" id="view-settings">
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">自社情報（見積書に印刷されます）</h2>
+          <div class="card-actions" id="preset-actions"></div>
+        </div>
+        <p class="hint">
+          ここで入れた内容は<strong>この端末のブラウザの中</strong>に保存されます（連動を設定した場合は、暗号にしてクラウドにも預けます）。<br>
+          同じURLを別の会社の方が開いても、それぞれ自分の会社の情報が入るので、お互いの情報は見えません。
+        </p>
+        <div class="grid">
+          <label class="f f-wide"><span>会社名</span><input type="text" id="c-name"></label>
+          <label class="f"><span>代表者・担当者</span><input type="text" id="c-owner"></label>
+          <label class="f"><span>郵便番号</span><input type="text" id="c-zip"></label>
+          <label class="f f-wide"><span>住所</span><input type="text" id="c-address"></label>
+          <label class="f"><span>電話番号</span><input type="text" id="c-tel"></label>
+          <label class="f"><span>メール</span><input type="text" id="c-email"></label>
+          <label class="f"><span>ウェブサイト</span><input type="text" id="c-web"></label>
+          <label class="f"><span>登録番号（インボイス）</span><input type="text" id="c-invoice"></label>
+          <label class="f f-wide"><span>振込先</span><input type="text" id="c-bank" placeholder="〇〇銀行 〇〇支店 普通 1234567 カ）〇〇〇〇"></label>
+          <label class="f"><span>1人工の金額（円・新しい見積の初期値）</span><input type="number" id="c-manday" min="0" step="1000"></label>
+          <label class="f"><span>原価の1人工（円・社内用）</span><input type="number" id="c-manday-cost" min="0" step="500"></label>
+          <label class="f"><span>材料の仕入掛率（下の表に当たらないとき・定価の%）</span><input type="number" id="c-material-cost" min="0" max="100" step="1"></label>
+          <div class="f f-wide">
+            <span>メーカー・シリーズごとの仕入掛率（社内用）</span>
+            <small class="rate-note">商社はメーカーごと、寒冷地モデルかどうかで掛率を変えます。シリーズを空にすると、そのメーカー全部に当たります。</small>
+            <div class="rate-head"><b>メーカー</b><b>シリーズ</b><b>掛率%</b><i></i></div>
+            <div id="cost-rates"></div>
+            <button class="btn btn-ghost btn-sm" id="btn-rate-add" type="button">＋ 行を足す</button>
+          </div>
+          <label class="f"><span>機種に乗せる利益（見積に出す金額 ＝ 原価 ÷ この数）</span>
+            <input type="number" id="c-model-div" min="0" max="1" step="0.01" placeholder="0.65">
+            <small class="rate-note" id="c-model-div-note"></small>
+          </label>
+          <label class="f"><span>単価の端数（新しい見積の初期値）</span>
+            <select id="c-unit-round">
+              <option value="0">そのまま</option>
+              <option value="10">10円未満は繰り上げ</option>
+              <option value="100">100円未満は繰り上げ</option>
+            </select>
+          </label>
+          <label class="f f-wide"><span>見積書の下部に入れる注意書き</span><textarea id="c-footer" rows="3"></textarea></label>
+        </div>
+        <div class="card-actions" style="margin-top:16px">
+          <button class="btn btn-primary" id="btn-save-company">保存</button>
+          <p class="app-ver" id="app-ver"></p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">端末を移すとき（全データのバックアップ）</h2>
+        <p class="hint">
+          <strong>スマホとパソコンの両方で使うときは、これ1つで全部運べます。</strong><br>
+          自社情報・ロゴ・社判・単価マスタ・機種データ・現場・現調シート・見積・請求書を、
+          まとめて1つのファイルに書き出します。<br>
+          <small>※読み込むと、いまの内容はすべて置き換わります。</small>
+        </p>
+        <div class="csv-btns">
+          <button class="btn btn-primary" id="btn-export-all">全部まとめて書き出す</button>
+          <label class="btn btn-ghost file-btn">まとめて読み込む<input type="file" id="file-import-all" accept="application/json"></label>
+        </div>
+
+        <div class="bk-box" id="bk-box">
+          <div class="bk-head">
+            <strong>かんたんバックアップ</strong>
+            <span>保存先を1回決めておけば、次からはボタン1つで上書き保存できます。
+              <b>OneDrive の中に置くと、そのままクラウドにも残ります。</b></span>
+          </div>
+          <div class="bk-row">
+            <div class="bk-info">
+              <div>保存先：<span id="bk-target">まだ決めていません</span></div>
+              <div>最終バックアップ：<span id="bk-last">まだ</span></div>
+            </div>
+            <div class="csv-btns">
+              <button class="btn btn-primary" id="btn-bk-save">いますぐ保存</button>
+              <button class="btn btn-ghost" id="btn-bk-pick">保存先を決める</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" id="sync-card">
+        <div class="card-head">
+          <h2 class="card-title">スマホとパソコンの連動</h2>
+          <div class="card-actions">
+            <span class="sync-badge is-off" id="sync-state">連動していません</span>
+          </div>
+        </div>
+        <p class="hint">
+          <strong>現場のスマホで入れた内容が、事務所のパソコンにも自動で入ります。</strong>（その逆も）<br>
+          データは<strong>この端末の中で暗号にしてから</strong>預けるので、
+          クラウド側には意味の分からない文字列しか残りません。中身を開けるのは
+          <strong>あいことばを入れた端末だけ</strong>です。<br>
+          <small>※あいことばを無くすと、預けた分は誰にも開けません。「全部まとめて書き出す」バックアップは今までどおり続けてください。</small>
+        </p>
+
+        <p class="hint" id="sync-setup-note" style="display:none">
+          <strong>まだクラウドの設定が入っていません。</strong>（firebase-config.js）
+        </p>
+
+        <div class="bk-row">
+          <div class="bk-info">
+            <div>状態：<span id="sync-last-label">最終同期</span> <span id="sync-last">まだ</span> <span id="sync-err" class="sync-err"></span></div>
+            <div>あいことば：<code id="sync-code-view"></code></div>
+          </div>
+          <div class="csv-btns" id="sync-off-btns">
+            <button class="btn btn-primary" id="btn-sync-start">この端末で連動を始める</button>
+            <button class="btn btn-ghost" id="btn-sync-join">あいことばを入れる</button>
+          </div>
+          <div class="csv-btns" id="sync-on-btns" style="display:none">
+            <button class="btn btn-primary" id="btn-sync-now">いま同期する</button>
+            <button class="btn btn-ghost" id="btn-sync-show">あいことばを表示</button>
+            <button class="btn btn-ghost btn-danger" id="btn-sync-stop">連動をやめる</button>
+          </div>
+        </div>
+
+        <div class="sync-code-box" id="sync-code-box" style="display:none">
+          <p id="sync-code-msg"></p>
+          <div class="sync-code-big" id="sync-code-big"></div>
+          <div class="csv-btns">
+            <button class="btn btn-ghost" id="btn-sync-copy">コピーする</button>
+          </div>
+          <small>
+            <strong>紙に控えてください。</strong>忘れても、連動中の端末のこのボタンでいつでも確認できますが、
+            全部の端末が使えなくなると、預けたデータは誰にも開けません。<br>
+            <strong>人には教えないでください。</strong>あいことばを入れた端末は、中身をすべて開けます。
+          </small>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">ロゴ（見積書の右上に入ります）</h2>
+        <p class="hint">
+          会社のロゴを入れると、見積書の会社名の上に印字されます。<strong>入れなくても大丈夫です。</strong><br>
+          対応形式：<strong>PNG / JPEG / SVG / WebP / GIF / BMP</strong>。
+          背景が透明なPNG・SVGなら、そのまま自然に乗ります。<br>
+          <small>※社判とちがい、白い背景を抜く加工はしません。背景を消したい場合は、透過PNGで用意してください。</small>
+        </p>
+
+        <div class="seal-setup">
+          <div class="logo-preview" id="logo-preview">
+            <span class="seal-placeholder">ロゴなし<br><small>会社名だけ印字</small></span>
+          </div>
+
+          <div class="seal-controls">
+            <div class="seal-btns">
+              <label class="btn btn-primary file-btn">ロゴの画像・データを選ぶ<input type="file" id="file-logo" accept="image/png,image/jpeg,image/svg+xml,image/webp,image/gif,image/bmp,image/*"></label>
+              <button class="btn btn-ghost btn-danger" id="btn-logo-clear">ロゴを削除</button>
+            </div>
+
+            <label class="f seal-size-field">
+              <span>ロゴの高さ（mm）　※10〜16mm くらいが見積書になじみます</span>
+              <input type="number" id="logo-size" min="5" max="40" step="1">
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">社判（角印・ゴム印）</h2>
+        <p class="hint">
+          <strong>電子印鑑のデータ（PNG・JPEG・SVG）も、紙に押して撮った写真も、どちらでも使えます。</strong><br>
+          ・すでに背景が透明なデータ → そのまま取り込みます（加工しません）<br>
+          ・写真やスキャン → 「白い背景を透明にする」で、紙の白い部分が消えて印影だけが残ります<br>
+          写真から取り込むときは、<strong>真上から・明るいところで</strong>撮ってください。<br>
+          <small>※PDFやWord内の印影は読み込めません。PNGで書き出してからお使いください。</small>
+        </p>
+
+        <div class="seal-setup">
+          <div class="seal-preview" id="seal-preview">
+            <span class="seal-placeholder">社判なし<br><small>㊞ と印字</small></span>
+          </div>
+
+          <div class="seal-controls">
+            <label class="check">
+              <input type="checkbox" id="seal-transparent" checked>
+              <span>白い背景を透明にする（写真・スキャンのとき用。透過データには影響しません）</span>
+            </label>
+
+            <div class="seal-btns">
+              <label class="btn btn-primary file-btn">社判の画像・データを選ぶ<input type="file" id="file-seal" accept="image/png,image/jpeg,image/svg+xml,image/webp,image/gif,image/bmp,image/*"></label>
+              <button class="btn btn-ghost btn-danger" id="btn-seal-clear">社判を削除</button>
+            </div>
+
+            <label class="f seal-size-field">
+              <span>社判の大きさ（mm）　※角印は 18〜24mm くらいが実物大です</span>
+              <input type="number" id="seal-size" min="8" max="45" step="1">
+            </label>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<!-- ====================== 見積書（プレビューと印刷で共用） ======================
+     画面で見ているものと印刷されるものが必ず同じになるよう、
+     #sheet は1つだけ作って、プレビューでも印刷でもこれを使う。
+     ========================================================================== -->
+<div class="preview" id="preview" hidden>
+  <div class="preview-bar">
+    <b class="preview-title" id="pv-title">プレビュー</b>
+    <small class="preview-hint">紙に出したときの見た目です。<b>1枚ずつに分けて出しています</b></small>
+    <button class="btn btn-sm btn-primary" type="button" id="pv-pdf">PDFにする</button>
+    <button class="btn btn-sm" type="button" id="pv-print">印刷 / PDF</button>
+    <button class="btn btn-sm btn-ghost" type="button" id="pv-close">閉じる</button>
+  </div>
+  <div class="preview-scroll" id="pv-scroll">
+    <div class="preview-fit" id="pv-fit">
+      <div class="preview-stage" id="pv-stage"><div id="sheet"></div></div>
+    </div>
+  </div>
+</div>
+
+<script src="pricebook.js?v=202609030140"></script>
+<script src="survey.js?v=202609030140"></script>
+<script src="firebase-config.js?v=202609030140"></script>
+<script src="app.js?v=202609030140"></script>
+<script src="sync.js?v=202609030140"></script>
+</body>
+</html>

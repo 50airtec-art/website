@@ -1,0 +1,798 @@
+/* ==========================================================================
+   50Airtec 見積作成ツール（社内用）
+   ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --text: #1a1d21;
+  --text-sub: #5a6068;
+  --text-light: #8a8f96;
+  --border: #e2e5e9;
+  --dark: #1a1d21;
+  --accent: #0b6bcb;
+  --accent-soft: #e8f1fb;
+  --danger: #c0392b;
+  --ok: #1e7a46;
+  --radius: 10px;
+  --font: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+input, select, textarea, button { font-family: inherit; font-size: inherit; color: inherit; }
+
+/* ---------- ヘッダー ---------- */
+.topbar {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--dark);
+  color: #fff;
+}
+.topbar-inner {
+  max-width: 1100px; margin: 0 auto; padding: 10px 16px;
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark {
+  display: grid; place-items: center;
+  width: 34px; height: 34px; border-radius: 8px;
+  background: #fff; color: var(--dark);
+  font-weight: 800; font-size: 15px; letter-spacing: -0.5px;
+}
+.brand strong { display: block; font-size: 15px; line-height: 1.3; }
+.brand small { display: block; font-size: 11px; color: #a8adb4; line-height: 1.3; }
+
+.tabs { display: flex; gap: 4px; margin-left: auto; flex-wrap: wrap; }
+.tab {
+  border: 0; background: transparent; color: #c3c8ce;
+  padding: 7px 13px; border-radius: 7px; cursor: pointer;
+  font-size: 14px; white-space: nowrap;
+}
+.tab:hover { background: rgba(255,255,255,.1); color: #fff; }
+.tab.is-active { background: #fff; color: var(--dark); font-weight: 600; }
+
+/* ---------- レイアウト ---------- */
+.wrap { max-width: 1100px; margin: 0 auto; padding: 20px 16px 120px; }
+.view { display: none; }
+.view.is-active { display: block; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-bottom: 16px;
+}
+.card-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.card-title { font-size: 15px; font-weight: 700; letter-spacing: .02em; }
+.card-head .card-title { margin: 0; }
+.card > .card-title { margin-bottom: 14px; }
+.card-actions { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+
+.hint {
+  font-size: 13px; color: var(--text-sub);
+  background: #fbfbfc; border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px; padding: 10px 12px; margin-bottom: 16px;
+}
+
+/* ---------- フォーム ---------- */
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.f { display: flex; flex-direction: column; gap: 5px; grid-column: span 1; min-width: 0; }
+.f-wide { grid-column: span 2; }
+.f > span { font-size: 12px; color: var(--text-sub); font-weight: 600; }
+.f-row { display: flex; gap: 6px; }
+.f-row input { flex: 1 1 auto; min-width: 0; }
+.f-row select { flex: 0 0 auto; width: auto; }
+
+input[type=text], input[type=date], input[type=number], input[type=search], select, textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 10px;
+  background: #fff;
+  min-width: 0;
+}
+textarea { resize: vertical; line-height: 1.6; }
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+
+/* ---------- ボタン ---------- */
+.btn {
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 7px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  white-space: nowrap;
+  transition: background .15s, border-color .15s;
+}
+.btn:hover { background: #f2f4f6; }
+.btn-primary { background: var(--dark); color: #fff; border-color: var(--dark); font-weight: 600; }
+.btn-primary:hover { background: #2f353c; }
+.btn-danger { color: var(--danger); border-color: #f0d4d0; }
+.btn-danger:hover { background: #fdf2f0; }
+.file-btn { position: relative; overflow: hidden; display: inline-block; }
+.file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+/* ---------- 単価ピッカー ---------- */
+.picker {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fafbfc;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+.picker-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.picker-label { font-size: 12px; font-weight: 700; color: var(--text-sub); }
+.picker-head input { flex: 1; min-width: 180px; background: #fff; }
+
+.picker-cats { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+.cat-btn {
+  border: 1px solid var(--border); background: #fff;
+  border-radius: 999px; padding: 5px 13px; font-size: 13px; cursor: pointer;
+}
+.cat-btn:hover { border-color: var(--accent); color: var(--accent); }
+.cat-btn.is-active { background: var(--dark); color: #fff; border-color: var(--dark); }
+.cat-freq { border-color: #e8c66a; color: #8a6d1f; background: #fffaf0; font-weight: 600; }
+.cat-freq:hover { border-color: #d9ab3c; color: #7a5f14; }
+.cat-freq.is-active { background: var(--dark); color: #fff; border-color: var(--dark); }
+
+.picker-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px; max-height: 300px; overflow-y: auto; }
+.item-btn {
+  text-align: left; border: 1px solid var(--border); background: #fff;
+  border-radius: 7px; padding: 8px 10px; cursor: pointer; line-height: 1.45;
+}
+.item-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+.item-btn b { display: block; font-size: 13px; font-weight: 600; }
+.item-btn em { display: block; font-style: normal; font-size: 11px; color: var(--text-light); }
+.item-btn span { display: block; font-size: 12px; color: var(--accent); font-weight: 600; margin-top: 2px; }
+/* 単価の一覧：ボタンの右上に製品ページへのリンクを重ねる */
+.item-cell { position: relative; display: flex; }
+.item-cell .item-btn { flex: 1 1 auto; min-width: 0; }
+.item-btn.has-ref { padding-right: 30px; }
+.item-ref { position: absolute; top: 4px; right: 4px; margin: 0; }
+
+.picker-empty { grid-column: 1 / -1; font-size: 13px; color: var(--text-light); padding: 10px; }
+
+/* ---------- 明細テーブル ---------- */
+.lines-wrap { overflow-x: auto; }
+table.lines { width: 100%; border-collapse: collapse; min-width: 720px; }
+table.lines th {
+  font-size: 11px; color: var(--text-sub); text-align: left;
+  padding: 6px 8px; border-bottom: 2px solid var(--border); font-weight: 700;
+}
+table.lines td { padding: 4px; border-bottom: 1px solid #f0f2f4; vertical-align: middle; }
+table.lines input { border-color: transparent; background: transparent; padding: 6px 8px; }
+table.lines input:hover { border-color: var(--border); background: #fff; }
+table.lines input:focus { background: #fff; }
+.c-move { width: 48px; }
+.c-qty { width: 84px; }
+.c-unit { width: 70px; }
+.c-rate { width: 78px; }
+.c-price { width: 116px; }
+.rate-sel { width: 100%; padding: 6px 4px; font-size: 13px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+td.c-rate.is-off .rate-sel { border-color: var(--accent); color: var(--accent); font-weight: 600; background: var(--accent-soft); }
+.c-amount { width: 120px; text-align: right; }
+.c-del { width: 140px; }
+/* 原価・粗利（社内用。見積書には出ない） */
+.c-cost { width: 110px; }
+.c-margin { width: 74px; text-align: right; }
+td.c-cost input { text-align: right; font-variant-numeric: tabular-nums; }
+td.c-margin { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-sub); }
+td.c-margin.is-thin { color: var(--danger); font-weight: 700; }
+th.c-cost, th.c-margin, td.c-cost, td.c-margin { background: var(--accent-soft); }
+.cost-toggle {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 13px; color: var(--text-sub); cursor: pointer;
+  padding: 6px 10px; border: 1px dashed var(--border); border-radius: 6px;
+}
+.cost-toggle input { margin: 0; }
+#totals dt.row-cost, #totals dd.row-cost { color: var(--accent); }
+/* 原価の列は、チェックを入れたときだけ出す */
+body:not(.show-cost) .c-cost,
+body:not(.show-cost) .c-margin,
+body:not(.show-cost) .mcol-cost { display: none; }
+.mrow input.m-cost { text-align: right; font-variant-numeric: tabular-nums; }
+/* 色分けを選ぶ欄 */
+.m-color { width: 100%; padding: 5px 2px; font-size: 12px; font-weight: 700;
+  border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+td.c-amount { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; padding-right: 10px; }
+td.c-qty input, td.c-price input { text-align: right; font-variant-numeric: tabular-nums; }
+.line-name { display: flex; flex-direction: column; gap: 2px; }
+.line-name input.spec { font-size: 12px; color: var(--text-sub); }
+.icon-btn {
+  border: 0; background: transparent; cursor: pointer;
+  color: var(--text-light); padding: 4px 6px; border-radius: 5px; line-height: 1;
+}
+.icon-btn:hover { background: #f0f2f4; color: var(--danger); }
+.icon-reg { font-size: 11px; border: 1px solid var(--border); margin-right: 4px; padding: 3px 5px; }
+.icon-reg:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+/* 作業費に数えるかどうかの切り替え（消耗品雑費・諸経費のもと） */
+.icon-work { font-size: 11px; border: 1px solid var(--border); margin-right: 4px; padding: 3px 6px; }
+.icon-work:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.icon-work.is-on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+/* 製品ページを見るボタン */
+.icon-ref { font-size: 13px; margin-right: 2px; }
+.icon-ref:hover { color: var(--accent); background: var(--accent-soft); }
+.m-ref { display: flex; justify-content: center; }
+
+/* Excel貼り付け欄 */
+.paste-box { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--border); }
+.paste-box textarea {
+  background: #fff; font-size: 13px;
+  font-family: var(--font-mono, ui-monospace, "SFMono-Regular", Consolas, monospace);
+}
+.paste-box .csv-btns { margin-top: 8px; }
+/* ---------- 並び替え（つかんで動かす） ---------- */
+.move-wrap { display: flex; align-items: center; gap: 1px; }
+.row-grip {
+  cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none;
+  color: var(--text-light); font-size: 15px; line-height: 1; letter-spacing: -1px;
+  padding: 7px 3px; border-radius: 5px;
+}
+.row-grip:hover { background: var(--accent-soft); color: var(--accent); }
+.row-grip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.row-grip:active, tbody.is-reordering .row-grip { cursor: grabbing; }
+tbody.is-reordering { cursor: grabbing; }
+tr.is-dragging {
+  background: var(--accent-soft); opacity: .8;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .16);
+}
+.move-btns { display: flex; flex-direction: column; }
+.move-btns .icon-btn { padding: 0 4px; font-size: 11px; }
+.move-btns .icon-btn:hover { color: var(--accent); }
+.empty-note { font-size: 13px; color: var(--text-light); padding: 18px 4px; text-align: center; }
+
+/* ---------- 合計 ---------- */
+.totals { margin-top: 16px; margin-left: auto; max-width: 380px; }
+.totals dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 16px; }
+.totals dt { font-size: 13px; color: var(--text-sub); }
+.totals dd { text-align: right; font-variant-numeric: tabular-nums; font-size: 14px; }
+.totals dt.row-total, .totals dd.row-total {
+  border-top: 2px solid var(--dark); padding-top: 8px; margin-top: 4px;
+  font-size: 18px; font-weight: 700; color: var(--text);
+}
+
+/* ---------- 下部アクションバー ---------- */
+.actionbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  background: rgba(255,255,255,.96);
+  border-top: 1px solid var(--border);
+  padding: 10px 16px;
+  display: flex; gap: 8px; justify-content: flex-end;
+  backdrop-filter: blur(6px);
+}
+
+/* ---------- 保存済み一覧 ---------- */
+.est-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 4px; border-bottom: 1px solid var(--border); flex-wrap: wrap;
+}
+.est-row:last-child { border-bottom: 0; }
+.est-main { flex: 1; min-width: 200px; }
+.est-main b { display: block; font-size: 14px; }
+.est-main small { color: var(--text-light); font-size: 12px; }
+.est-amount { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ---------- 単価マスタ編集 ---------- */
+.cat-block { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 14px; overflow: hidden; }
+.cat-block > summary {
+  padding: 10px 14px; background: #f7f8fa; cursor: pointer;
+  font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 10px;
+}
+.cat-block > summary::-webkit-details-marker { display: none; }
+.cat-block > summary::before { content: "▶"; font-size: 10px; color: var(--text-light); transition: transform .15s; }
+.cat-block[open] > summary::before { transform: rotate(90deg); }
+.cat-body { padding: 12px 14px; }
+.cat-count { color: var(--text-light); font-weight: 400; font-size: 12px; }
+.cat-filter { margin-bottom: 10px; }
+.cat-filter input { max-width: 320px; background: #fff; }
+.mrow { display: grid; grid-template-columns: 110px 1.6fr 1.2fr 62px 62px 104px 58px 32px 32px; gap: 6px; margin-bottom: 6px; align-items: center; }
+/* 原価の列を出しているときは1列ぶん広げる */
+body.show-cost .mrow { grid-template-columns: 110px 1.6fr 1.2fr 62px 62px 90px 104px 58px 32px 32px; }
+.mrow input { padding: 6px 8px; font-size: 13px; }
+.mrow-head { font-size: 11px; color: var(--text-sub); font-weight: 700; }
+.mrow input.m-price { text-align: right; font-variant-numeric: tabular-nums; }
+.mrow input.m-code { font-family: var(--font-mono, ui-monospace, "SFMono-Regular", Consolas, monospace); font-size: 12px; }
+
+/* 「作業費の◯%」で単価が決まる項目（消耗品雑費など） */
+.m-auto { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.m-auto input { flex: 1; min-width: 0; }
+.m-auto i { font-style: normal; font-size: 11px; color: var(--text-sub); white-space: nowrap; }
+/* 人工（にんく）。ここに数字を入れると単価は［人工 × 1人工の金額］で決まる */
+.m-manday { display: flex; align-items: center; gap: 3px; min-width: 0; }
+.m-manday input { flex: 1; min-width: 0; text-align: right; }
+.m-manday i { font-style: normal; font-size: 11px; color: var(--text-light); }
+.mrow input.m-price[readonly] { background: var(--bg); color: var(--text-sub); }
+tr.line-auto td.c-price input { background: var(--bg); color: var(--text-sub); }
+tr.line-auto td.c-rate .rate-sel { opacity: .4; }
+
+/* ---------- CSV取り込み ---------- */
+.csv-box {
+  border: 1px solid var(--border); border-radius: 8px;
+  background: #fafbfc; padding: 14px; margin-bottom: 18px;
+}
+.csv-head { margin-bottom: 12px; }
+.csv-head strong { display: block; font-size: 14px; }
+.csv-head span { display: block; font-size: 12px; color: var(--text-sub); }
+.csv-row { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px; }
+.csv-row .f { min-width: 220px; }
+.csv-row .f select { background: #fff; }
+.csv-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.csv-note { font-size: 12px; color: var(--text-light); line-height: 1.7; margin-top: 8px; }
+.csv-note code {
+  background: #eef0f3; border-radius: 4px; padding: 1px 5px;
+  font-size: 11.5px; color: var(--text);
+}
+
+/* 単価ピッカーの品番表示 */
+.item-btn .item-code {
+  display: block; font-style: normal; font-size: 11px; color: var(--text-light);
+  font-family: var(--font-mono, ui-monospace, "SFMono-Regular", Consolas, monospace);
+}
+
+/* ---------- メーカーごとの仕入掛率 ---------- */
+.rate-note { display: block; font-size: 11px; color: var(--text-sub); line-height: 1.6; margin: 2px 0 8px; }
+.rate-head, .rate-row { display: grid; grid-template-columns: 1fr 1.3fr 66px 30px; gap: 6px; align-items: center; }
+.rate-head { font-size: 11px; color: var(--text-sub); margin-bottom: 4px; }
+.rate-head i { display: block; }
+.rate-row { margin-bottom: 6px; }
+.rate-row input { width: 100%; padding: 8px 9px; font-size: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
+.rate-row input:focus { background: #fff; outline: 2px solid var(--accent); outline-offset: -1px; }
+
+/* ---------- 社判の設定 ---------- */
+.seal-setup { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.seal-preview {
+  flex: none;
+  width: 132px; height: 132px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  display: grid; place-items: center;
+  background:
+    linear-gradient(45deg, #f0f1f3 25%, transparent 25%, transparent 75%, #f0f1f3 75%),
+    linear-gradient(45deg, #f0f1f3 25%, #fff 25%, #fff 75%, #f0f1f3 75%);
+  background-size: 14px 14px;
+  background-position: 0 0, 7px 7px;
+  text-align: center;
+  padding: 8px;
+}
+.seal-preview.has-seal { border-style: solid; }
+.seal-placeholder { font-size: 12px; color: var(--text-light); line-height: 1.6; }
+.seal-placeholder small { font-size: 11px; }
+.seal-size-field input { max-width: 110px; }
+.seal-img-preview { max-width: 100%; max-height: 116px; object-fit: contain; }
+
+/* ロゴ（社判と同じ枠を使い、白いロゴでも見えるよう市松模様の上に置く） */
+.logo-preview {
+  flex: none;
+  width: 200px; height: 132px;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  display: grid; place-items: center;
+  background:
+    linear-gradient(45deg, #f0f1f3 25%, transparent 25%, transparent 75%, #f0f1f3 75%),
+    linear-gradient(45deg, #f0f1f3 25%, #fff 25%, #fff 75%, #f0f1f3 75%);
+  background-size: 14px 14px;
+  background-position: 0 0, 7px 7px;
+  text-align: center;
+  padding: 8px;
+}
+.logo-preview.has-logo { border-style: solid; }
+.logo-img-preview { max-width: 100%; max-height: 116px; object-fit: contain; }
+
+.seal-controls { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 12px; }
+.seal-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.check { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--text-sub); cursor: pointer; }
+.check input { width: auto; margin-top: 4px; flex: none; }
+.seal-controls .f > span { font-weight: 400; }
+
+/* ---------- トースト ---------- */
+.toast {
+  position: fixed; left: 50%; bottom: 78px; transform: translateX(-50%) translateY(14px);
+  background: var(--dark); color: #fff; padding: 10px 20px; border-radius: 8px;
+  font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 100;
+}
+.toast.is-show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---------- スマホ ---------- */
+@media (max-width: 780px) {
+  .grid { grid-template-columns: repeat(2, 1fr); }
+  .f-wide { grid-column: span 2; }
+  .topbar-inner { gap: 10px; }
+  .tabs { margin-left: 0; width: 100%; overflow-x: auto; }
+  .mrow { grid-template-columns: 1fr 1fr; }
+  .mrow-head { display: none; }
+  .csv-row { flex-direction: column; align-items: stretch; }
+  .csv-row .f { min-width: 0; }
+  .wrap { padding-bottom: 140px; }
+  .totals { max-width: none; }
+}
+@media (max-width: 480px) {
+  .grid { grid-template-columns: 1fr; }
+  .f-wide { grid-column: span 1; }
+  .actionbar { justify-content: stretch; }
+  .actionbar .btn { flex: 1; padding: 10px 6px; }
+}
+
+/* ==========================================================================
+   印刷用 見積書（A4縦）
+   ========================================================================== */
+#sheet { display: block; color: #000; font-family: var(--font); }
+
+/* ---------- プレビュー（紙に出す前に画面で見た目を確かめる） ----------
+   印刷用の #sheet をそのまま画面にかぶせて出すだけなので、
+   ここで見えているものと印刷されるものは必ず同じになる。 */
+.preview {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; flex-direction: column;
+  background: #6b7178;
+}
+.preview[hidden] { display: none; }
+
+.preview-bar {
+  flex: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 14px; background: var(--dark); color: #fff;
+}
+.preview-title { font-size: 14px; }
+/* バーの文字は白なので、ボタンだけは元の文字色に戻す。
+   「印刷 / PDF」は白ベタで目立たせ、「閉じる」は枠だけにして区別する。 */
+.preview-bar .btn { color: var(--text); font-weight: 600; }
+.preview-bar .btn-ghost {
+  background: transparent; color: #fff; border-color: #5a6068; font-weight: 400;
+}
+.preview-bar .btn-ghost:hover { background: #2f353c; }
+.preview-hint { color: #a8adb4; font-size: 12px; margin-right: auto; }
+
+.preview-scroll { flex: 1; overflow: auto; padding: 12px; -webkit-overflow-scrolling: touch; }
+.preview-fit { margin: 0 auto; }
+/* A4の幅そのままで組んでおき、画面が狭いときは JS が縮小する */
+.preview-stage { width: 210mm; transform-origin: top left; }
+
+.preview .sheet-page {
+  background: #fff;
+  padding: 14mm 14mm 12mm;
+  min-height: 297mm;
+  box-shadow: 0 2px 14px rgba(0,0,0,.35);
+  margin-bottom: 12px;
+}
+
+@media print {
+  @page { size: A4 portrait; margin: 14mm 14mm 12mm; }
+
+  body { background: #fff; font-size: 10.5pt; }
+  /* プレビュー中は body のスクロールを止めているが、
+     そのまま印刷すると1枚目しか出ないブラウザがあるので必ず戻す */
+  html, body { overflow: visible !important; height: auto !important; }
+  #app { display: none !important; }
+
+  /* プレビューを開いたまま印刷しても、閉じた状態で印刷しても、
+     紙には見積書だけが出るようにする */
+  .preview, .preview[hidden] { display: block !important; position: static; background: none; }
+  .preview-bar { display: none !important; }
+  .preview-scroll { overflow: visible; padding: 0; }
+  .preview-fit { width: auto !important; height: auto !important; }
+  .preview-stage { width: auto; transform: none !important; }
+
+  /* ------------------------------------------------------------------
+     iPhone は印刷のとき、紙の幅ではなく「画面の幅」で組み立ててから、
+     紙に合わせて拡大する。そのせいで文字も行も大きくなり、
+     こちらで測って割った1枚ぶんが入りきらず、ブラウザがもう一度切る。
+     （2026-09-02、実機のPDFで確認。同じ見積がPCで3枚、iPhoneで4枚になった）
+
+     幅をmmで決め打ちして、画面の幅を見に行かせない。
+     210mm から左右の余白14mmずつを引いた 182mm が、紙に印刷できる幅。
+     ------------------------------------------------------------------ */
+  html, body { width: 182mm; }
+  .preview, .preview-scroll, .preview-fit, .preview-stage,
+  .preview .sheet-page { width: 182mm !important; max-width: 182mm; }
+  .preview .sheet-page {
+    background: none; background-image: none; padding: 0; min-height: 0;
+    box-shadow: none; margin-bottom: 0;
+  }
+
+  .sheet-page { page-break-after: always; }
+  .sheet-page:last-child { page-break-after: auto; }
+
+  /* ------------------------------------------------------------------
+     どこで紙を変えるか。
+     指定しないとブラウザは高さだけを見て切るので、
+     「小計と消費税は2枚目、合計だけ3枚目」のような紙ができてしまう。
+     ------------------------------------------------------------------ */
+
+  /* 明細が次の紙に続くときは、見出し（No 品名 数量…）も一緒に出す */
+  table.sheet-lines thead { display: table-header-group; }
+
+  /* 1行の途中で切らない。品名と金額が別の紙に離れないように */
+  table.sheet-lines tr { page-break-inside: avoid; break-inside: avoid; }
+
+  /* 宛名・金額・工期の固まりと、備考・合計の固まりは、それぞれ丸ごと動かす */
+  .sheet-head,
+  .sheet-foot,
+  .sheet-remarks,
+  table.sheet-sum { page-break-inside: avoid; break-inside: avoid; }
+
+}
+
+.sheet-title {
+  text-align: center; font-size: 20pt; font-weight: 700;
+  letter-spacing: .8em; text-indent: .8em; margin-bottom: 6mm;
+}
+.sheet-meta { text-align: right; font-size: 9pt; line-height: 1.6; margin-bottom: 4mm; }
+
+.sheet-head { display: flex; gap: 8mm; align-items: flex-start; margin-bottom: 6mm; }
+.sheet-head-left { flex: 1; min-width: 0; }
+.sheet-head-right { width: 66mm; font-size: 9pt; line-height: 1.65; }
+
+.sheet-to { font-size: 14pt; font-weight: 700; border-bottom: 1.2pt solid #000; padding-bottom: 2mm; margin-bottom: 4mm; }
+.sheet-lead { font-size: 10pt; margin-bottom: 5mm; }
+
+.sheet-total-box { border: 1.2pt solid #000; padding: 3mm 4mm; margin-bottom: 5mm; display: flex; align-items: baseline; gap: 5mm; }
+.sheet-total-box .label { font-size: 10pt; font-weight: 700; letter-spacing: .3em; }
+.sheet-total-box .value { font-size: 17pt; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sheet-total-box .tax-note { font-size: 8.5pt; margin-left: auto; }
+
+.sheet-terms { font-size: 9pt; line-height: 1.7; }
+.sheet-terms div { display: flex; gap: 3mm; }
+.sheet-terms dt-label { }
+.sheet-terms .k { width: 22mm; flex: none; color: #333; }
+.sheet-terms .v { flex: 1; border-bottom: .4pt dotted #999; }
+
+.sheet-company .sheet-logo { display: block; width: auto; max-width: 52mm; margin-bottom: 1.5mm; object-fit: contain; }
+.sheet-company b { font-size: 11pt; }
+.sheet-company .seal-area {
+  margin-top: 2mm;
+  position: relative;
+  display: flex; align-items: center;
+  padding-right: 4mm;
+}
+.sheet-company .seal-area .owner { flex: 1; }
+.sheet-company .seal-img {
+  flex: none;
+  height: auto;
+  /* 代表者名に少し重なる位置に置く（実際の押印に近い見え方） */
+  margin-left: -3mm;
+  mix-blend-mode: multiply;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.sheet-company .seal-fallback { flex: none; margin-left: 4mm; }
+
+table.sheet-lines { width: 100%; border-collapse: collapse; margin-bottom: 4mm; font-size: 9.5pt; }
+table.sheet-lines th {
+  background: #f0f0f0; border: .6pt solid #666; padding: 1.6mm 2mm;
+  font-weight: 700; font-size: 9pt;
+}
+table.sheet-lines td { border: .6pt solid #999; padding: 1.6mm 2mm; vertical-align: top; }
+table.sheet-lines .t-no { width: 9mm; text-align: center; }
+table.sheet-lines .t-qty { width: 15mm; text-align: right; }
+table.sheet-lines .t-unit { width: 12mm; text-align: center; }
+table.sheet-lines .t-price { width: 24mm; text-align: right; }
+table.sheet-lines .t-amount { width: 27mm; text-align: right; }
+table.sheet-lines td.t-qty, table.sheet-lines td.t-price, table.sheet-lines td.t-amount { font-variant-numeric: tabular-nums; }
+table.sheet-lines .l-spec { display: block; font-size: 8.5pt; color: #444; }
+/* 「定価 ¥○○ → ¥△△」の一行。仕様より少し大きく・濃くして、お客様の目に留まるようにする */
+table.sheet-lines .l-list   { display: block; font-size: 9.5pt; color: #111; margin-top: 0.8mm; }
+table.sheet-lines .l-list s { color: #777; }
+table.sheet-lines .l-list b { font-size: 10.5pt; }
+
+.sheet-foot { display: flex; gap: 6mm; align-items: flex-start; }
+.sheet-remarks { flex: 1; font-size: 9pt; white-space: pre-wrap; border: .6pt solid #999; padding: 2.5mm 3mm; min-height: 24mm; }
+.sheet-remarks .rk { font-weight: 700; font-size: 8.5pt; display: block; margin-bottom: 1mm; }
+
+table.sheet-sum { width: 62mm; flex: none; border-collapse: collapse; font-size: 9.5pt; }
+table.sheet-sum th, table.sheet-sum td { border: .6pt solid #999; padding: 1.6mm 2.5mm; }
+table.sheet-sum th { background: #f6f6f6; text-align: left; font-weight: 500; width: 26mm; }
+table.sheet-sum td { text-align: right; font-variant-numeric: tabular-nums; }
+table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; font-weight: 700; font-size: 11pt; }
+
+/* ===== 機器を選ぶ（機種データからの絞り込み） ===== */
+.chooser {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fafbfc;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+.chooser-src { font-size: 11px; color: var(--text-light); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.chooser .picker-head { margin-bottom: 8px; }
+.chooser .picker-head .btn-sm { margin-left: auto; }
+
+.chooser-step { padding: 6px 0; border-top: 1px dashed var(--border); }
+.chooser-step:first-child { border-top: 0; }
+.chooser-step-head { display: flex; align-items: center; gap: 8px; }
+.chooser-step-label { font-size: 12px; font-weight: 700; color: var(--text-sub); }
+.chooser-clear { font-size: 11px; border: 1px solid var(--border); padding: 2px 7px; }
+.chooser-clear:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.chooser-chosen { font-size: 14px; font-weight: 600; padding: 2px 0 4px; }
+
+.chooser-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; margin-top: 6px; }
+.chooser-opt {
+  text-align: left; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: #fff; padding: 8px 10px;
+  display: flex; align-items: baseline; gap: 8px;
+}
+.chooser-opt:hover { border-color: var(--accent); background: var(--accent-soft); }
+.chooser-opt b { font-size: 13px; font-weight: 600; flex: 1; line-height: 1.35; }
+.chooser-opt span { font-size: 11px; color: var(--text-light); flex: none; }
+
+.chooser-result { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+.chooser-result .chooser-step-label { display: block; margin-bottom: 8px; }
+.model-btn {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 7px;
+  background: #fff; padding: 9px 11px; margin-bottom: 6px;
+}
+.model-btn:hover { border-color: var(--accent); background: var(--accent-soft); }
+.model-btn-top { display: flex; align-items: baseline; gap: 10px; }
+.model-btn-top .item-code { flex: 1; font-style: normal; font-weight: 700; font-size: 13px; }
+.model-price { flex: none; font-weight: 700; font-variant-numeric: tabular-nums; }
+.model-btn em { display: block; font-style: normal; font-size: 12px; color: var(--accent); margin-top: 3px; }
+.model-btn small { display: block; font-size: 11px; color: var(--text-light); margin-top: 3px; line-height: 1.5; }
+
+@media (max-width: 600px) {
+  .chooser-opts { grid-template-columns: 1fr 1fr; }
+}
+
+/* ===== 現場（案件） ===== */
+#site-search { width: 100%; margin-bottom: 12px; }
+.site-row {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  text-align: left; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: #fff; padding: 12px 14px; margin-bottom: 8px;
+}
+.site-row:hover { border-color: var(--accent); background: var(--accent-soft); }
+.site-row .est-main { flex: 1; min-width: 0; }
+.site-row .est-main b { display: block; font-size: 15px; }
+.site-row .est-main small { display: block; font-size: 12px; color: var(--text-light); margin-top: 2px; }
+.site-right { flex: none; text-align: right; }
+.site-right small { display: block; font-size: 11px; color: var(--text-light); }
+.site-head { margin-bottom: 12px; }
+.site-head .card-title { margin-bottom: 4px; }
+.site-acts { margin-bottom: 16px; }
+.site-sec-label { font-size: 12px; font-weight: 700; color: var(--text-sub); margin: 16px 0 8px; }
+
+/* ===== 現地調査チェックシート（画面） ===== */
+.survey-block { margin-bottom: 20px; }
+.survey-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 16px 0 8px; }
+.survey-head .site-sec-label { margin: 0; }
+.survey-count { font-size: 11px; color: var(--text-light); }
+.survey-head .btn-sm { margin-left: auto; }
+.survey-head .btn-sm + .btn-sm { margin-left: 0; }
+
+.survey-sec { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 6px; background: #fff; }
+.survey-sec > summary {
+  cursor: pointer; padding: 10px 14px; font-size: 13px; font-weight: 700;
+  color: var(--text-sub); list-style: none; user-select: none;
+}
+.survey-sec > summary::-webkit-details-marker { display: none; }
+.survey-sec > summary::before { content: '▸ '; color: var(--text-light); }
+.survey-sec[open] > summary::before { content: '▾ '; }
+.survey-sec[open] > summary { border-bottom: 1px solid var(--border); }
+
+.survey-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 16px; padding: 12px 14px; }
+.survey-f { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.survey-f-wide { grid-column: 1 / -1; }
+.survey-k { font-size: 11px; font-weight: 700; color: var(--text-sub); }
+.survey-f input[type=text], .survey-f input[type=date], .survey-f textarea {
+  width: 100%; padding: 6px 8px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: 6px; background: #fff;
+}
+.survey-sub { margin-top: 4px; }
+.survey-opts { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.survey-chk { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer; }
+.survey-chk input { width: 16px; height: 16px; }
+
+@media (max-width: 700px) {
+  .survey-grid { grid-template-columns: 1fr; }
+}
+
+/* ===== 現地調査チェックシート（印刷） ===== */
+.sv-page { font-size: 8.5pt; }
+.sv-title {
+  text-align: center; font-size: 13pt; font-weight: 700; letter-spacing: .1em;
+  background: #dde3ea; padding: 2.5mm; margin-bottom: 3mm;
+}
+.sv-sec {
+  background: #2b5578; color: #fff; font-weight: 700; font-size: 9pt;
+  padding: 1.4mm 2.5mm; margin-top: 2.5mm;
+}
+.sv-tbl { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.sv-tbl th, .sv-tbl td { border: .4pt solid #9aa5b1; padding: 1.3mm 2mm; vertical-align: top; }
+.sv-tbl .sv-k { width: 24mm; background: #dfe5ec; font-weight: 600; text-align: left; font-size: 8pt; }
+.sv-tbl .sv-v { width: 62mm; background: #f4f2ee; }
+.sv-head .sv-k { background: #d5dce4; }
+.sv-head .sv-v { background: #e9edf2; }
+.sv-o { display: inline-block; margin-right: 2.5mm; white-space: nowrap; }
+.sv-sub { display: block; margin-top: .8mm; color: #333; }
+.sv-ph { color: #999; }
+
+/* 請求書：税率ごとの内訳（インボイス） */
+.sheet-sum tr.tax-break th, .sheet-sum tr.tax-break td { background: #fafafa; font-size: 8.5pt; color: #333; }
+.inv-block { margin-top: 8px; }
+
+/* ===== かんたんバックアップ ===== */
+.bk-box { border: 1px solid var(--border); border-radius: 8px; background: #fafbfc; padding: 12px 14px; margin-top: 14px; }
+.bk-head strong { display: block; font-size: 13px; margin-bottom: 4px; }
+.bk-head span { display: block; font-size: 12px; color: var(--text-sub); line-height: 1.7; margin-bottom: 10px; }
+.bk-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.bk-info { flex: 1; min-width: 200px; font-size: 12px; color: var(--text-sub); line-height: 1.9; }
+.bk-info span { color: var(--text); font-weight: 600; }
+
+.bk-warn {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: #fff4e5; border-bottom: 1px solid #f0c48a;
+  padding: 10px 16px; font-size: 13px; color: #7a4b00;
+}
+.bk-warn span { flex: 1; min-width: 200px; }
+@media print { .bk-warn { display: none !important; } }
+
+/* ===== スマホ⇄パソコンの連動 ===== */
+.sync-warn { background: var(--accent-soft); border-bottom: 1px solid #b9d4ef; color: #0b4f96; }
+.new-warn  { background: #e9f7ee; border-bottom: 1px solid #a9d8ba; color: #14603a; }
+.app-ver { margin-top: 10px; font-size: 11px; color: var(--text-light); }
+
+.sync-badge {
+  display: inline-block; font-size: 12px; font-weight: 700;
+  padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border);
+}
+.sync-badge.is-off { background: #f2f3f5; color: var(--text-sub); }
+.sync-badge.is-on  { background: #e7f5ed; color: var(--ok); border-color: #b8e0c8; }
+.sync-badge.is-err { background: #fdecea; color: var(--danger); border-color: #f2b8b1; }
+.sync-err { color: var(--danger); font-weight: 600; }
+
+#sync-code-view { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; letter-spacing: .04em; }
+
+.sync-code-box {
+  margin-top: 14px; padding: 14px; border-radius: 8px;
+  background: var(--accent-soft); border: 1px solid #b9d4ef;
+}
+.sync-code-box p { font-size: 13px; line-height: 1.8; white-space: pre-line; margin-bottom: 8px; }
+.sync-code-box small { display: block; margin-top: 8px; font-size: 11px; color: var(--text-sub); line-height: 1.7; }
+.sync-code-big {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: clamp(18px, 5vw, 26px); font-weight: 700; letter-spacing: .08em;
+  background: #fff; border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; margin-bottom: 10px; word-break: break-all; user-select: all;
+}
+
+/* 単価表の色分け：入力欄も行の色を受け継ぐ */
+.mrow input { color: inherit; }
+.item-btn b, .item-btn .item-code { color: inherit; }
+
+/* ---------- 読み込んだ機種データ（メーカーごと） ---------- */
+.models-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 6px 0; border-bottom: 1px dashed var(--border);
+}
+.models-row:last-child { border-bottom: 0; }
+.models-row b { font-size: 13px; color: var(--text); }
+.models-num { font-weight: 600; color: var(--accent); }
+.models-note { color: var(--text-light); }
+.models-row .icon-btn { margin-left: auto; }
+
+/* 明細画面だけに出る小さな案内。見積書には印刷されない */
+.line-list-hint:empty { display: none; }
+.line-list-hint {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #0a7d3c;
+}
+.line-list-hint.is-warn { color: #a35200; }
