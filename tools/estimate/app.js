@@ -226,6 +226,7 @@
     migrateTo8();
     migrateTo9();
     migrateTo10();
+    migrateTo11();
   }
 
   /** 分類に、その品名＋規格の項目が無ければ足す。すでにある行の金額には触らない */
@@ -271,6 +272,37 @@
       });
     });
     pb.version = 10;
+    save(KEY_PB, pb);
+  }
+
+  /**
+   * 単価マスタの並びを、現場の段取りの順にそろえる（2026-09-02）。
+   * 初期値の並びを手本にして、同じ品名・規格の行をその順に置き直すだけ。
+   * 金額も規格も色も触らない。自分で足した項目は、順番を保ったまま分類の最後に残す。
+   */
+  function migrateTo11() {
+    if (num(pb.version) >= 11) return;
+
+    DEFAULT_PRICEBOOK.categories.forEach(function (dc) {
+      var cat = null;
+      pb.categories.forEach(function (c) { if (c.id === dc.id) cat = c; });
+      if (!cat || !Array.isArray(cat.items)) return;
+
+      var key = function (it) { return it.name + '｜' + (it.spec || ''); };
+      var rest = cat.items.slice();      // まだ置いていない行
+      var sorted = [];
+
+      // 手本の順に、同じ品名・規格の行を拾っていく
+      (dc.items || []).forEach(function (di) {
+        for (var i = 0; i < rest.length; i++) {
+          if (key(rest[i]) === key(di)) { sorted.push(rest.splice(i, 1)[0]); return; }
+        }
+      });
+      // 手本に無い行（自分で足したもの）は、元の順のまま後ろに付ける
+      cat.items = sorted.concat(rest);
+    });
+
+    pb.version = 11;
     save(KEY_PB, pb);
   }
 
