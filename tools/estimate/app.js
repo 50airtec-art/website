@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609022300';
+  var APP_VERSION = '202609022340';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -3864,9 +3864,9 @@
     var hon = d.honorific === '（なし）' ? '' : ('　' + d.honorific);
     var validUntil = d.validDays ? jpDate(addDays(d.date, d.validDays)) + 'まで' : '';
 
-    var rowsHTML = '';
+    var rowList = [];
     d.lines.forEach(function (l, i) {
-      rowsHTML +=
+      rowList.push(
         '<tr>' +
           '<td class="t-no">' + (i + 1) + '</td>' +
           '<td>' + esc(l.name) + (l.spec ? '<span class="l-spec">' + esc(l.spec) + '</span>' : '') + listPriceHTML(l) + '</td>' +
@@ -3874,12 +3874,8 @@
           '<td class="t-unit">' + esc(l.unit) + '</td>' +
           '<td class="t-price">' + Math.round(num(l.price)).toLocaleString('ja-JP') + '</td>' +
           '<td class="t-amount">' + lineAmount(l, d.unitRound).toLocaleString('ja-JP') + '</td>' +
-        '</tr>';
+        '</tr>');
     });
-    // 見た目を整えるため最低12行になるよう空行を足す
-    for (var k = d.lines.length; k < 12; k++) {
-      rowsHTML += '<tr><td class="t-no">&nbsp;</td><td></td><td class="t-qty"></td><td class="t-unit"></td><td class="t-price"></td><td class="t-amount"></td></tr>';
-    }
 
     var sumHTML = '<tr><th>小計</th><td>' + Math.round(t.subtotal).toLocaleString('ja-JP') + '</td></tr>';
     if (t.overhead) sumHTML += '<tr><th>諸経費</th><td>' + t.overhead.toLocaleString('ja-JP') + '</td></tr>';
@@ -3941,8 +3937,7 @@
 
     var remarks = (d.note || '') + (c.bank ? '\n\n【お振込先】' + c.bank : '');
 
-    $('#sheet').innerHTML =
-      '<div class="sheet-page">' +
+    var headHTML =
         '<div class="sheet-title">' + (inv ? '御請求書' : '御見積書') + '</div>' +
         '<div class="sheet-meta">' +
           (inv ? '請求番号：' : '見積番号：') + esc(d.no) + '<br>' +
@@ -3962,19 +3957,114 @@
             '<div class="sheet-terms">' + termsHTML + '</div>' +
           '</div>' +
           '<div class="sheet-head-right">' + companyHTML + '</div>' +
-        '</div>' +
-        '<table class="sheet-lines">' +
-          '<thead><tr>' +
-            '<th class="t-no">No</th><th>品名・仕様</th><th class="t-qty">数量</th>' +
-            '<th class="t-unit">単位</th><th class="t-price">単価</th><th class="t-amount">金額</th>' +
-          '</tr></thead>' +
-          '<tbody>' + rowsHTML + '</tbody>' +
-        '</table>' +
+        '</div>';
+
+    var theadHTML =
+        '<thead><tr>' +
+          '<th class="t-no">No</th><th>品名・仕様</th><th class="t-qty">数量</th>' +
+          '<th class="t-unit">単位</th><th class="t-price">単価</th><th class="t-amount">金額</th>' +
+        '</tr></thead>';
+
+    var footHTML =
         '<div class="sheet-foot">' +
           '<div class="sheet-remarks"><span class="rk">備考</span>' + esc(remarks) + '</div>' +
           '<table class="sheet-sum">' + sumHTML + '</table>' +
-        '</div>' +
+        '</div>';
+
+    paginateSheet(headHTML, theadHTML, rowList, footHTML);
+  }
+
+  var EMPTY_ROW = '<tr><td class="t-no">&nbsp;</td><td></td><td class="t-qty"></td>' +
+                  '<td class="t-unit"></td><td class="t-price"></td><td class="t-amount"></td></tr>';
+
+  /**
+   * 紙に割る。
+   *
+   * ブラウザ任せにすると、iPhoneでは「行の途中で切るな」も「見出しを繰り返せ」も
+   * 効かない。品名だけ前の紙・仕様は次の紙、という見積書ができてしまう。
+   * （2026-09-02、実機で確認した）
+   *
+   * そこで、いったん1枚に全部入れて高さを実際に測り、こちらで紙を分ける。
+   * どのブラウザでも同じ紙になるし、プレビューも1枚ずつ見えるようになる。
+   */
+  function paginateSheet(headHTML, theadHTML, rows, footHTML) {
+    var box = $('#sheet');
+    var tableOf = function (inner) {
+      return '<table class="sheet-lines">' + theadHTML + '<tbody>' + inner + '</tbody></table>';
+    };
+
+    // 隠れたままだと高さが全部0になるので、測るあいだだけ見えない形で開く
+    var pv = $('#preview'), wasHidden = pv.hidden;
+    if (wasHidden) { pv.style.visibility = 'hidden'; pv.hidden = false; }
+
+    box.innerHTML =
+      '<div class="sheet-page">' +
+        '<div id="m-head">' + headHTML + '</div>' +
+        tableOf(rows.join('') + EMPTY_ROW) +
+        '<div id="m-foot">' + footHTML + '</div>' +
       '</div>';
+
+    // 1mm が何ピクセルか、実物で測る（端末ごとにちがう）
+    var ruler = el('div');
+    ruler.style.cssText = 'position:absolute;width:100mm;height:0';
+    box.appendChild(ruler);
+    var pxPerMm = ruler.offsetWidth / 100;
+    box.removeChild(ruler);
+
+    var table  = box.querySelector('table.sheet-lines');
+    var headH  = $('#m-head').offsetHeight;
+    var theadH = table.tHead ? table.tHead.offsetHeight : 0;
+    var footH  = $('#m-foot').offsetHeight;
+    var trs    = table.tBodies[0] ? table.tBodies[0].rows : [];
+    var rowH   = [];
+    for (var i = 0; i < trs.length; i++) rowH.push(trs[i].offsetHeight);
+    var emptyH = rowH.pop() || 0;   // いちばん最後は、高さを測るために足した空行
+
+    if (wasHidden) { pv.hidden = true; pv.style.visibility = ''; }
+
+    // A4 297mm から上の余白14mm・下の余白12mm を引いた高さが、1枚に入るぶん。
+    // ぎりぎりだと白紙が1枚増えるので、少しだけ余裕を取る。
+    var avail = 271 * pxPerMm - 4;
+    if (!pxPerMm || avail <= 0 || !rowH.length) return;   // 測れないときは1枚のまま
+
+    var pages = [], cur = [], space = avail - headH - theadH;
+    for (i = 0; i < rows.length; i++) {
+      if (cur.length && rowH[i] > space) {
+        pages.push(cur);
+        cur = []; space = avail - theadH;
+      }
+      cur.push(i);
+      space -= rowH[i];
+    }
+    pages.push(cur);
+
+    // 備考と合計は絶対に割らない。最後の紙に入らなければ、次の紙にまとめて置く
+    var footOwnPage = space < footH;
+
+    // 短い見積は表がすかすかに見えるので空行で埋める。
+    // ただし入るぶんだけ。数だけ見て足すと紙からあふれて、白紙が1枚増える。
+    var restSpace = space - (footOwnPage ? 0 : footH);
+    var filler = '';
+    for (var k = rows.length; k < 12 && emptyH > 0 && restSpace >= emptyH; k++) {
+      filler += EMPTY_ROW;
+      restSpace -= emptyH;
+    }
+
+    var html = '';
+    for (var p = 0; p < pages.length; p++) {
+      var last = (p === pages.length - 1);
+      var inner = '';
+      for (var j = 0; j < pages[p].length; j++) inner += rows[pages[p][j]];
+      if (last) inner += filler;
+      html += '<div class="sheet-page">' +
+                (p === 0 ? headHTML : '') +
+                tableOf(inner) +
+                (last && !footOwnPage ? footHTML : '') +
+              '</div>';
+    }
+    if (footOwnPage) html += '<div class="sheet-page">' + footHTML + '</div>';
+
+    box.innerHTML = html;
   }
 
   /* ---------- プレビュー ----------

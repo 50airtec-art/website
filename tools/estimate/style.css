@@ -465,15 +465,6 @@ tr.line-auto td.c-rate .rate-sel { opacity: .4; }
 
 .preview .sheet-page {
   background: #fff;
-  /* 紙が変わるところに赤い線を引く（画面だけ。印刷には出ない）。
-     A4 297mm から上下の余白 14mm・12mm を引いた 271mm ごとに紙が変わる。
-     線の始まりを内側（padding の内）にそろえたいので background-origin を使う。 */
-  background-image: repeating-linear-gradient(to bottom,
-    transparent 0, transparent 270.5mm,
-    rgba(200, 40, 40, .5) 270.5mm, rgba(200, 40, 40, .5) 271mm);
-  background-origin: content-box;
-  background-clip: border-box;
-  background-repeat: repeat-y;
   padding: 14mm 14mm 12mm;
   min-height: 297mm;
   box-shadow: 0 2px 14px rgba(0,0,0,.35);
