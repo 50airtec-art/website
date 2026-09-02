@@ -68,6 +68,11 @@ const DEFAULT_PRICEBOOK = {
        series を空にすると、そのメーカーの機器ぜんぶに当たる。
        ここに当たらないものは、上の materialCostPercent を使う。 */
     costRates: [],
+    /* 機種の見積金額の出し方。
+         定価 × 仕入掛率 ＝ 原価　→　原価 ÷ この数 ＝ 見積に出す金額
+       0.65 なら粗利率35%。0 や空なら効かせない（定価そのまま）。
+       会社によって乗せる利益が違うので、［自社情報］で変えられる。 */
+    modelSellDivisor: 0.65,
     overheadPercent: 0,
     paymentTerms: '工事完了後、月末締め翌月末払い',
     deliveryTerms: 'ご発注後、別途打合せ',

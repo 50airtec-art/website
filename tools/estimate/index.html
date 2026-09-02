@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>空調王</title>
-<link rel="stylesheet" href="style.css?v=202608301100">
+<link rel="stylesheet" href="style.css?v=202609022130">
 </head>
 <body>
 
@@ -304,6 +304,10 @@
             <div id="cost-rates"></div>
             <button class="btn btn-ghost btn-sm" id="btn-rate-add" type="button">＋ 行を足す</button>
           </div>
+          <label class="f"><span>機種に乗せる利益（見積に出す金額 ＝ 原価 ÷ この数）</span>
+            <input type="number" id="c-model-div" min="0" max="1" step="0.01" placeholder="0.65">
+            <small class="rate-note" id="c-model-div-note"></small>
+          </label>
           <label class="f"><span>単価の端数（新しい見積の初期値）</span>
             <select id="c-unit-round">
               <option value="0">そのまま</option>
@@ -485,10 +489,10 @@
   </div>
 </div>
 
-<script src="pricebook.js?v=202608301100"></script>
-<script src="survey.js?v=202608301100"></script>
-<script src="firebase-config.js?v=202608301100"></script>
-<script src="app.js?v=202608301100"></script>
-<script src="sync.js?v=202608301100"></script>
+<script src="pricebook.js?v=202609022130"></script>
+<script src="survey.js?v=202609022130"></script>
+<script src="firebase-config.js?v=202609022130"></script>
+<script src="app.js?v=202609022130"></script>
+<script src="sync.js?v=202609022130"></script>
 </body>
 </html>

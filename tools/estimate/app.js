@@ -638,6 +638,50 @@
     };
   }
 
+  /**
+   * 機種1台ぶんの掛率（定価の何%で出すか）を、原価と「乗せる利益」の設定から出す。
+   *     定価 × 仕入掛率 ＝ 原価　→　原価 ÷ modelSellDivisor ＝ 見積に出す金額
+   * 会社によって乗せる利益が違うので、割る数は［自社情報］で決める。
+   * 仕入掛率が未設定で原価が出せないときは 100%＝定価のまま（勝手に安くしない）。
+   */
+  function modelRateFor(l) {
+    var list = num(l.listPrice), div = num(pb.defaults.modelSellDivisor);
+    var cost = num(l.cost) || lineCostFromSettings(l);
+    if (!list || !div || cost <= 0) return 100;
+    return (cost / div) / list * 100;
+  }
+
+  /**
+   * 機種の行の単価を、いまの設定で出し直す。
+   * 掛率や単価を手で触った行（rateFixed）は動かさない。
+   */
+  function applyModelPrices() {
+    st.lines.forEach(function (l) {
+      if (!num(l.listPrice) || l.rateFixed) return;
+      l.rate = modelRateFor(l);
+      l.price = priceFromBase(l);
+    });
+  }
+
+  /** 「原価 ÷ ○○」の下に、それが粗利率いくつになるかを言葉で出す */
+  function showModelDivNote() {
+    var note = $('#c-model-div-note');
+    if (!note) return;
+    var d = num($('#c-model-div').value);
+    if (d > 0 && d < 1) {
+      note.textContent = '粗利率 ' + Math.round((1 - d) * 1000) / 10 + '%。' +
+        '例：原価10万円 → 見積に出す金額 ' + yen(100000 / d) + '。' +
+        '仕入掛率を入れていない機種は、定価のまま出ます。';
+    } else if (d >= 1) {
+      note.textContent = '1以上だと利益が乗りません。0.65 なら粗利率35%です。';
+    } else {
+      note.textContent = '空か0のときは、機種は定価のまま出ます。';
+    }
+  }
+
+  /** 掛率の表示。半端な数字になるので、小数第1位まで見せる */
+  function fmtRate(r) { return (Math.round(num(r) * 10) / 10) + '%'; }
+
   /** 元値（定価）と掛率から、その行の単価を出す。端数の繰り上げもここでかける */
   function priceFromBase(l) {
     return ceilYen(num(l.base) * num(l.rate) / 100, st.unitRound);
@@ -912,7 +956,7 @@
      明細
      ====================================================================== */
   function addLine(line) {
-    var l = Object.assign({ name: '', spec: '', qty: 1, unit: '式', price: 0, url: '', cat: '', autoPercent: 0, autoBase: '', manDay: 0, cost: 0 }, line || {});
+    var l = Object.assign({ name: '', spec: '', qty: 1, unit: '式', price: 0, url: '', cat: '', autoPercent: 0, autoBase: '', manDay: 0, cost: 0, listPrice: 0 }, line || {});
     // base は掛率をかける前の元値（単価マスタの定価）。rate は「定価の何%で出すか」
     if (l.base == null) l.base = num(l.price);
     if (l.rate == null) l.rate = 100;
@@ -1050,6 +1094,9 @@
       iSpec.addEventListener('input', function () { l.spec = iSpec.value; persistDraft(); });
       wrap.appendChild(iName); wrap.appendChild(iSpec);
       tdName.appendChild(wrap);
+      // 見積書に出る「定価 → 売値」を、画面でも見えるようにしておく
+      var listHint = el('div', 'line-list-hint');
+      tdName.appendChild(listHint);
       tr.appendChild(tdName);
 
       // 数量
@@ -1080,7 +1127,7 @@
       });
       // 選択肢に無い掛率（手入力の結果など）も残せるようにしておく
       if (RATES.indexOf(num(l.rate)) < 0) {
-        var oX = el('option', null, l.rate + '%');
+        var oX = el('option', null, fmtRate(l.rate));
         oX.value = l.rate; oX.selected = true;
         sRate.insertBefore(oX, sRate.firstChild);
       }
@@ -1102,11 +1149,24 @@
         // 掛率が100%でないときだけ、元の定価が分かるようにしておく
         iPrice.title = num(l.rate) === 100 ? '' : '定価 ' + yen(num(l.base)) + ' の ' + l.rate + '%';
         tdRate.classList.toggle('is-off', num(l.rate) !== 100);
+        var lp = num(l.listPrice);
+        if (lp && num(l.price) && lp > num(l.price)) {
+          listHint.textContent = '見積書に出ます　定価 ' + yen(lp) + ' → ' + yen(num(l.price));
+          listHint.classList.remove('is-warn');
+        } else if (lp && num(l.cost) <= 0) {
+          // 原価が出せないと利益の乗せようがない。黙って定価のままにせず、理由を出す
+          listHint.textContent = '仕入掛率が未設定なので、定価のまま出ます（［自社情報］で設定できます）';
+          listHint.classList.add('is-warn');
+        } else {
+          listHint.textContent = '';
+          listHint.classList.remove('is-warn');
+        }
       }
       showBaseHint();
 
       sRate.addEventListener('change', function () {
         l.rate = num(sRate.value);
+        l.rateFixed = true;          // 手で選んだ掛率は、設定を変えても動かさない
         l.price = priceFromBase(l);
         iPrice.value = l.price;
         showBaseHint();
@@ -1144,6 +1204,7 @@
         // 単価を手で書き換えたら、その金額が新しい元値。掛率は100%に戻す
         l.base = num(iPrice.value);
         l.rate = 100;
+        l.rateFixed = true;          // 手で入れた単価は、設定を変えても動かさない
         sRate.value = '100';
         showBaseHint();
         recalc();
@@ -3068,6 +3129,8 @@
     $('#c-manday').value = num(pb.defaults.manDayYen) || 0;
     $('#c-manday-cost').value = num(pb.defaults.manDayCostYen) || 0;
     $('#c-material-cost').value = num(pb.defaults.materialCostPercent) || 0;
+    $('#c-model-div').value = num(pb.defaults.modelSellDivisor) || '';
+    showModelDivNote();
     renderCostRates();
     $('#seal-size').value = pb.company.sealSizeMm || 18;
     $('#logo-size').value = pb.company.logoHeightMm || 12;
@@ -3131,6 +3194,9 @@
     $('#brand-mark').textContent = mark || '空調';
   }
 
+  // 割る数を打ち替えている途中でも、粗利率がいくつになるか見えるようにする
+  $('#c-model-div').addEventListener('input', showModelDivNote);
+
   $('#btn-rate-add').addEventListener('click', function () {
     ensureCostRates();
     pb.defaults.costRates.push({ maker: '', series: '', percent: 0 });
@@ -3146,12 +3212,14 @@
     pb.defaults.manDayYen = num($('#c-manday').value);
     pb.defaults.manDayCostYen = num($('#c-manday-cost').value);
     pb.defaults.materialCostPercent = num($('#c-material-cost').value);
+    pb.defaults.modelSellDivisor = num($('#c-model-div').value);
     // メーカー名もシリーズ名も空、あるいは掛率0の行は捨てる
     pb.defaults.costRates = (pb.defaults.costRates || []).filter(function (r) {
       return (String(r.maker || '').trim() || String(r.series || '').trim()) && num(r.percent) > 0;
     });
     renderCostRates();
     applyLineCosts();
+    applyModelPrices();   // 乗せる利益や仕入掛率を変えたら、機種の金額も出し直す
     renderLines();
     savePB();
     updateBrand();
@@ -3637,14 +3705,22 @@
       if (x.opt) b.appendChild(el('em', null, x.opt));
       b.appendChild(el('small', null, '室外機 ' + x.om + '／室内機 ' + x.im + (x.pm ? '／パネル ' + x.pm : '') + (x.rm ? '／リモコン ' + x.rm : '')));
       b.addEventListener('click', function () {
-        addLine({
+        var line = {
           name: (x.mk || '') + ' ' + x.s + ' ' + x.i,
           spec: [x.m, x.ab, x.tp, x.pw === '三相' ? '三相200V' : '単相200V', x.rc, x.opt].filter(Boolean).join('　'),
+          // 定価は仕様の文字に焼き付けず、行の持ち物として覚えておく。
+          // 売値は掛率でいつでも動くので、見せる文字は印刷のたびに作り直す。
+          listPrice: x.y,
           qty: 1,
           unit: '台',
           price: x.y,
           url: x.u || ''
-        });
+        };
+        // 定価 × 仕入掛率 ＝ 原価。その原価に利益を乗せた金額を、見積に出す金額にする
+        line.base = num(x.y);
+        line.cost = lineCostFromSettings(line);
+        line.rate = modelRateFor(line);
+        addLine(line);
         toast('「' + x.m + '」を追加しました');
       });
       res.appendChild(b);
@@ -3731,6 +3807,17 @@
   /* ======================================================================
      見積書の印刷
      ====================================================================== */
+  /**
+   * 機種の行に「定価 ¥○○ → ¥△△」を出すための文字を作る。
+   * ・定価より安くなっているときだけ出す（同じ額なら見せる意味がない）
+   * ・売値は掛率でいつでも動くので、印刷のたびにここで作り直す
+   */
+  function listPriceHTML(l) {
+    var list = num(l.listPrice), now = num(l.price);
+    if (!list || !now || list <= now) return '';
+    return '<span class="l-list">定価 <s>' + yen(list) + '</s> → <b>' + yen(now) + '</b></span>';
+  }
+
   function buildSheet(mode, doc) {
     var d = doc || st;
     mode = mode || 'estimate';
@@ -3746,7 +3833,7 @@
       rowsHTML +=
         '<tr>' +
           '<td class="t-no">' + (i + 1) + '</td>' +
-          '<td>' + esc(l.name) + (l.spec ? '<span class="l-spec">' + esc(l.spec) + '</span>' : '') + '</td>' +
+          '<td>' + esc(l.name) + (l.spec ? '<span class="l-spec">' + esc(l.spec) + '</span>' : '') + listPriceHTML(l) + '</td>' +
           '<td class="t-qty">' + (num(l.qty) % 1 === 0 ? num(l.qty) : num(l.qty).toFixed(1)) + '</td>' +
           '<td class="t-unit">' + esc(l.unit) + '</td>' +
           '<td class="t-price">' + Math.round(num(l.price)).toLocaleString('ja-JP') + '</td>' +

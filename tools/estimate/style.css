@@ -552,6 +552,10 @@ table.sheet-lines .t-price { width: 24mm; text-align: right; }
 table.sheet-lines .t-amount { width: 27mm; text-align: right; }
 table.sheet-lines td.t-qty, table.sheet-lines td.t-price, table.sheet-lines td.t-amount { font-variant-numeric: tabular-nums; }
 table.sheet-lines .l-spec { display: block; font-size: 8.5pt; color: #444; }
+/* 「定価 ¥○○ → ¥△△」の一行。仕様より少し大きく・濃くして、お客様の目に留まるようにする */
+table.sheet-lines .l-list   { display: block; font-size: 9.5pt; color: #111; margin-top: 0.8mm; }
+table.sheet-lines .l-list s { color: #777; }
+table.sheet-lines .l-list b { font-size: 10.5pt; }
 
 .sheet-foot { display: flex; gap: 6mm; align-items: flex-start; }
 .sheet-remarks { flex: 1; font-size: 9pt; white-space: pre-wrap; border: .6pt solid #999; padding: 2.5mm 3mm; min-height: 24mm; }
@@ -748,3 +752,12 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
 .models-num { font-weight: 600; color: var(--accent); }
 .models-note { color: var(--text-light); }
 .models-row .icon-btn { margin-left: auto; }
+
+/* 明細画面だけに出る小さな案内。見積書には印刷されない */
+.line-list-hint:empty { display: none; }
+.line-list-hint {
+  margin-top: 3px;
+  font-size: 11px;
+  color: #0a7d3c;
+}
+.line-list-hint.is-warn { color: #a35200; }
