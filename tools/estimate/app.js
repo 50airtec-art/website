@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609030105';
+  var APP_VERSION = '202609030140';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -4022,10 +4022,12 @@
 
     if (wasHidden) { pv.hidden = true; pv.style.visibility = ''; }
 
-    // A4 297mm から上の余白14mm・下の余白12mm を引いた 271mm が、1枚に入るぶん。
-    // ただし端末によって紙の余白の取り方に差があり、ぎりぎりに詰めると
-    // ブラウザがもう一度切ってしまう。3mmぶん余らせて、そこを吸収する。
-    var avail = 268 * pxPerMm;
+    // A4 297mm から上の余白14mm・下の余白12mm を引くと271mm。
+    // ただし iPhone の Safari は、その中にURLと日付とページ番号を自分で刷る。
+    // そのぶん使える高さが減るので、271mm いっぱいまで詰めると
+    // ほんの数mmはみ出して、真っ白な紙が1枚できてしまう。
+    // （2026-09-02、実機で確認）そこで 245mm までしか詰めない。
+    var avail = 245 * pxPerMm;
     if (!pxPerMm || avail <= 0 || !rowH.length) return;   // 測れないときは1枚のまま
 
     var pages = [], cur = [], space = avail - headH - theadH;
