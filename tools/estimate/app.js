@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609030010';
+  var APP_VERSION = '202609030105';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -4134,6 +4134,104 @@
   });
 
   $('#pv-close').addEventListener('click', closePreview);
+
+  /* --------------------------------------------------------------------
+     PDFを、こちらで作る。
+
+     iPhoneの印刷は、紙の幅ではなく画面の幅で組み立ててから紙に合わせて
+     拡大するので、こちらで割った1枚とずれる。ずれた結果、ブラウザが
+     もう一度切って、品名と仕様が別の紙に離れてしまう。
+     （2026-09-02、実機のPDFで確認。同じ見積がPCで3枚、iPhoneで4枚）
+
+     そこで、印刷そのものに頼らない。画面に出ている紙をそのまま絵にして、
+     A4のPDFに1枚ずつ貼る。どの端末でも、画面で見えているとおりの紙になる。
+
+     部品（html2canvas と jsPDF）は vendor/ に置いてある。
+     よそのサイトから読まないので、電波が悪いところでも動く。
+     押したときだけ読み込むので、ふだんの起動は重くならない。
+     -------------------------------------------------------------------- */
+  var pdfLibsReady = false;
+
+  function loadScript(src) {
+    return new Promise(function (ok, ng) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = function () { ok(); };
+      s.onerror = function () { ng(new Error('部品が読み込めませんでした')); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function ensurePdfLibs() {
+    if (pdfLibsReady) return Promise.resolve();
+    return loadScript('vendor/html2canvas.min.js?v=' + APP_VERSION)
+      .then(function () { return loadScript('vendor/jspdf.umd.min.js?v=' + APP_VERSION); })
+      .then(function () { pdfLibsReady = true; });
+  }
+
+  function makePdf() {
+    var btn = $('#pv-pdf'), label = btn.textContent;
+    // 新しい画面は「押した流れの中」でしか開けない。あとから開くと止められる
+    var win = window.open('', '_blank');
+    btn.disabled = true;
+    btn.textContent = '作っています…';
+
+    var stage = $('#pv-stage'), fit = $('#pv-fit');
+    var keepTransform = stage.style.transform;
+    var keepW = fit.style.width, keepH = fit.style.height;
+
+    function restore() {
+      stage.style.transform = keepTransform;
+      fit.style.width = keepW;
+      fit.style.height = keepH;
+      btn.disabled = false;
+      btn.textContent = label;
+      fitPreview();
+    }
+
+    ensurePdfLibs().then(function () {
+      // 縮めたまま絵にすると粗くなるので、いったん原寸に戻す
+      stage.style.transform = 'none';
+      fit.style.width = '';
+      fit.style.height = '';
+
+      var pages = [].slice.call(document.querySelectorAll('#sheet .sheet-page'));
+      if (!pages.length) throw new Error('紙がありません');
+      var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+      var chain = Promise.resolve();
+      pages.forEach(function (page, i) {
+        chain = chain.then(function () {
+          // 何枚目をやっているか出す。止まったように見せない
+          btn.textContent = (i + 1) + ' / ' + pages.length + ' 枚目…';
+          return window.html2canvas(page, {
+            scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false
+          });
+        }).then(function (canvas) {
+          if (i) pdf.addPage();
+          pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, 210, 297);
+        });
+      });
+
+      return chain.then(function () { return pdf; });
+    }).then(function (pdf) {
+      var name = (pvDocTitle || '見積書') + '.pdf';
+      if (win) {
+        // その場でPDFを開く。iPhoneはここから共有・印刷ができる
+        win.location.href = URL.createObjectURL(pdf.output('blob'));
+      } else {
+        pdf.save(name);   // 新しい画面が開けなかったときは、ファイルとして保存
+      }
+      restore();
+      toast('PDFにしました（' + document.querySelectorAll('#sheet .sheet-page').length + '枚）');
+    }).catch(function (e) {
+      if (win) win.close();
+      restore();
+      toast('PDFが作れませんでした：' + (e && e.message ? e.message : ''));
+    });
+  }
+
+  $('#pv-pdf').addEventListener('click', makePdf);
 
   $('#pv-print').addEventListener('click', function () {
     if (pvDocTitle) document.title = pvDocTitle;
