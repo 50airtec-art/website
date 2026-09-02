@@ -487,6 +487,19 @@ tr.line-auto td.c-rate .rate-sel { opacity: .4; }
   .preview-scroll { overflow: visible; padding: 0; }
   .preview-fit { width: auto !important; height: auto !important; }
   .preview-stage { width: auto; transform: none !important; }
+
+  /* ------------------------------------------------------------------
+     iPhone は印刷のとき、紙の幅ではなく「画面の幅」で組み立ててから、
+     紙に合わせて拡大する。そのせいで文字も行も大きくなり、
+     こちらで測って割った1枚ぶんが入りきらず、ブラウザがもう一度切る。
+     （2026-09-02、実機のPDFで確認。同じ見積がPCで3枚、iPhoneで4枚になった）
+
+     幅をmmで決め打ちして、画面の幅を見に行かせない。
+     210mm から左右の余白14mmずつを引いた 182mm が、紙に印刷できる幅。
+     ------------------------------------------------------------------ */
+  html, body { width: 182mm; }
+  .preview, .preview-scroll, .preview-fit, .preview-stage,
+  .preview .sheet-page { width: 182mm !important; max-width: 182mm; }
   .preview .sheet-page {
     background: none; background-image: none; padding: 0; min-height: 0;
     box-shadow: none; margin-bottom: 0;
