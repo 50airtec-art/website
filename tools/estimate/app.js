@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609061530';
+  var APP_VERSION = '202609061900';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -1657,19 +1657,30 @@
     var s = findSite(openSiteId);
     if (!s) return;
     var n = estimatesOf(s.id).length;
+    // 写真は別の入れ物にあるので、数えるのも消すのもあとから（待たせないため先に数だけ聞く）
+    photosOf(s.id).then(function (photos) { askDeleteSite(s, n, photos || []); },
+                        function () { askDeleteSite(s, n, []); });
+  });
+
+  function askDeleteSite(s, n, photos) {
     if (!confirm('現場「' + s.name + '」を削除します。\n' +
-      (n ? 'この現場の見積 ' + n + '件も一緒に消えます。\n' : '') + 'よろしいですか？')) return;
+      (n ? 'この現場の見積 ' + n + '件も一緒に消えます。\n' : '') +
+      (photos.length ? 'この現場の写真 ' + photos.length + '枚も一緒に消えます。\n' : '') +
+      'よろしいですか？')) return;
     saveSites(loadSites().filter(function (x) { return x.id !== s.id; }));
     save(KEY_EST, load(KEY_EST, []).filter(function (e) { return e.siteId !== s.id; }));
+    // 現場が消えたあとに写真だけ残ると、二度と出せないゴミになる
+    photos.forEach(function (p) { photoDel(p.id); });
     openSiteId = null;
     renderList();
     toast('削除しました');
-  });
+  }
 
   $('#site-search').addEventListener('input', function () { renderSiteList(); });
 
   function renderList() {
     migrateEstimatesToSites();
+    freePhotoUrls();                 // 前に出していた写真の一時アドレスを返す
     var showDetail = !!(openSiteId && findSite(openSiteId));
     $('#site-list-card').style.display = showDetail ? 'none' : '';
     $('#site-detail-card').style.display = showDetail ? '' : 'none';
@@ -1740,6 +1751,7 @@
     box.appendChild(acts);
 
     box.appendChild(renderSurveyBlock(s));
+    box.appendChild(renderPhotoBlock(s));
 
     var mine = estimatesOf(s.id).sort(function (a, b) {
       return String(b.savedAt).localeCompare(String(a.savedAt));
@@ -1931,28 +1943,60 @@
   var canPickFile = (typeof window.showSaveFilePicker === 'function');
   var bkHandle = null;
 
-  /* 保存先そのもの（ファイルハンドル）は localStorage に入れられないので IndexedDB に置く */
-  function idb(fn) {
-    return new Promise(function (res, rej) {
-      var q = indexedDB.open('airtec', 1);
-      q.onupgradeneeded = function () { q.result.createObjectStore('kv'); };
-      q.onerror = function () { rej(q.error); };
+  /* --------------------------------------------------------------------
+     IndexedDB（この端末の中の、大きいものを置ける入れ物）
+
+     localStorage には文字しか入らず、容量も5MBほどしかない。
+     そこに入らないものを、ここに置く。棚は2つ。
+       kv     … 保存先のファイルハンドル
+       photos … 現場写真（写真そのもの＝Blob）
+     -------------------------------------------------------------------- */
+  var IDB_VER = 2;                 // 棚を増やしたら1つ上げる（増えた棚だけ作られる）
+  var idbConn = null;              // 開いた入れ物は使い回す（写真を何十枚も入れるときのため）
+  function idbOpen() {
+    if (idbConn) return idbConn;
+    idbConn = new Promise(function (res, rej) {
+      var q = indexedDB.open('airtec', IDB_VER);
+      q.onupgradeneeded = function () {
+        // すでにある棚は作り直さない（作ろうとするとその場で止まる）
+        var db = q.result;
+        if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv');
+        if (!db.objectStoreNames.contains('photos')) {
+          db.createObjectStore('photos', { keyPath: 'id' })
+            .createIndex('siteId', 'siteId', { unique: false });
+        }
+      };
+      q.onerror   = function () { rej(q.error); };
+      q.onblocked = function () { rej(new Error('別のタブが開いています')); };
       q.onsuccess = function () {
+        var db = q.result;
+        // 別のタブが棚を増やそうとしたら、こちらは手を離す（次に使うとき開き直す）
+        db.onversionchange = function () { db.close(); idbConn = null; };
+        db.onclose = function () { idbConn = null; };
+        res(db);
+      };
+    });
+    idbConn.catch(function () { idbConn = null; });   // 開けなかったら、次でやり直せるようにする
+    return idbConn;
+  }
+  /** 棚を1つ開いて、その中で1回だけ操作する */
+  function idb(store, mode, fn) {
+    return idbOpen().then(function (db) {
+      return new Promise(function (res, rej) {
         // put() などはその場でエラーを投げることがある。
         // ここで受け止めないと、待っている側が永久に止まってしまう。
         try {
-          var db = q.result;
-          var tx = db.transaction('kv', 'readwrite');
-          var r = fn(tx.objectStore('kv'));
+          var tx = db.transaction(store, mode);
+          var r = fn(tx.objectStore(store));
           r.onsuccess = function () { res(r.result); };
           r.onerror = function () { rej(r.error); };
           tx.onabort = function () { rej(tx.error); };
         } catch (e) { rej(e); }
-      };
+      });
     });
   }
-  function idbSet(k, v) { return idb(function (s) { return s.put(v, k); }); }
-  function idbGet(k) { return idb(function (s) { return s.get(k); }); }
+  function idbSet(k, v) { return idb('kv', 'readwrite', function (s) { return s.put(v, k); }); }
+  function idbGet(k) { return idb('kv', 'readonly', function (s) { return s.get(k); }); }
 
   function bkMeta() { return load(KEY_BK, { lastAt: '', name: '' }); }
   function markBackedUp(name) {
@@ -2791,6 +2835,398 @@
     toast(n + '項目を取り込みました');
   }
 
+  /* ======================================================================
+     現場写真
+     ----------------------------------------------------------------------
+     撮った写真を、その現場にぶら下げて残す。
+
+     写真は1枚が数MBある。localStorage（5MB）にも、連動の1MBにも入らない。
+     そこで写真そのものは IndexedDB（この端末の中）に置き、
+     「何を撮ったか」の印だけを現調シートの［写真］の欄に書き戻す。
+     印は現場の中身なので、連動しているもう一方の端末にも届く。
+
+     撮った写真はそのままでは大きすぎるので、長いほうの辺を1600pxに縮めて
+     JPEGにし直してから入れる。紙に印刷するにはこれで十分足りる。
+     ====================================================================== */
+  var PHOTO_KINDS = ['全景', '銘板', '配管', '電源', '搬入経路', 'その他'];
+  var PHOTO_MAX = 1600;      // 長いほうの辺（これより大きい写真は縮める）
+  var PHOTO_Q   = 0.72;      // JPEGの画質
+
+  function photoPut(rec)   { return idb('photos', 'readwrite', function (s) { return s.put(rec); }); }
+  function photoDel(id)    { return idb('photos', 'readwrite', function (s) { return s.delete(id); }); }
+  function photoAll()      { return idb('photos', 'readonly',  function (s) { return s.getAll(); }); }
+  function photosOf(siteId) {
+    return idb('photos', 'readonly', function (s) { return s.index('siteId').getAll(siteId); })
+      .then(function (list) {
+        return (list || []).sort(function (a, b) { return String(a.at).localeCompare(String(b.at)); });
+      });
+  }
+
+  /**
+   * 写真を読み込む。
+   * iPhoneで撮った写真は「横向きのまま記録して、正しい向きは別に書いてある」ことがある。
+   * from-image と伝えないと、canvas に描いたとたん横倒しになる。
+   */
+  function loadBitmap(src) {
+    if (window.createImageBitmap) {
+      return createImageBitmap(src, { imageOrientation: 'from-image' })
+        .catch(function () { return createImageBitmap(src); })
+        .catch(function () { return loadViaImg(src); });
+    }
+    return loadViaImg(src);
+  }
+  function loadViaImg(src) {
+    return new Promise(function (res, rej) {
+      var url = URL.createObjectURL(src);
+      var im = new Image();
+      im.onload  = function () { URL.revokeObjectURL(url); res(im); };
+      im.onerror = function () { URL.revokeObjectURL(url); rej(new Error('画像として読めません')); };
+      im.src = url;
+    });
+  }
+
+  /** 写真を縮めてJPEGにする。turn を渡すとその角度だけ回してから作り直す */
+  function shrinkImage(src, turn) {
+    return loadBitmap(src).then(function (img) {
+      var scale = Math.min(1, PHOTO_MAX / Math.max(img.width, img.height));
+      var dw = Math.round(img.width * scale), dh = Math.round(img.height * scale);
+      turn = ((turn || 0) % 360 + 360) % 360;
+      var sideways = (turn === 90 || turn === 270);
+      var cv = document.createElement('canvas');
+      cv.width  = sideways ? dh : dw;
+      cv.height = sideways ? dw : dh;
+      var cx = cv.getContext('2d');
+      cx.translate(cv.width / 2, cv.height / 2);
+      if (turn) cx.rotate(turn * Math.PI / 180);
+      cx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+      if (img.close) img.close();
+      return new Promise(function (res, rej) {
+        cv.toBlob(function (b) {
+          if (b) res({ blob: b, w: cv.width, h: cv.height });
+          else rej(new Error('画像を作れませんでした'));
+        }, 'image/jpeg', PHOTO_Q);
+      });
+    });
+  }
+
+  function photoSizeText(list) {
+    var mb = list.reduce(function (a, p) { return a + num(p.size); }, 0) / 1048576;
+    return mb < 0.1 ? '' : mb.toFixed(1) + 'MB';
+  }
+
+  /* 画面に出している写真の一時アドレス。作り直すたびに古いものを返しておく */
+  var photoUrls = [];
+  function freePhotoUrls() {
+    photoUrls.forEach(function (u) { URL.revokeObjectURL(u); });
+    photoUrls = [];
+  }
+  function photoUrl(blob) {
+    var u = URL.createObjectURL(blob);
+    photoUrls.push(u);
+    return u;
+  }
+
+  /** 選んだ（撮った）写真を、この現場に入れる */
+  function addPhotos(site, kind, files, after) {
+    var list = Array.prototype.slice.call(files || []);
+    if (!list.length) return;
+    toast(list.length + '枚を取り込んでいます…');
+
+    var ok = 0, ng = 0, full = false;
+    var chain = Promise.resolve();
+    list.forEach(function (f) {
+      chain = chain.then(function () {
+        if (!/^image\//.test(f.type)) { ng++; return; }
+        return shrinkImage(f, 0).then(function (r) {
+          return photoPut({
+            id: 'ph' + Date.now() + Math.floor(Math.random() * 100000),
+            siteId: site.id,
+            kind: kind,
+            memo: '',
+            at: new Date().toISOString(),
+            w: r.w, h: r.h, size: r.blob.size,
+            blob: r.blob
+          });
+        }).then(function () { ok++; }, function (e) {
+          ng++;
+          if (e && (e.name === 'QuotaExceededError' || /quota/i.test(String(e.message || '')))) full = true;
+        });
+      });
+    });
+
+    chain.then(function () {
+      if (after) after();
+      if (full) toast('端末の空きが足りません。いらない写真を消してからやり直してください');
+      else if (ng) toast(ok + '枚を入れました（' + ng + '枚は取り込めませんでした）');
+      else toast(ok + '枚を入れました');
+    });
+  }
+
+  /**
+   * 撮った種類を、現調シートの［写真］の欄に印として書き戻す。
+   * 写真そのものは端末に残るが、何を撮ったかは連動でもう一方の端末にも届く。
+   * 1枚も入れていないうちは触らない（紙だけで使っている人の印を消さないため）。
+   */
+  function syncPhotoCheck(siteId, list) {
+    if (!list || !list.length) return;
+    var live = findSite(siteId);
+    if (!live) return;
+    var f = surveyFieldMap()['写真'];
+    var allow = (f && f.o) ? f.o : [];
+    var has = {};
+    list.forEach(function (p) { has[p.kind] = true; });
+    var kinds = allow.filter(function (k) { return has[k]; });
+    var data = surveyOf(live);
+    var cur = Array.isArray(data['写真']) ? data['写真'] : [];
+    if (cur.join('|') === kinds.join('|')) return;      // 変わっていなければ保存しない
+    data['写真'] = kinds;
+    saveSurvey(live.id, data);
+  }
+
+  function renderPhotoBlock(site) {
+    var wrap = el('div', 'photo-block');
+
+    var head = el('div', 'survey-head');
+    head.appendChild(el('span', 'site-sec-label', '現場写真'));
+    var cnt = el('span', 'survey-count', '');
+    head.appendChild(cnt);
+    wrap.appendChild(head);
+
+    var pick = el('div', 'photo-pick');
+    PHOTO_KINDS.forEach(function (k) {
+      var lab = el('label', 'btn btn-ghost btn-sm file-btn', '＋ ' + k);
+      lab.title = k + 'の写真を撮るか、写真から選びます';
+      var inp = el('input');
+      inp.type = 'file'; inp.accept = 'image/*'; inp.multiple = true;
+      inp.addEventListener('change', function () {
+        // 先に写しを取る。inp.value を空にすると inp.files も同時に空になるので、
+        // 参照のまま渡すと1枚も入らない
+        var files = Array.prototype.slice.call(inp.files || []);
+        inp.value = '';                    // 同じ写真をもう一度選べるようにする
+        addPhotos(site, k, files, function () { drawPhotos(site, grid, cnt); });
+      });
+      lab.appendChild(inp);
+      pick.appendChild(lab);
+    });
+    wrap.appendChild(pick);
+
+    var grid = el('div', 'photo-grid');
+    wrap.appendChild(grid);
+
+    wrap.appendChild(el('p', 'hint photo-note',
+      '写真はこの端末の中だけに残ります（見積の連動には乗りません）。' +
+      '端末を替えるときは［設定］の「写真を書き出す」で持ち出してください。' +
+      '［印刷 / PDF］を押すと、現調シートのうしろに写真のページが付きます。'));
+
+    drawPhotos(site, grid, cnt);
+    return wrap;
+  }
+
+  function drawPhotos(site, grid, cnt) {
+    photosOf(site.id).then(function (list) {
+      freePhotoUrls();
+      grid.innerHTML = '';
+      var sz = photoSizeText(list);
+      cnt.textContent = list.length + '枚' + (sz ? '　' + sz : '');
+      syncPhotoCheck(site.id, list);
+
+      if (!list.length) {
+        grid.appendChild(el('p', 'empty-note',
+          'まだ写真がありません。上のボタンを押すと、その場で撮るか、写真から選べます。'));
+        return;
+      }
+
+      list.forEach(function (p, i) {
+        var cell = el('div', 'photo-cell');
+
+        var im = el('img');
+        im.src = photoUrl(p.blob);
+        im.alt = p.kind || '写真';
+        // loading="lazy" は付けない。写真は端末の中にあるので待つ必要がなく、
+        // 「画面に入るまで読まない」ぶん、かえって白いままになることがある
+        im.addEventListener('click', function () { openPhotoView(list, i); });
+        cell.appendChild(im);
+
+        var bar = el('div', 'photo-bar');
+        var sel = el('select', 'photo-kind');
+        PHOTO_KINDS.forEach(function (k) {
+          var o = el('option', null, k);
+          o.value = k;
+          if (k === p.kind) o.selected = true;
+          sel.appendChild(o);
+        });
+        sel.addEventListener('change', function () {
+          p.kind = sel.value;
+          photoPut(p).then(function () { drawPhotos(site, grid, cnt); });
+        });
+        bar.appendChild(sel);
+
+        var rot = el('button', 'btn btn-ghost btn-sm', '回転'); rot.type = 'button';
+        rot.title = '横向きに写っているときに押してください';
+        rot.addEventListener('click', function () {
+          rot.disabled = true;
+          shrinkImage(p.blob, 90).then(function (r) {
+            p.blob = r.blob; p.w = r.w; p.h = r.h; p.size = r.blob.size;
+            return photoPut(p);
+          }).then(function () { drawPhotos(site, grid, cnt); },
+                  function () { rot.disabled = false; toast('回転できませんでした'); });
+        });
+        bar.appendChild(rot);
+
+        var del = el('button', 'btn btn-ghost btn-sm btn-danger', '削除'); del.type = 'button';
+        del.addEventListener('click', function () {
+          if (!confirm('この写真を削除します。よろしいですか？')) return;
+          photoDel(p.id).then(function () {
+            drawPhotos(site, grid, cnt);
+            toast('削除しました');
+          });
+        });
+        bar.appendChild(del);
+        cell.appendChild(bar);
+
+        var memo = el('input', 'photo-memo');
+        memo.type = 'text';
+        memo.value = p.memo || '';
+        memo.placeholder = '覚え書き';
+        memo.title = '写真の説明。印刷したときに写真の下に出ます（例：室外機の裏、サビあり）';
+        memo.addEventListener('change', function () {
+          p.memo = memo.value;
+          photoPut(p);
+        });
+        cell.appendChild(memo);
+
+        grid.appendChild(cell);
+      });
+    }, function () {
+      grid.innerHTML = '';
+      grid.appendChild(el('p', 'empty-note', '写真を読み出せませんでした。'));
+    });
+  }
+
+  /** 写真を大きく見る */
+  function openPhotoView(list, idx) {
+    var box = el('div', 'photo-view');
+    var im = el('img');
+    var cap = el('div', 'photo-view-cap');
+    var url = '';
+
+    function show(i) {
+      idx = (i + list.length) % list.length;
+      if (url) URL.revokeObjectURL(url);
+      url = URL.createObjectURL(list[idx].blob);
+      im.src = url;
+      var p = list[idx];
+      cap.textContent = (idx + 1) + ' / ' + list.length + '　' +
+        (p.kind || '') + (p.memo ? '　' + p.memo : '');
+    }
+    function close() {
+      if (url) URL.revokeObjectURL(url);
+      document.removeEventListener('keydown', onKey);
+      if (box.parentNode) box.parentNode.removeChild(box);
+    }
+    function onKey(e) {
+      if (e.key === 'Escape') close();
+      else if (e.key === 'ArrowRight') show(idx + 1);
+      else if (e.key === 'ArrowLeft')  show(idx - 1);
+    }
+
+    var prev = el('button', 'photo-nav photo-prev', '‹'); prev.type = 'button';
+    var next = el('button', 'photo-nav photo-next', '›'); next.type = 'button';
+    var shut = el('button', 'photo-close', '閉じる');     shut.type = 'button';
+    prev.addEventListener('click', function (e) { e.stopPropagation(); show(idx - 1); });
+    next.addEventListener('click', function (e) { e.stopPropagation(); show(idx + 1); });
+    shut.addEventListener('click', close);
+    box.addEventListener('click', function (e) { if (e.target === box || e.target === im) close(); });
+    document.addEventListener('keydown', onKey);
+
+    box.appendChild(im); box.appendChild(cap);
+    if (list.length > 1) { box.appendChild(prev); box.appendChild(next); }
+    box.appendChild(shut);
+    document.body.appendChild(box);
+    show(idx);
+  }
+
+  /* ---------- 写真の持ち出し・持ち込み ----------
+     写真は全データのバックアップには入れない（毎日の上書き保存が重くなるため）。
+     端末を替えるときだけ、この専用のファイルで運ぶ。 */
+  function blobToDataUrl(b) {
+    return new Promise(function (res, rej) {
+      var r = new FileReader();
+      r.onload  = function () { res(String(r.result)); };
+      r.onerror = function () { rej(r.error); };
+      r.readAsDataURL(b);
+    });
+  }
+  function dataUrlToBlob(d) {
+    var m = String(d || '').match(/^data:(image\/[a-z+]+);base64,([A-Za-z0-9+/=]+)$/i);
+    if (!m) return null;
+    var bin = atob(m[2]), arr = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return new Blob([arr], { type: m[1] });
+  }
+
+  $('#btn-export-photos').addEventListener('click', function () {
+    photoAll().then(function (list) {
+      list = list || [];
+      if (!list.length) { toast('写真がまだありません'); return; }
+      var names = {};
+      loadSites().forEach(function (s) { names[s.id] = s.name; });
+      return Promise.all(list.map(function (p) {
+        return blobToDataUrl(p.blob).then(function (d) {
+          return {
+            id: p.id, siteId: p.siteId, siteName: names[p.siteId] || '',
+            kind: p.kind, memo: p.memo, at: p.at, w: p.w, h: p.h, data: d
+          };
+        });
+      })).then(function (rows) {
+        download('空調王-現場写真-' + todayISO() + '.json', JSON.stringify({
+          type: 'airtec-photos', version: 1,
+          exportedAt: new Date().toISOString(),
+          photos: rows
+        }));
+        toast(rows.length + '枚を書き出しました');
+      });
+    }).catch(function () { toast('書き出せませんでした'); });
+  });
+
+  $('#file-import-photos').addEventListener('change', function (ev) {
+    readJSON(ev.target, function (data) {
+      if (!data || data.type !== 'airtec-photos' || !Array.isArray(data.photos)) {
+        toast('「写真を書き出す」で作ったファイルを選んでください');
+        return;
+      }
+      var sites = loadSites();
+      var byId = {}, byName = {};
+      sites.forEach(function (s) { byId[s.id] = s; byName[s.name] = s; });
+
+      var rows = [], lost = 0;
+      data.photos.forEach(function (p) {
+        var site = byId[p.siteId] || byName[p.siteName];      // 現場が作り直されていても名前で拾う
+        var blob = dataUrlToBlob(p.data);
+        if (!site || !blob) { lost++; return; }
+        rows.push({
+          id: p.id, siteId: site.id, kind: p.kind || 'その他', memo: p.memo || '',
+          at: p.at || new Date().toISOString(), w: p.w, h: p.h, size: blob.size, blob: blob
+        });
+      });
+      if (!rows.length) { toast('入れられる写真がありませんでした（先に現場を読み込んでください）'); return; }
+      if (!confirm(rows.length + '枚をこの端末に入れます。\n' +
+        (lost ? '（' + lost + '枚は、行き先の現場が無いので入れません）\n' : '') +
+        '同じ写真がすでにあれば上書きします。よろしいですか？')) return;
+
+      var chain = Promise.resolve(), ok = 0, ng = 0;
+      rows.forEach(function (r) {
+        chain = chain.then(function () {
+          return photoPut(r).then(function () { ok++; }, function () { ng++; });
+        });
+      });
+      chain.then(function () {
+        renderList();
+        toast(ok + '枚を入れました' + (ng ? '（' + ng + '枚は入りませんでした）' : ''));
+      });
+    });
+  });
+
   /** 調査シートを紙と同じ形で印刷する。blank=true なら何も記入しない状態で出す */
   function printSurvey(site, blank) {
     // 画面が持っている現場は入力前の写しのことがあるので、保存済みを読み直す
@@ -2834,9 +3270,58 @@
     });
     html += '</div>';
 
-    $('#sheet').innerHTML = html;
     document.title = '現場調査確認表_' + (site.name || '');
-    setTimeout(function () { window.print(); }, 60);
+    freePrintUrls();
+    if (blank) { showSheetAndPrint(html); return; }
+
+    // 記入済みで出すときは、うしろに写真のページを足す
+    photosOf(site.id).then(function (list) {
+      showSheetAndPrint(html + photoPagesHtml(list, site));
+    }, function () { showSheetAndPrint(html); });
+  }
+
+  /* 印刷に出している写真の一時アドレス。次に印刷するときに返す */
+  var printUrls = [];
+  function freePrintUrls() {
+    printUrls.forEach(function (u) { URL.revokeObjectURL(u); });
+    printUrls = [];
+  }
+
+  /** 写真のページを組み立てる（1枚の紙に6枚） */
+  function photoPagesHtml(list, site) {
+    if (!list || !list.length) return '';
+    var out = '', per = 6;
+    for (var i = 0; i < list.length; i += per) {
+      out += '<div class="sheet-page sv-page ph-page">';
+      out += '<div class="sv-title">現場写真　' + esc(site.name || '') + '</div>';
+      out += '<div class="ph-grid">';
+      list.slice(i, i + per).forEach(function (p, j) {
+        var u = URL.createObjectURL(p.blob);
+        printUrls.push(u);
+        out += '<figure class="ph-cell"><img src="' + esc(u) + '" alt="">' +
+          '<figcaption>' + (i + j + 1) + '. ' + esc(p.kind || '') +
+          (p.memo ? '　' + esc(p.memo) : '') + '</figcaption></figure>';
+      });
+      out += '</div></div>';
+    }
+    return out;
+  }
+
+  /**
+   * 紙面を画面に組んでから印刷する。
+   * 写真は読み込みが終わる前に印刷を始めると、白いままの紙が出てしまう。
+   * だから全部の画像が出そろうのを待ってから window.print() を呼ぶ。
+   */
+  function showSheetAndPrint(html) {
+    $('#sheet').innerHTML = html;
+    var imgs = $$('#sheet img');
+    var waits = imgs.map(function (im) {
+      if (im.complete) return Promise.resolve();
+      return new Promise(function (res) { im.onload = im.onerror = res; });
+    });
+    Promise.all(waits).then(function () {
+      setTimeout(function () { window.print(); }, 60);
+    });
   }
 
   function openEstimate(e, msg) {

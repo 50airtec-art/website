@@ -748,6 +748,66 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
 .sv-sub { display: block; margin-top: .8mm; color: #333; }
 .sv-ph { color: #999; }
 
+/* ===== 現場写真（画面） ===== */
+.photo-block { margin-bottom: 20px; }
+.photo-pick { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.photo-note { margin-top: 8px; line-height: 1.8; }
+
+.photo-grid {
+  display: grid; gap: 10px;
+  /* 46% と書いておくと、スマホの細い画面でも必ず2枚ずつ並ぶ */
+  grid-template-columns: repeat(auto-fill, minmax(min(150px, 46%), 1fr));
+}
+.photo-cell {
+  border: 1px solid var(--border); border-radius: 8px; background: #fff;
+  padding: 6px; display: flex; flex-direction: column; gap: 6px;
+}
+.photo-cell img {
+  width: 100%; height: 110px; object-fit: cover;
+  border-radius: 6px; background: #eee; cursor: zoom-in; display: block;
+}
+.photo-bar { display: flex; gap: 4px; align-items: center; }
+.photo-kind {
+  flex: 1; min-width: 0; padding: 3px 4px; font-size: 12px;
+  border: 1px solid var(--border); border-radius: 6px; background: #fff;
+}
+.photo-bar .btn-sm { padding: 3px 7px; font-size: 11px; }
+.photo-memo {
+  width: 100%; padding: 4px 6px; font-size: 12px;
+  border: 1px solid var(--border); border-radius: 6px; background: #fff;
+}
+.photo-grid .empty-note { grid-column: 1 / -1; }
+
+/* 写真を大きく見る */
+.photo-view {
+  position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.88);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  padding: 16px;
+}
+.photo-view img { max-width: 100%; max-height: calc(100vh - 110px); object-fit: contain; }
+.photo-view-cap { color: #fff; font-size: 13px; text-align: center; }
+.photo-nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 44px; height: 64px; border: 0; border-radius: 8px;
+  background: rgba(255,255,255,.18); color: #fff; font-size: 30px; line-height: 1; cursor: pointer;
+}
+.photo-prev { left: 10px; }
+.photo-next { right: 10px; }
+.photo-close {
+  position: absolute; top: 12px; right: 12px;
+  padding: 6px 14px; border: 0; border-radius: 8px;
+  background: rgba(255,255,255,.9); font-size: 13px; cursor: pointer;
+}
+
+/* ===== 現場写真（印刷） ===== */
+.ph-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin-top: 3mm; }
+.ph-cell { margin: 0; page-break-inside: avoid; break-inside: avoid; }
+.ph-cell img {
+  width: 100%; height: 62mm; object-fit: contain;
+  background: #f2f2f2; border: .4pt solid #9aa5b1;
+}
+.ph-cell figcaption { font-size: 8pt; padding: 1mm 0 0; word-break: break-all; }
+
 /* 請求書：税率ごとの内訳（インボイス） */
 .sheet-sum tr.tax-break th, .sheet-sum tr.tax-break td { background: #fafafa; font-size: 8.5pt; color: #333; }
 .inv-block { margin-top: 8px; }
@@ -767,6 +827,8 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
 }
 .bk-warn span { flex: 1; min-width: 200px; }
 @media print { .bk-warn { display: none !important; } }
+/* 写真を開いたまま印刷しても、紙には出さない */
+@media print { .photo-view { display: none !important; } }
 
 /* ===== スマホ⇄パソコンの連動 ===== */
 .sync-warn { background: var(--accent-soft); border-bottom: 1px solid #b9d4ef; color: #0b4f96; }
