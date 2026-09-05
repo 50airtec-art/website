@@ -862,3 +862,37 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
 .sz-body .sizer-checks { margin-bottom: 8px; }
 .sz-body .sizer-result { margin-top: 10px; }
 .sz-body .btn { margin-top: 2px; }
+
+/* ---------- 寸法から広さを出す ---------- */
+.sz-meas {
+  border: 1px solid #d7e3f0; background: #f7fafd; border-radius: 8px;
+  padding: 10px; margin-bottom: 10px;
+}
+.sz-meas-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.sz-meas-head b { font-size: 13.5px; }
+.sz-meas-head .sz-note { margin-top: 0; flex: 1 1 auto; }
+.sz-unit { width: auto; flex: 0 0 auto; background: #fff; font-size: 12.5px; padding: 4px 6px; }
+.sz-rows { display: flex; flex-direction: column; gap: 6px; }
+.sz-row {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
+  background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+}
+.sz-row-minus { background: #fdf6f6; border-color: #e6cfcf; }
+.sz-row input.sz-nm { flex: 1 1 120px; min-width: 90px; font-size: 13px; }
+.sz-row input.sz-d { flex: 0 0 82px; width: 82px; font-size: 14px; text-align: right; }
+.sz-lab { font-size: 12px; color: var(--text-light); }
+.sz-x { font-size: 14px; color: var(--text-sub); }
+.sz-eq { font-size: 13.5px; font-weight: 700; margin-left: 4px; white-space: nowrap; }
+.sz-row-minus .sz-eq::before { content: '−'; color: #b45; margin-right: 2px; }
+.sz-pm { flex: 0 0 auto; margin-top: 0 !important; padding: 4px 8px; font-size: 12px; }
+.sz-row-minus .sz-pm { color: #b45; border-color: #e6cfcf; }
+.sz-del { flex: 0 0 auto; margin-top: 0 !important; padding: 4px 8px; color: var(--text-light); }
+.sz-meas-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.sz-meas-total { font-size: 14.5px; font-weight: 700; color: var(--accent); flex: 1 1 auto; }
+@media (max-width: 480px) {
+  .sz-row input.sz-nm { flex: 1 1 100%; }
+  .sz-row input.sz-d { flex: 1 1 0; width: auto; min-width: 0; }
+  .sz-eq { flex: 1 1 100%; text-align: right; }
+  .sz-meas-foot .btn { flex: 1 1 auto; }
+}
+.sz-meas-total.sz-warn { color: #b45; font-size: 13px; }

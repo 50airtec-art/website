@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609060700';
+  var APP_VERSION = '202609061530';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -2169,12 +2169,10 @@
 
     // 面積と天井高（「120㎡ / 天井高2.7m」など）
     var at = txt('対象面積・天井高');
-    var area = 0, height = 0;
-    var ma = at.match(/([\d.]+)\s*(?:㎡|m2|m²|平米)/i);
-    if (ma) area = Number(ma[1]);
-    else { var mt = at.match(/([\d.]+)\s*坪/); if (mt) area = Number(mt[1]) * 3.3058; }
+    var area = szAreaFromText(at);
+    var height = 0;
     var mh = at.match(/(?:天井高|天高|高さ)\s*([\d.]+)/);
-    if (!mh) mh = at.match(/([\d.]+)\s*m(?!\s*[²2])/i);
+    if (!mh && !SZ_X.test(at)) mh = at.match(/([\d.]+)\s*m(?!\s*[²2])/i);
     if (mh) height = Number(mh[1]);
 
     // 構造から断熱を推し量る（あくまで初期値。現場を見て直す）
@@ -2361,6 +2359,155 @@
       fi.appendChild(si); form.appendChild(fi);
       body.appendChild(form);
 
+      /* 寸法から広さを出す
+         現場ではメジャーで測るだけ。横と縦を入れれば掛け算も足し算もここでやる。
+         L字の部屋は「大きい四角 ＋ 出っ張り」か「大きい四角 － 欠け」で入れる。 */
+      if (!Array.isArray(p.rooms)) p.rooms = [];
+      if (!p.rooms.length) p.rooms.push({ n: '', w: 0, d: 0, minus: false });
+      if (p.unit !== 'cm') p.unit = 'm';
+
+      var meas = el('div', 'sz-meas');
+      var mhd = el('div', 'sz-meas-head');
+      mhd.appendChild(el('b', null, '寸法から広さを出す'));
+      mhd.appendChild(el('span', 'sz-note', '測った横と縦を入れるだけ。掛け算も足し算もこちらでやります'));
+      var sunit = document.createElement('select');
+      sunit.className = 'sz-unit';
+      [['m', 'メートルで入れる'], ['cm', 'センチで入れる']].forEach(function (u) {
+        var o = document.createElement('option');
+        o.value = u[0]; o.textContent = u[1];
+        sunit.appendChild(o);
+      });
+      sunit.value = p.unit;
+      sunit.addEventListener('change', function () {
+        // 入れ直さなくていいように、いま入っている数字も単位に合わせて直す
+        var k = (p.unit === 'm' && sunit.value === 'cm') ? 100
+              : (p.unit === 'cm' && sunit.value === 'm') ? 0.01 : 1;
+        if (k !== 1) {
+          p.rooms.forEach(function (r) {
+            if (num(r.w)) r.w = Math.round(num(r.w) * k * 100) / 100;
+            if (num(r.d)) r.d = Math.round(num(r.d) * k * 100) / 100;
+          });
+        }
+        p.unit = sunit.value; save(); drawRows(); syncArea();
+      });
+      mhd.appendChild(sunit);
+      meas.appendChild(mhd);
+
+      var rowsBox = el('div', 'sz-rows');
+      meas.appendChild(rowsBox);
+
+      var mfoot = el('div', 'sz-meas-foot');
+      var addBtn = el('button', 'btn btn-ghost btn-sm', '＋ 場所を足す');
+      addBtn.type = 'button';
+      addBtn.title = '部屋がいくつかあるとき、L字の部屋のときに足してください';
+      addBtn.addEventListener('click', function () {
+        p.rooms.push({ n: '', w: 0, d: 0, minus: false });
+        save(); drawRows(); syncArea();
+        var last = rowsBox.querySelector('.sz-row:last-child .sz-d');
+        if (last) last.focus();
+      });
+      mfoot.appendChild(addBtn);
+      var tot = el('div', 'sz-meas-total');
+      mfoot.appendChild(tot);
+      var wr = el('button', 'btn btn-ghost btn-sm', 'この広さをシートに書く');
+      wr.type = 'button';
+      wr.title = '上の「対象面積・天井高」の欄に書き込みます';
+      wr.addEventListener('click', function () {
+        if (!p.area) return;
+        var line = szFmt(p.area) + '㎡ / 天井高' + (p.height || 2.7) + 'm';
+        data['対象面積・天井高'] = line;
+        saveSurvey(site.id, data);
+        var host = box.parentNode || document;
+        var inp = host.querySelector('.survey-f[data-k="対象面積・天井高"] input');
+        if (inp) inp.value = line;
+        wr.textContent = 'シートに書きました';
+        setTimeout(function () { wr.textContent = 'この広さをシートに書く'; }, 1600);
+      });
+      mfoot.appendChild(wr);
+      meas.appendChild(mfoot);
+      body.appendChild(meas);
+
+      /** 1行ぶんの数字の入れ物。打っている間に作り直すと文字が消えるので、
+          入力中は行の中の答えと合計だけを書き換える */
+      function measInput(r, key, eq) {
+        var i = document.createElement('input');
+        i.type = 'number'; i.min = '0'; i.step = '0.01';
+        i.className = 'sz-d'; i.inputMode = 'decimal';
+        i.placeholder = (p.unit === 'cm') ? '例 820' : '例 8.2';
+        i.value = r[key] ? String(r[key]) : '';
+        i.addEventListener('input', function () {
+          r[key] = num(i.value);
+          eq.textContent = '＝ ' + szFmt(szRoomArea(r, p.unit)) + ' m²';
+          syncArea();
+        });
+        return i;
+      }
+
+      function drawRows() {
+        rowsBox.innerHTML = '';
+        p.rooms.forEach(function (r, idx) {
+          var row = el('div', 'sz-row' + (r.minus ? ' sz-row-minus' : ''));
+
+          var nm = document.createElement('input');
+          nm.type = 'text'; nm.className = 'sz-nm';
+          nm.placeholder = '場所（例 事務所）';
+          nm.value = r.n || '';
+          nm.addEventListener('input', function () { r.n = nm.value; save(); });
+          row.appendChild(nm);
+
+          var eq = el('span', 'sz-eq', '＝ ' + szFmt(szRoomArea(r, p.unit)) + ' m²');
+          row.appendChild(el('span', 'sz-lab', '横'));
+          row.appendChild(measInput(r, 'w', eq));
+          row.appendChild(el('span', 'sz-x', '×'));
+          row.appendChild(el('span', 'sz-lab', '縦'));
+          row.appendChild(measInput(r, 'd', eq));
+          row.appendChild(eq);
+
+          var pm = el('button', 'btn btn-ghost btn-sm sz-pm', r.minus ? 'ひく' : 'たす');
+          pm.type = 'button';
+          pm.title = '出っ張りは「たす」、欠けている所は「ひく」にしてください';
+          pm.addEventListener('click', function () {
+            r.minus = !r.minus; save(); drawRows(); syncArea();
+          });
+          row.appendChild(pm);
+
+          if (p.rooms.length > 1) {
+            var del = el('button', 'btn btn-ghost btn-sm sz-del', '✕');
+            del.type = 'button'; del.title = 'この行を消す';
+            del.setAttribute('aria-label', (idx + 1) + '行目を消す');
+            del.addEventListener('click', function () {
+              p.rooms.splice(idx, 1); save(); drawRows(); syncArea();
+            });
+            row.appendChild(del);
+          }
+          rowsBox.appendChild(row);
+        });
+      }
+
+      /** 行の合計を「広さ」の欄に流し込む。1行でも数字が入っていれば、そちらが正。
+          quiet は最初に見た目をそろえるだけのとき（まだ結果の欄を作っていない） */
+      function syncArea(quiet) {
+        var any = p.rooms.some(function (r) { return num(r.w) > 0 && num(r.d) > 0; });
+        var sum = any ? szRoomsArea(p.rooms, p.unit) : 0;
+        if (any && sum > 0) {
+          p.area = sum;
+          ia.value = szFmt(sum);
+          tot.textContent = '合計 ' + szFmt(sum) + ' m²（約 ' + szTsubo(sum) + ' 坪）';
+          tot.classList.remove('sz-warn');
+        } else if (any) {
+          tot.textContent = 'ひく方が大きくなっています。「たす／ひく」を見直してください';
+          tot.classList.add('sz-warn');
+        } else {
+          tot.textContent = '';
+          tot.classList.remove('sz-warn');
+        }
+        wr.style.display = (any && sum > 0) ? '' : 'none';
+        if (!quiet) { save(); drawResult(); }
+      }
+
+      drawRows();
+      syncArea(true);
+
       // 上乗せ
       var checks = el('div', 'sizer-checks');
       SZ_ADDS.forEach(function (a) {
@@ -2452,6 +2599,7 @@
   /** 1項目分の入力欄を作る */
   function surveyField(f, data, touch) {
     var box = el('div', 'survey-f' + (f.t === 'memo' ? ' survey-f-wide' : ''));
+    box.setAttribute('data-k', f.k);   // 下の機種選定から書き戻すときの目印
     box.appendChild(el('span', 'survey-k', f.k));
 
     if (f.t === 'check' || f.t === 'checktext') {
@@ -4023,6 +4171,48 @@
     { key: 'people', name: '人が多い（ピーク時）', k: 0.10 },
     { key: 'air', name: '外気をたくさん入れる', k: 0.10 }
   ];
+
+  /* 「横×縦」の書き方を見つけるための目印。× ｘ x X * ✕ のどれでも通す */
+  var SZ_X = /[×✕xX＊*]/;
+
+  /** 文字から広さ（m²）を読む。
+      「8.2×6」「8.2m×6m ＋ 3×2.4」→ 掛けて足す（測ったまま書ける）
+      「120㎡」→ そのまま／「36坪」→ m² に直す */
+  function szAreaFromText(s) {
+    s = String(s || '');
+    var re = /([\d.]+)\s*(?:m|ｍ)?\s*[×✕xX＊*]\s*([\d.]+)\s*(?:m|ｍ)?/g;
+    var sum = 0, hit = false, m;
+    while ((m = re.exec(s))) {
+      var w = Number(m[1]), d = Number(m[2]);
+      if (w > 0 && d > 0) { sum += w * d; hit = true; }
+    }
+    if (hit) return Math.round(sum * 100) / 100;
+    var ma = s.match(/([\d.]+)\s*(?:㎡|m2|m²|平米)/i);
+    if (ma) return Number(ma[1]);
+    var mt = s.match(/([\d.]+)\s*坪/);
+    if (mt) return Math.round(Number(mt[1]) * 3.3058 * 100) / 100;
+    return 0;
+  }
+
+  /** 測った部屋の一覧から広さ（m²）を出す。単位が cm なら 100 で割ってから掛ける */
+  function szRoomArea(r, unit) {
+    var d = (unit === 'cm') ? 100 : 1;
+    var a = (num(r.w) / d) * (num(r.d) / d);
+    return Math.round(a * 100) / 100;
+  }
+  function szRoomsArea(rooms, unit) {
+    var sum = 0;
+    (rooms || []).forEach(function (r) {
+      var a = szRoomArea(r, unit);
+      sum += r.minus ? -a : a;
+    });
+    return Math.round(sum * 100) / 100;   // ひきすぎたらマイナスのまま返す（呼ぶ側で気づけるように）
+  }
+  /** m² を坪にする（1坪 = 3.3058 m²）。現場では坪で話すことが多いので併記する */
+  function szTsubo(m2) { return Math.round((m2 / 3.3058) * 10) / 10; }
+
+  /** 小数のうしろのゼロを出さない（56.40 → 56.4、100.00 → 100） */
+  function szFmt(n) { return String(Math.round(n * 100) / 100); }
 
   // 形番号（P40 など）と馬力。能力[kW] は形番号 ÷ 10
   var SZ_FORMS = [
