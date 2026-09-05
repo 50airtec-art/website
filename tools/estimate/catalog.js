@@ -880,7 +880,9 @@
           var d = Math.abs(l.y - y);
           if (d < bd) { bd = d; best = l; }
         });
-        if (best && bd <= (mode === 'above' ? 60 : 30)) parts.push(best.s);
+        // vert（品番が縦に並ぶ表）は、品名がマスの先頭にしか書かれず離れているので広めに見る
+        var far = (mode === 'above' ? 60 : (mode === 'vert' ? 60 : 30));
+        if (best && bd <= far) parts.push(best.s);
       });
       var uniq = [];
       parts.forEach(function (s) {
@@ -1366,7 +1368,7 @@
         if (OPT_CODE.test(c.s.trim()) && c.x < minCodeX) minCodeX = c.x;
       });
     });
-    var nameAt = (minCodeX < 1e9) ? nameReader(rows, minCodeX - 20, 1e9) : null;
+    var nameAt = (minCodeX < 1e9) ? nameReader(rows, minCodeX - 20, 1e9, 'vert') : null;
 
     rows.forEach(function (r, idx) {
       var t = r.cells.map(function (c) { return c.s; }).join('').replace(/\s/g, '');
@@ -1381,7 +1383,13 @@
         var left = codes[0].x - 20;
         var name = rows[k].cells.filter(function (c) { return c.x < left && isJa(c.s); })
           .map(function (c) { return c.s; }).join('').replace(/注\d+/g, '').trim();
-        if (name.length < 2 && nameAt) name = nameAt(rows[k].y);   // 同じ行に無ければ上下から拾う
+        /* 「ホワイト」「ブラウン」だけの行は、色であって品名ではない。
+           品名は上の行（縦につながったマス）にあるので、上下から拾い直す */
+        var colorOnly = /^[（(]?(フレッシュ)?(ホワイト|ブラック|ブラウン|ベージュ|グレー|シルバー|アイボリー|ホワイ|ブラ)[）)]?(（単色）)?$/;
+        if ((name.length < 2 || colorOnly.test(name.replace(/\s/g, ''))) && nameAt) {
+          var n2 = nameAt(rows[k].y);
+          if (n2 && n2.length > name.length) name = n2;
+        }
 
         codes.forEach(function (c) {
           var best = null, bd = 1e9;
@@ -2044,6 +2052,38 @@
     return !!(fit.type || fit.series || fit.cap || fit.tp);
   }
 
+  /* --------------------------------------------------------------------
+     別売品の仲間分け
+     1台の機種に700品目も出ると、現場では選べない。品名で仲間に分ける。
+     上から順に見て、最初に当たったものをその品目の仲間とする
+     （「化粧パネル用フィルター」はフィルターではなくパネルに入れたくないので、
+       フィルターを先に置いてある）
+     -------------------------------------------------------------------- */
+  var OPT_CATS = [
+    ['フィルター', /フィルタ|ろ材|集塵|エレメント/],
+    ['パネル・グリル', /パネル|グリル|化粧|ルーバー|吹出口閉鎖/],
+    ['リモコン・制御', /リモコン|コントロ|アダプタ|基板|センサ|集中|タイマ|通信|端子|遠方|ケーブル/],
+    ['ドレン', /ドレン/],
+    ['ダクト・吹出', /ダクト|吹出|チャンバ|フランジ|ガイド|パンカ|ノズル|ホース|エルボ/],
+    ['屋外・防雪', /防雪|架台|防振|フード|屋根|network|安全ネット|凍結|ヒータ|散水|背面/],
+    ['空気清浄・加湿', /ストリーマ|除菌|脱臭|加湿|空気清浄|UV|イオン|クリーン/],
+    ['分岐・分配', /分岐|分配|ディストリビュータ/],
+    ['取付・工事部材', /取付|キット|金具|バンド|カバー|スペーサ|延長|接続/]
+  ];
+
+  /* 画面に並べる順。仕事でよく使うものから出す。
+     （上の OPT_CATS は「どれに入れるか」を決める順で、こちらは「どう並べるか」） */
+  var OPT_CAT_ORDER = ['パネル・グリル', 'リモコン・制御', 'フィルター', 'ドレン', '分岐・分配',
+                       '空気清浄・加湿', 'ダクト・吹出', '屋外・防雪', '取付・工事部材', 'その他'];
+
+  function optCategory(name) {
+    var s = String(name || '');
+    for (var i = 0; i < OPT_CATS.length; i++) {
+      if (OPT_CATS[i][1].test(s)) return OPT_CATS[i][0];
+    }
+    return 'その他';
+  }
+
   /** その機種に付く別売品を返す。model は［機器を選ぶ］で選んだ1行 */
   function optionsFor(store, model) {
     var out = [];
@@ -2087,5 +2127,5 @@
     return [Math.min.apply(null, nums), Math.max.apply(null, nums)];
   }
 
-  window.KUCHOO_CATALOG = { makers: MAKERS, run: run, yen: yen, optionsFor: optionsFor, optFits: optFits, typeAtPage: typeAtPage };
+  window.KUCHOO_CATALOG = { makers: MAKERS, run: run, yen: yen, optionsFor: optionsFor, optFits: optFits, typeAtPage: typeAtPage, optCategory: optCategory, catOrder: OPT_CAT_ORDER };
 })();

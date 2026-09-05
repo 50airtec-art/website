@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609060003';
+  var APP_VERSION = '202609060047';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -3805,8 +3805,42 @@
     head.appendChild(close);
     box.appendChild(head);
 
-    var wrap = el('div', 'picker-items');
+    /* 1台に700品目も出ると現場では選べない。品名で仲間に分けて絞れるようにする */
+    var cats = {};
     list.forEach(function (o) {
+      o.cat = (KUCHOO_CATALOG.optCategory ? KUCHOO_CATALOG.optCategory(o.name) : 'その他');
+      cats[o.cat] = (cats[o.cat] || 0) + 1;
+    });
+    // 仕事でよく使う順に並べる（catalog.js が持っている順）
+    var fixed = (KUCHOO_CATALOG.catOrder || []);
+    var order = Object.keys(cats).sort(function (a, b) {
+      var ia = fixed.indexOf(a), ib = fixed.indexOf(b);
+      return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+    });
+    var pick = order.length > 1 ? order[0] : '';   // 最初はいちばん多い仲間だけ出す
+
+    var catBox = el('div', 'picker-cats');
+    box.appendChild(catBox);
+    var wrap = el('div', 'picker-items');
+    box.appendChild(wrap);
+
+    function drawCats() {
+      catBox.innerHTML = '';
+      var all = el('button', 'cat-btn' + (pick ? '' : ' is-active'), 'すべて' + list.length);
+      all.type = 'button';
+      all.addEventListener('click', function () { pick = ''; drawCats(); drawItems(); });
+      catBox.appendChild(all);
+      order.forEach(function (c) {
+        var b = el('button', 'cat-btn' + (pick === c ? ' is-active' : ''), c + cats[c]);
+        b.type = 'button';
+        b.addEventListener('click', function () { pick = c; drawCats(); drawItems(); });
+        catBox.appendChild(b);
+      });
+    }
+
+    function drawItems() {
+      wrap.innerHTML = '';
+      list.filter(function (o) { return !pick || o.cat === pick; }).forEach(function (o) {
       var b = el('button', 'item-btn');
       b.type = 'button';
       b.appendChild(el('b', null, o.name || o.code));
@@ -3828,8 +3862,11 @@
         toast('「' + (o.name || o.code) + '」を追加しました');
       });
       wrap.appendChild(b);
-    });
-    box.appendChild(wrap);
+      });
+    }
+
+    drawCats();
+    drawItems();
   }
 
   $('#btn-chooser-reset').addEventListener('click', function () {
