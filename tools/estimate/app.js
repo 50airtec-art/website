@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609052304';
+  var APP_VERSION = '202609060003';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -3778,9 +3778,21 @@
     var box = $('#chooser-options');
     if (!box) return;
     box.innerHTML = '';
-    if (!optStore || !window.KUCHOO_CATALOG || !KUCHOO_CATALOG.optionsFor) return;
+    if (!optStores.length || !window.KUCHOO_CATALOG || !KUCHOO_CATALOG.optionsFor) return;
 
-    var list = KUCHOO_CATALOG.optionsFor(optStore, x);
+    /* そのメーカーの別売品だけを見る。
+       ダイキンの機種にパナソニックのパネルを出してはいけない。 */
+    var same = function (a, b) {
+      if (!a || !b) return false;
+      return String(a).indexOf(String(b)) >= 0 || String(b).indexOf(String(a)) >= 0;
+    };
+    var list = [];
+    optStores.forEach(function (s) {
+      if (x.mk && s.maker && !same(x.mk, s.maker)) return;
+      KUCHOO_CATALOG.optionsFor(s, x).forEach(function (o) {
+        list.push({ code: o.code, name: o.name, y: o.y, fits: o.fits, maker: s.maker });
+      });
+    });
     if (!list.length) return;
 
     var head = el('div', 'opt-head');
@@ -3802,7 +3814,7 @@
       b.appendChild(el('em', null, yen(o.y)));
       b.addEventListener('click', function () {
         var line = {
-          name: (optStore.maker || '') + '　' + (o.name || o.code),
+          name: (o.maker || '') + '　' + (o.name || o.code),
           spec: o.code,
           listPrice: o.y,
           qty: 1,
@@ -3966,10 +3978,15 @@
   /* ----------------------------------------------------------------------
      別売品（どの室内機に付くかの情報つき）
      ---------------------------------------------------------------------- */
-  var optStore = null;
+  // メーカーごとに持つ（機種データと同じ）。1つしか持てないと、
+  // 2社目を入れたとたん1社目が消える
+  var optStores = [];
 
   function loadOptions() {
-    optStore = load(KEY_OPT, null);
+    var raw = load(KEY_OPT, null);
+    if (raw && raw.stores) optStores = raw.stores;
+    else if (raw && raw.items) optStores = [raw];      // 前の形（1社だけ）も読めるように
+    else optStores = [];
     renderOptionsStatus();
   }
 
@@ -3977,34 +3994,43 @@
     var box = $('#options-status');
     if (!box) return;
     box.innerHTML = '';
-    if (!optStore || !optStore.items || !optStore.items.length) {
-      box.textContent = 'まだ読み込まれていません。';
-      return;
-    }
-    var row = el('div', 'models-row');
-    row.appendChild(el('b', null, optStore.maker + '　' + (optStore.brand || '別売品')));
-    row.appendChild(el('span', 'models-num', optStore.items.length + '品目'));
-    if (optStore.fetched) row.appendChild(el('span', null, '取得日 ' + optStore.fetched));
-    var del = el('button', 'icon-btn', '✕');
-    del.type = 'button';
-    del.title = '別売品のデータを削除';
-    del.addEventListener('click', function () {
-      if (!confirm('別売品のデータを削除します。よろしいですか？')) return;
-      removeKey(KEY_OPT);
-      loadOptions();
-      toast('別売品のデータを削除しました');
+    if (!optStores.length) { box.textContent = 'まだ読み込まれていません。'; return; }
+
+    optStores.forEach(function (s, i) {
+      var row = el('div', 'models-row');
+      row.appendChild(el('b', null, s.maker + '　' + (s.brand || '別売品')));
+      row.appendChild(el('span', 'models-num', (s.items || []).length + '品目'));
+      if (s.fetched) row.appendChild(el('span', null, '取得日 ' + s.fetched));
+      var del = el('button', 'icon-btn', '✕');
+      del.type = 'button';
+      del.title = s.maker + ' の別売品だけを削除';
+      del.addEventListener('click', function () {
+        if (!confirm(s.maker + ' の別売品を削除します。よろしいですか？\n（ほかのメーカーは残ります）')) return;
+        var rest = optStores.slice();
+        rest.splice(i, 1);
+        if (rest.length) save(KEY_OPT, { v: 1, stores: rest });
+        else removeKey(KEY_OPT);
+        loadOptions();
+        toast(s.maker + ' の別売品を削除しました');
+      });
+      row.appendChild(del);
+      box.appendChild(row);
     });
-    row.appendChild(del);
-    box.appendChild(row);
   }
 
   function adoptOptions(store, extra) {
-    if (save(KEY_OPT, store) === false) {
+    var stores = optStores.slice();
+    var at = -1;
+    stores.forEach(function (s, i) { if (s.maker === store.maker) at = i; });
+    if (at >= 0) stores[at] = store; else stores.push(store);
+
+    if (save(KEY_OPT, { v: 1, stores: stores }) === false) {
       catalogNote('読み取れましたが、保存できませんでした。端末の空きが足りないかもしれません。', 'ng');
       return;
     }
     loadOptions();
     catalogNote(store.items.length + '品目の別売品を読み取りました。' + (extra || '') +
+                (at >= 0 ? '（入れ替え）' : '') +
                 '\n機器を選ぶと、その機種に付く別売品が下に出ます。', 'ok');
     toast(store.items.length + '品目を入れました');
   }
