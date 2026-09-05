@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609060047';
+  var APP_VERSION = '202609060446';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -3635,12 +3635,17 @@
   ];
   var chooserSel = {};
 
-  /** いま選ばれている条件に合う機種を返す（stopAt を指定するとそこまでの条件だけで絞る） */
+  /** いま選ばれている条件に合う機種を返す。
+      stopAt を指定すると、**そのステップの条件だけを外して**残り全部で絞る
+      （そのステップの選択肢を出すため）。
+      先の順番でも、すでに選ばれている条件は効かせる。
+      ＝「必要な能力を出す」から馬力を先に決めて来たとき、
+        メーカーやシリーズの件数もその馬力で絞られる。 */
   function chooserMatches(stopAt) {
     if (!models) return [];
-    var limit = stopAt == null ? STEPS.length : stopAt;
     return models.items.filter(function (x) {
-      for (var i = 0; i < limit; i++) {
+      for (var i = 0; i < STEPS.length; i++) {
+        if (stopAt != null && i === stopAt) continue;
         var k = STEPS[i].k;
         if (chooserSel[k] != null && String(x[k]) !== String(chooserSel[k])) return false;
       }
@@ -3765,6 +3770,188 @@
     });
     box.appendChild(res);
   }
+
+  /* ======================================================================
+     必要な能力を出す（用途と広さから馬力の目安）
+     ----------------------------------------------------------------------
+     土台はカタログの「算出基準冷房負荷（W/m²）」。5社のカタログに共通で載っている。
+     （2026-09-06、NotebookLM で5社ぶん確認）
+
+     必要能力[kW] ＝ 面積[m²] × 基準負荷[W/m²] ÷ 1000
+       × 天井の高さの分 × 断熱の分 × 現場の事情の分
+
+     **数字の出どころを分けてある。**
+     ・用途別の基準負荷、断熱の倍率 …… カタログに書いてある
+     ・天井の高さ、西日・厨房などの上乗せ …… カタログに数字が無い。
+       設計の考え方から置いた**目安**なので、最後は人が決める。
+     ====================================================================== */
+  // 5社のカタログに共通で載っている幅を使う（社によってもう少し広い幅を書いているところもある）
+  var SZ_USES = [
+    { name: '一般事務所', lo: 115, hi: 170 },
+    { name: '一般商店', lo: 155, hi: 230 },
+    { name: '喫茶店・理美容室', lo: 230, hi: 290 },
+    { name: 'レストラン・飲食店', lo: 230, hi: 370 }
+  ];
+
+  // カタログの適用面積の倍率をひっくり返したもの（面積が広がる＝能力は小さくてよい）
+  var SZ_INSUL = [
+    { name: '一重窓・断熱材なし（カタログの基準）', k: 1.00 },
+    { name: '標準的な断熱材あり', k: 1 / 1.2 },
+    { name: '高断熱＋二重窓・木造', k: 1 / 1.2 },
+    { name: '高断熱＋二重窓・コンクリート造', k: 1 / 1.5 }
+  ];
+
+  // カタログに数字が無いので、設計の考え方から置いた上乗せ（目安）
+  var SZ_ADDS = [
+    { key: 'west', name: '西日が強く入る', k: 0.10 },
+    { key: 'glass', name: 'ガラス面が大きい', k: 0.10 },
+    { key: 'kitchen', name: '厨房・熱を出す機器がある', k: 0.20 },
+    { key: 'people', name: '人が多い（ピーク時）', k: 0.10 },
+    { key: 'air', name: '外気をたくさん入れる', k: 0.10 }
+  ];
+
+  // 形番号（P40 など）と馬力。能力[kW] は形番号 ÷ 10
+  var SZ_FORMS = [
+    [40, 1.5], [45, 1.8], [50, 2], [56, 2.3], [63, 2.5], [71, 2.8], [80, 3], [90, 3.2],
+    [112, 4], [140, 5], [160, 6], [180, 7], [224, 8], [280, 10], [335, 12], [400, 14],
+    [450, 16], [500, 18], [560, 20]
+  ];
+
+  function szFormFor(kw) {
+    for (var i = 0; i < SZ_FORMS.length; i++) {
+      if (SZ_FORMS[i][0] / 10 >= kw - 0.001) return SZ_FORMS[i];
+    }
+    return SZ_FORMS[SZ_FORMS.length - 1];
+  }
+
+  function initSizer() {
+    var use = $('#sz-use'), insul = $('#sz-insul'), checks = $('#sz-checks');
+    if (!use || !insul || !checks) return;
+
+    SZ_USES.forEach(function (u, i) {
+      var o = document.createElement('option');
+      o.value = String(i); o.textContent = u.name + '（' + u.lo + '〜' + u.hi + ' W/m²）';
+      use.appendChild(o);
+    });
+    SZ_INSUL.forEach(function (v, i) {
+      var o = document.createElement('option');
+      o.value = String(i); o.textContent = v.name;
+      insul.appendChild(o);
+    });
+    SZ_ADDS.forEach(function (a) {
+      var lab = el('label', 'sz-check');
+      var cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.id = 'sz-' + a.key;
+      lab.appendChild(cb);
+      lab.appendChild(el('span', null, a.name));
+      cb.addEventListener('change', drawSizer);
+      checks.appendChild(lab);
+    });
+
+    ['#sz-use', '#sz-area', '#sz-unit', '#sz-height', '#sz-insul'].forEach(function (sel) {
+      var e = $(sel);
+      if (e) e.addEventListener('input', drawSizer);
+      if (e) e.addEventListener('change', drawSizer);
+    });
+    $('#btn-sizer-clear').addEventListener('click', function () {
+      $('#sz-area').value = '';
+      $('#sz-height').value = '2.7';
+      $('#sz-use').selectedIndex = 0;
+      $('#sz-insul').selectedIndex = 0;
+      SZ_ADDS.forEach(function (a) { var c = $('#sz-' + a.key); if (c) c.checked = false; });
+      drawSizer();
+    });
+    drawSizer();
+  }
+
+  function drawSizer() {
+    var box = $('#sz-result');
+    if (!box) return;
+    box.innerHTML = '';
+
+    var area = num($('#sz-area').value);
+    if ($('#sz-unit').value === 'tsubo') area = area * 3.3058;   // 坪→m²
+    if (!area) { box.appendChild(el('div', 'sz-empty', '広さを入れると、必要な能力の目安が出ます。')); return; }
+
+    var u = SZ_USES[Number($('#sz-use').value) || 0];
+    var ins = SZ_INSUL[Number($('#sz-insul').value) || 0];
+    var h = num($('#sz-height').value) || 2.7;
+
+    // 天井が高いと部屋の容積が増える。2.7mを1.0として容積の比で見る（カタログに数字は無い）
+    var hk = Math.max(1, h / 2.7);
+
+    var addK = 1, addNames = [];
+    SZ_ADDS.forEach(function (a) {
+      var c = $('#sz-' + a.key);
+      if (c && c.checked) { addK += a.k; addNames.push(a.name); }
+    });
+
+    var lo = area * u.lo / 1000 * ins.k * hk * addK;
+    var hi = area * u.hi / 1000 * ins.k * hk * addK;
+    // 真ん中の負荷で選ぶ。上限で選ぶと過大になり、下限では足りない
+    var mid = (lo + hi) / 2;
+    var pick = szFormFor(mid);
+    var pickHi = szFormFor(hi);
+
+    var head = el('div', 'sz-head');
+    head.appendChild(el('b', null, '必要な能力の目安　' + mid.toFixed(1) + ' kW'));
+    head.appendChild(el('span', 'sz-range', '（' + lo.toFixed(1) + '〜' + hi.toFixed(1) + ' kW の幅）'));
+    box.appendChild(head);
+
+    var rec = el('div', 'sz-pick');
+    rec.appendChild(el('b', null, 'P' + pick[0] + '形（' + pick[1] + '馬力・' + (pick[0] / 10).toFixed(1) + 'kW）'));
+    if (pickHi[0] !== pick[0]) {
+      rec.appendChild(el('span', null, '　※負荷が重いほうに振れるなら P' + pickHi[0] + '形（' + pickHi[1] + '馬力）'));
+    }
+    box.appendChild(rec);
+
+    var why = el('div', 'sz-why');
+    why.appendChild(el('span', null, '広さ ' + area.toFixed(1) + ' m² × ' + u.lo + '〜' + u.hi + ' W/m²'));
+    if (ins.k !== 1) why.appendChild(el('span', null, '／断熱 ×' + ins.k.toFixed(2)));
+    if (hk > 1) why.appendChild(el('span', null, '／天井 ' + h + 'm ×' + hk.toFixed(2)));
+    if (addNames.length) why.appendChild(el('span', null, '／' + addNames.join('・') + ' ×' + addK.toFixed(2)));
+    box.appendChild(why);
+
+    // 機種データがあれば、その能力に合う機種の数を出す
+    if (models && models.items && models.items.length) {
+      /* 形はメーカーによって無いものがある（ダイキンに90形は無い）。
+         推奨した形が無ければ、1つずつ上の形を探す */
+      var formOf = function (x) {
+        var m = String(x.ab || '').match(/(\d{2,3})\s*[形型]/);
+        return m ? Number(m[1]) : 0;
+      };
+      var need = pick[0], hp = pick[1], hit = [];
+      for (var fi = 0; fi < SZ_FORMS.length; fi++) {
+        if (SZ_FORMS[fi][0] < pick[0]) continue;
+        need = SZ_FORMS[fi][0];
+        hp = SZ_FORMS[fi][1];
+        hit = models.items.filter(function (x) { return formOf(x) === need; });
+        if (hit.length) break;
+      }
+      if (hit.length) {
+        if (need !== pick[0]) {
+          box.appendChild(el('div', 'sz-why', 'P' + pick[0] + '形は入っている機種データに無いので、1つ上の P' + need + '形（' + hp + '馬力）で探します。'));
+        }
+        var go = el('button', 'btn btn-ghost btn-sm', 'この馬力（' + hp + '馬力）で機器を選ぶ　' + hit.length + '件');
+        go.type = 'button';
+        go.addEventListener('click', function () {
+          chooserSel = { hp: hp };
+          renderChooser();
+          var c = $('#chooser');
+          if (c) c.scrollIntoView({ block: 'start' });
+        });
+        box.appendChild(go);
+      }
+    }
+
+    var note = el('div', 'sz-note');
+    note.appendChild(el('span', null,
+      '用途の負荷と断熱の倍率はカタログの数字です。天井の高さと上のチェックは、' +
+      'カタログに数字が無いので設計の考え方から置いた目安です。最後は現場を見て決めてください。'));
+    box.appendChild(note);
+  }
+
+  initSizer();
 
   /* ----------------------------------------------------------------------
      選んだ機種に付けられる別売品を出す

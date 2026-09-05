@@ -432,12 +432,14 @@ ol.catalog-howto li { margin: 2px 0; }
   .mrow-head { display: none; }
   .csv-row { flex-direction: column; align-items: stretch; }
   .csv-row .f { min-width: 0; }
+  .sizer-form { grid-template-columns: repeat(2, 1fr); }
   .wrap { padding-bottom: 140px; }
   .totals { max-width: none; }
 }
 @media (max-width: 480px) {
   .grid { grid-template-columns: 1fr; }
   .f-wide { grid-column: span 1; }
+  .sizer-form { grid-template-columns: 1fr; }
   .actionbar { justify-content: stretch; }
   .actionbar .btn { flex: 1; padding: 10px 6px; }
 }
@@ -829,3 +831,26 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
 }
 .opt-head .models-num { color: var(--text-sub); font-size: 12px; }
 .opt-head .icon-btn { margin-left: auto; }
+
+/* ---------- 必要な能力を出す ---------- */
+.sizer { border-color: #d7e3f0; background: #f7fafd; }
+.sizer-note { font-size: 11px; color: var(--text-light); }
+.picker-head .sizer-note { margin-left: 4px; }
+.sizer-form { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 10px; }
+.sizer-form .f-row { display: flex; gap: 6px; }
+.sizer-form .f-row input { flex: 1 1 auto; min-width: 0; }
+.sizer-form .f-row select { flex: 0 0 auto; width: auto; background: #fff; }
+.sizer-form select, .sizer-form input { background: #fff; }
+.sizer-checks { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 10px; }
+.sz-check { display: flex; align-items: center; gap: 5px; font-size: 13px; cursor: pointer; }
+.sz-check input { width: auto; }
+.sizer-result { border-top: 1px solid var(--border); padding-top: 10px; }
+.sz-empty { font-size: 13px; color: var(--text-light); }
+.sz-head { font-size: 16px; margin-bottom: 4px; }
+.sz-pick { font-size: 14px; color: var(--accent); margin-bottom: 6px; }
+.sz-pick span { color: var(--text-sub); font-size: 12px; font-weight: normal; }
+.sz-why { font-size: 12px; color: var(--text-sub); line-height: 1.8; margin-bottom: 8px; }
+.sz-note { font-size: 11.5px; color: var(--text-light); line-height: 1.7; margin-top: 8px; }
+
+
+.sz-range { font-size: 12px; color: var(--text-sub); font-weight: normal; margin-left: 8px; }
