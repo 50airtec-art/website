@@ -854,3 +854,11 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
 
 
 .sz-range { font-size: 12px; color: var(--text-sub); font-weight: normal; margin-left: 8px; }
+
+/* ---------- 現調シートの中の機種選定 ---------- */
+.sz-sec > summary { font-weight: 700; color: var(--accent); }
+.sz-body { padding: 4px 2px 2px; }
+.sz-body .sizer-form { margin-bottom: 10px; }
+.sz-body .sizer-checks { margin-bottom: 8px; }
+.sz-body .sizer-result { margin-top: 10px; }
+.sz-body .btn { margin-top: 2px; }

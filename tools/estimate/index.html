@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>空調王</title>
-<link rel="stylesheet" href="style.css?v=202609060446">
+<link rel="stylesheet" href="style.css?v=202609060700">
 </head>
 <body>
 
@@ -95,28 +95,6 @@
           </div>
           <div class="picker-cats" id="picker-cats"></div>
           <div class="picker-items" id="picker-items"></div>
-        </div>
-
-        <!-- 必要な能力を出す（用途と広さから馬力の目安を出す） -->
-        <div class="picker sizer" id="sizer">
-          <div class="picker-head">
-            <span class="picker-label">必要な能力を出す</span>
-            <span class="sizer-note">カタログの「算出基準冷房負荷」が土台です</span>
-            <button class="btn btn-ghost btn-sm" id="btn-sizer-clear" type="button">消す</button>
-          </div>
-          <div class="sizer-form">
-            <label class="f"><span>用途</span><select id="sz-use"></select></label>
-            <label class="f"><span>広さ</span>
-              <div class="f-row">
-                <input type="number" id="sz-area" min="0" step="0.1" placeholder="60">
-                <select id="sz-unit"><option value="m2">m²</option><option value="tsubo">坪</option></select>
-              </div>
-            </label>
-            <label class="f"><span>天井の高さ（m）</span><input type="number" id="sz-height" min="1.8" max="8" step="0.1" value="2.7"></label>
-            <label class="f"><span>建物・断熱</span><select id="sz-insul"></select></label>
-          </div>
-          <div class="sizer-checks" id="sz-checks"></div>
-          <div class="sizer-result" id="sz-result"></div>
         </div>
 
         <!-- 機器を選ぶ（メーカーの機種データから絞り込んで明細に入れる） -->
@@ -539,11 +517,11 @@
   </div>
 </div>
 
-<script src="pricebook.js?v=202609060446"></script>
-<script src="survey.js?v=202609060446"></script>
-<script src="firebase-config.js?v=202609060446"></script>
-<script src="catalog.js?v=202609060446"></script>
-<script src="app.js?v=202609060446"></script>
-<script src="sync.js?v=202609060446"></script>
+<script src="pricebook.js?v=202609060700"></script>
+<script src="survey.js?v=202609060700"></script>
+<script src="firebase-config.js?v=202609060700"></script>
+<script src="catalog.js?v=202609060700"></script>
+<script src="app.js?v=202609060700"></script>
+<script src="sync.js?v=202609060700"></script>
 </body>
 </html>
