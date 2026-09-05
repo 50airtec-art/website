@@ -805,15 +805,19 @@
     return cols.sort(function (a, b) { return a.x - b.x; });
   }
 
-  function optPage(items, page, out) {
-    var rows = optRows(items);
-    var cols0 = optColumns(rows);
-    var common = !cols0.length;      // 列見出しの無いページは「各機種共通の別売品」
-    var cols = common ? [{ x: 300, heads: [OPT_COMMON], y: -1e9 }] : cols0;
-    var headY = common ? 1e9 : Math.max.apply(null, cols.map(function (k) { return k.y; }));
-    var leftEnd = common ? 300 : cols[0].x - 20;
+  /* --------------------------------------------------------------------
+     品名を組み立てる道具（5社で共通に使う）
 
-    // 隙間で細かく切る（列を探すための下ごしらえ）
+     品名は左側に「大分類 ｜ 品名 ｜ 色」のように縦の列で並ぶ。
+     しかも表のマスが縦につながっていて、**品名の文字がその行より下に
+     置かれていることがある**（マスの中央に置かれるため）。
+     だから「上の行から引き継ぐ」では取れない。
+
+     ① 隙間で細かく切って、始まりの x を数え、列の位置を決める
+     ② 断片を列に割り当て、同じ列のものはつなげる
+     ③ 行ごとに、列（帯）ごとの「いちばん近い文字」を拾ってつなげる
+     -------------------------------------------------------------------- */
+  function nameReader(rows, leftEnd, headY, mode) {
     function chops(cells) {
       var seg = [], cur = null;
       cells.filter(function (o) { return o.x < leftEnd; })
@@ -825,7 +829,6 @@
       return seg;
     }
 
-    // 表の縦の仕切りを決める。隙間だけで切ると隣の列の言葉までつながる
     var hist = {};
     rows.forEach(function (r) {
       if (r.y >= headY - 2) return;
@@ -849,7 +852,7 @@
         byCol[key] = (byCol[key] || '') + s.s;
       });
       return Object.keys(byCol).map(Number).sort(function (a, b) { return a - b; })
-        .map(function (x) { return { x: x, s: byCol[x].replace(/注[\d,]+/g, '').trim() }; })
+        .map(function (x) { return { x: x, s: byCol[x].replace(/注[\d,]+/g, '').replace(/※\d+/g, '').trim() }; })
         .filter(function (o) { return isJa(o.s) && o.s.length >= 2; });
     }
 
@@ -865,17 +868,19 @@
     });
     bands.sort(function (a, b) { return a.x - b.x; });
 
-    /** その行の高さに、いちばん近い見出しを帯ごとに集めて品名にする */
-    function nameAt(y) {
+    // mode が above のときは「その行より上」に置かれた見出しだけを見る。
+    // 品名をマスの上端に書く社（パナソニック）は、これでないと1行ずれる。
+    return function (y) {
       var parts = [];
       bands.forEach(function (b) {
         var best = null, bd = 1e9;
         b.at.forEach(function (l) {
           if (!l.s || l.s.length < 2) return;
+          if (mode === 'above' && l.y < y - 2) return;
           var d = Math.abs(l.y - y);
           if (d < bd) { bd = d; best = l; }
         });
-        if (best && bd <= 30) parts.push(best.s);
+        if (best && bd <= (mode === 'above' ? 60 : 30)) parts.push(best.s);
       });
       var uniq = [];
       parts.forEach(function (s) {
@@ -884,16 +889,31 @@
         if (!dup) uniq.push(s);
       });
       return uniq.join(' ')
+        .replace(/[①-⑳]/g, ' ')     // 紙面の丸数字（①②③…）は品名ではない
+        .replace(/[（(]\s*注\s*[\d,\s]+\s*[）)]?/g, ' ')   // （注 2 ）のような注記番号
+        .replace(/^品名\s*/, '')                          // 見出しの「品名」を拾うことがある
         .replace(/(FIVE\s*STAR\s*ZEAS|Eco-?ZEAS|スゴ暖\s*ZEAS)\s*シリーズ(のみ)?に?適用?/g, ' ')
         .replace(/(FIVE\s*STAR\s*ZEAS|Eco-?ZEAS)\s*(および|シリーズ)?/g, ' ')
-        .replace(/[\d,]{3,}\s*円?/g, ' ')          // 金額が品名に紛れ込むことがある
-        .replace(/\b[A-Z][A-Z0-9\-]{3,}\b/g, ' ')  // 品番も同じ
+        .replace(/[\d,]{3,}\s*円?/g, ' ')
+        .replace(/\b[A-Z][A-Z0-9\-]{3,}\b/g, ' ')
         .replace(/適用機種/g, ' ')
         .replace(/[ -]/g, ' ')
         .replace(/^[・、。\s]+|[・、。\s]+$/g, '')
         .replace(/\s+/g, ' ')
         .trim();
-    }
+    };
+  }
+
+  function optPage(items, page, out) {
+    var rows = optRows(items);
+    var cols0 = optColumns(rows);
+    var common = !cols0.length;      // 列見出しの無いページは「各機種共通の別売品」
+    var cols = common ? [{ x: 300, heads: [OPT_COMMON], y: -1e9 }] : cols0;
+    var headY = common ? 1e9 : Math.max.apply(null, cols.map(function (k) { return k.y; }));
+    var leftEnd = common ? 300 : cols[0].x - 20;
+
+    // 品名は5社で同じ作りなので、共通の道具で組み立てる
+    var nameAt = nameReader(rows, leftEnd, headY);
 
     rows.forEach(function (r) {
       if (r.y >= headY - 2) return;
@@ -918,8 +938,450 @@
         var col = null, bd = 1e9;
         cols.forEach(function (k) { var d = Math.abs(k.x - mk.x); if (d < bd) { bd = d; col = k; } });
         if (!col || bd > 120) return;
-        out.push({ page: page, name: name, code: mk.code, y: mk.yen, fits: col.heads.slice() });
+        var fits = col.heads.map(function (h) { return h === OPT_COMMON ? { all: true } : { im: h }; });
+        out.push({ page: page, name: name, code: mk.code, y: mk.yen, fits: fits });
       });
+    });
+  }
+
+  /* --------------------------------------------------------------------
+     パナソニックの別売品
+     ダイキンと違い、**「適用室内ユニット」という列が1つ**ある。
+       品名 ｜ 適用室内ユニット ｜ 品番 ｜ 希望小売価格
+       天井パネル 標準パネル ホワイト ｜ 全機種 ｜ CZ-160KPU7C ｜ 71,000円
+       自然気化式加湿器            ｜ P40〜P80 ｜ CZ-07ASU7 ｜ 141,000円
+     どの機種タイプの表かは、ページの端に縦書きで書いてある（「４方向天井カセット形」）。
+     -------------------------------------------------------------------- */
+  function optPagePana(items, page, out, opt, ctx) {
+    opt = opt || {};
+    var codeWord = opt.codeWord || /品番|部品形名/;
+    var priceWord = opt.priceWord || /希望小売価格|価格/;
+    var types = opt.types || null;
+    var rows = optRows(items);
+
+    var head = null;
+    rows.forEach(function (r) {
+      if (head) return;
+      var t = r.cells.map(function (o) { return o.s; }).join('');
+      if (/適用室内ユニット/.test(t) && codeWord.test(t)) head = r;
+    });
+    if (!head) return;
+
+    var xOf = function (word) {
+      var x = null;
+      head.cells.forEach(function (c) { if (x === null && c.s.indexOf(word) >= 0) x = c.x; });
+      return x;
+    };
+    // 見出しのマスが「適用室内ユニッ」「ト」のように割れることがあるので、頭の数文字で探す
+    var xFit = xOf('適用室内');
+    var xCode = null, xPrice = null;
+    head.cells.forEach(function (c) {
+      if (xCode === null && codeWord.test(c.s)) xCode = c.x;
+      if (xPrice === null && priceWord.test(c.s) && c.s.indexOf('適用') < 0) xPrice = c.x;
+    });
+    if (xFit == null || xCode == null) return;
+    if (xPrice == null) xPrice = xCode + 80;
+
+    // ページの端の縦書きが、その表の機種タイプ
+    var type = '';
+    items.forEach(function (o) {
+      if (o.x > xPrice + 30 && /形$/.test(o.s) && o.s.length >= 4 && isJa(o.s)) type = o.s;
+    });
+    // 機種データのページ番号から決めるのがいちばん確か（紙面に書いていない社があるため）
+    if (ctx && ctx.pageTypes) {
+      var byPage = typeAtPage(ctx.pageTypes, page);
+      if (byPage) type = byPage;
+    }
+    if (!type && types) {
+      // ページのどこかに書いてある機種タイプを拾う（キヤリアは端の縦書きが無い）
+      var flat = items.map(function (o) { return o.s; }).join('').replace(/s/g, '');
+      types.forEach(function (t) { if (!type && flat.indexOf(t.replace(/s/g, '')) >= 0) type = t; });
+    }
+
+    // 品名は「大分類 ｜ 品名 ｜ 色」の縦の列。色だけの行でも品名を拾えるようにする
+    var nameAt = nameReader(rows, xFit - 25, head.y, 'above');
+
+    rows.forEach(function (r) {
+      if (r.y >= head.y - 2) return;
+
+      var code = '', price = 0, fitTxt = '';
+      r.cells.forEach(function (c) {
+        var s = c.s.trim();
+        if (Math.abs(c.x - xCode) < 40 && OPT_CODE.test(s)) code = s;
+        if (c.x >= xFit - 25 && c.x < xCode - 15) fitTxt += s;
+        if (c.x >= xPrice - 25) { var m = s.match(OPT_MONEY); if (m && !price) price = yen(m[1]); }
+      });
+      var nm = nameAt(r.y);
+      if (!code || !price) return;
+
+      var fit;
+      if (/全機種/.test(fitTxt)) fit = type ? { type: type } : { all: true };
+      else {
+        var cr = capRange(fitTxt);
+        fit = cr ? (type ? { type: type, cap: cr } : { cap: cr }) : (type ? { type: type } : { all: true });
+      }
+      out.push({ page: page, name: nm, code: code, y: price, fits: [fit] });
+    });
+  }
+
+  /* --------------------------------------------------------------------
+     日本キヤリアの別売品
+     **列の見出しがシリーズ**で、マスに入っているのは「能力ランク」。
+       別売部品 ｜ ウルトラパワーエコ ｜ スーパーパワーエコゴールド ｜ … ｜ 部品形名 ｜ 希望小売価格
+       吹出ガイド ｜ P40形〜P50形 ｜ P40形〜P63形 ｜ … ｜ TCB-G50 ｜ ¥14,000
+     「―」はそのシリーズには付かない印。
+     シリーズ名は2行に割れて書かれている（「ウルトラ」＋「パワーエコ®」）ので、
+     見出しのまわり数行を x でまとめてから読む。
+     -------------------------------------------------------------------- */
+  function optPageCarrier(items, page, out) {
+    var rows = optRows(items);
+
+    // 見出し行（「部品形名」がある行）
+    var head = null;
+    rows.forEach(function (r) {
+      if (head) return;
+      var t = r.cells.map(function (o) { return o.s; }).join('');
+      if (/部品形名/.test(t)) head = r;
+    });
+    if (!head) return;
+
+    var xCode = null, xPrice = null;
+    head.cells.forEach(function (c) {
+      if (xCode === null && c.s.indexOf('部品形名') >= 0) xCode = c.x;
+      if (c.s.indexOf('希望小売価格') >= 0) xPrice = c.x;
+    });
+    if (xCode === null) return;
+    if (xPrice === null) xPrice = xCode + 70;
+
+    // シリーズの列。見出しの上下3行ぶんの日本語を x でまとめる
+    var band = {};
+    rows.forEach(function (r) {
+      if (Math.abs(r.y - head.y) > 16) return;
+      r.cells.forEach(function (c) {
+        if (c.x >= xCode - 20 || !isJa(c.s)) return;
+        if (/別売部品|適用|能力ランク|希望小売|税別|部品形名|標準|オプション|価格|形名|注|※/.test(c.s)) return;
+        var key = null;
+        Object.keys(band).forEach(function (k) { if (key === null && Math.abs(Number(k) - c.x) < 30) key = k; });
+        if (key === null) { band[c.x] = { x: c.x, s: c.s }; }
+        else { band[key].s += c.s; band[key].x = Math.min(band[key].x, c.x); }
+      });
+    });
+    /* 列の見出しは**シリーズ名**。キヤリアのシリーズは4つと決まっているので、
+       それに合うものだけを列と認める。
+       ゆるくすると注釈文（「音が大きく感じられる場合があります」など）を
+       シリーズとして拾ってしまう。 */
+    var known = [];
+    Object.keys(CARRIER_SERIES).forEach(function (k) { known.push(CARRIER_SERIES[k]); });
+    var cols = Object.keys(band).map(function (k) { return band[k]; })
+      .map(function (b) {
+        var raw = b.s.replace(/[®™\s]/g, '').replace(/［.*?］|\[.*?\]/g, '');
+        var hit = '';
+        known.forEach(function (s) { if (!hit && looseSame(s, raw)) hit = s; });
+        return { x: b.x, series: hit };
+      })
+      .filter(function (b) { return b.series; })
+      .sort(function (a, b) { return a.x - b.x; });
+    if (!cols.length) return;
+
+    var leftEnd = cols[0].x - 20;
+    var nameAt = nameReader(rows, leftEnd, head.y);
+
+    rows.forEach(function (r) {
+      if (r.y >= head.y - 20) return;
+
+      var code = '', price = 0;
+      r.cells.forEach(function (c) {
+        var s = c.s.trim();
+        if (c.x >= xCode - 25 && c.x < xPrice - 20 && OPT_CODE.test(s) && !code) code = s;
+        if (c.x >= xPrice - 30) { var m = s.match(OPT_MONEY); if (m && !price) price = yen(m[1]); }
+      });
+      if (!code || !price) return;
+
+      // シリーズごとに、そのマスの能力ランクを読む
+      var fits = [];
+      cols.forEach(function (col, i) {
+        var lo = col.x - 18;
+        var hi = (i === cols.length - 1) ? xCode - 25 : cols[i + 1].x - 18;
+        var txt = '', dash = false;
+        r.cells.forEach(function (c) {
+          if (c.x < lo || c.x >= hi) return;
+          if (OPT_DASH.test(c.s.trim())) { dash = true; return; }
+          txt += c.s;
+        });
+        if (dash || !txt) return;
+        var cr = capRange(txt);
+        if (cr) fits.push({ series: col.series, cap: cr });
+      });
+      if (!fits.length) return;
+
+      out.push({ page: page, name: nameAt(r.y), code: code, y: price, fits: fits });
+    });
+  }
+
+  /* --------------------------------------------------------------------
+     日立の別売品（オプション一覧）
+       ■ オプション一覧（ てんかせ 4方向）        ← ページの機種タイプ
+       容量・型名（相当馬力）｜ 28型〜71型 ｜ 80型〜160型   ← 列＝容量の範囲
+       品名 ｜ 基本パネル ｜ デザインパネル ｜ …
+       高性能フィルター … F-71M-K3 24,300円 ｜ F-160M-K3 31,200円
+
+     列の容量範囲は「本体の筐体サイズ」で決まっている（NotebookLM でも確認）。
+     その列の品番は、その容量範囲の機種に付く。
+     -------------------------------------------------------------------- */
+  function optPageHitachi(items, page, out) {
+    var rows = optRows(items);
+
+    var type = '';
+    rows.forEach(function (r) {
+      if (type) return;
+      var t = r.cells.map(function (o) { return o.s; }).join('').replace(/\s/g, '');
+      var m = t.match(/オプション一覧[（(]([^）)]{2,20})[）)]/);
+      if (m) type = m[1];
+    });
+    if (!type) return;
+
+    var head = null;
+    rows.forEach(function (r) {
+      if (head) return;
+      var t = r.cells.map(function (o) { return o.s; }).join('').replace(/\s/g, '');
+      if (/容量[・･]型名/.test(t)) head = r;
+    });
+    if (!head) return;
+
+    // 見出しの行を x のすき間で切って、列（容量の範囲）にする
+    var cols = [], cur = null;
+    head.cells.forEach(function (c) {
+      if (/容量|型名|相当馬力/.test(c.s)) return;
+      if (!cur || c.x - cur.right > 60) { cur = { x: c.x, right: c.x, s: c.s }; cols.push(cur); }
+      else { cur.s += c.s; cur.right = c.x; }
+    });
+    cols = cols.map(function (c) { return { x: c.x, cap: capRange(c.s) }; })
+      .filter(function (c) { return c.cap; });
+    if (!cols.length) return;
+
+    var nameAt = nameReader(rows, cols[0].x - 20, head.y);
+
+    rows.forEach(function (r) {
+      if (r.y >= head.y - 2) return;
+      var name = nameAt(r.y);
+
+      r.cells.forEach(function (o, i) {
+        var s = o.s.trim();
+        if (!OPT_CODE.test(s)) return;
+        var price = 0;
+        for (var j = i + 1; j < r.cells.length; j++) {
+          var t = r.cells[j].s.trim();
+          if (OPT_CODE.test(t)) break;
+          var mm = t.match(OPT_MONEY);
+          if (mm) { price = yen(mm[1]); break; }
+        }
+        if (!price) return;
+        var col = null, bd = 1e9;
+        cols.forEach(function (k) { var d = Math.abs(k.x - o.x); if (d < bd) { bd = d; col = k; } });
+        if (!col || bd > 110) return;
+        out.push({ page: page, name: name, code: s, y: price, fits: [{ type: type, cap: col.cap }] });
+      });
+    });
+  }
+
+  /* --------------------------------------------------------------------
+     三菱電機の別売品
+     ほかの4社と違い、**別売品だけの表が無い**。
+     セット価格のページに、その機種の構成品として書かれている。
+
+       1方向天井カセット形                    ← ページの機種タイプ
+       P40形（1.5馬力） ｜ P45形 ｜ P50形 ｜ P56形   ← 4段組み
+       セット価格 1,064,000円
+       室内：PM-RP40FA22 352,000円
+       室外：PUZ-ERMP40SKA16 599,000円
+       ワイヤードリモコン：PAR-48MA 60,000円
+       ムーブアイセンサーパネル：PMP-P80FWF11 53,000円   ← これが別売品
+
+     「◯◯：品番 金額円」の形なので、ラベルがそのまま品名になる。
+     室内機・室外機は本体なので別売品には入れない。
+     -------------------------------------------------------------------- */
+  function optPageMitsu(items, page, out) {
+    var rows = optRows(items);
+
+    // ページの機種タイプ（いちばん上の日本語）
+    var type = '';
+    var top = rows.slice(0, 3);
+    top.forEach(function (r) {
+      r.cells.forEach(function (c) {
+        if (!type && isJa(c.s) && /形$/.test(c.s.trim()) && c.s.length >= 4) type = c.s.trim();
+      });
+    });
+    if (!type) return;
+
+    // 「セット価格」の x で段を割る
+    var xs = [];
+    items.forEach(function (i) { if (/セット/.test(i.s)) xs.push(i.x); });
+    if (xs.length < 2) return;
+    xs.sort(function (a, b) { return a - b; });
+    var st = [];
+    xs.forEach(function (x) { if (!st.length || x - st[st.length - 1] > 60) st.push(x); });
+
+    st.forEach(function (s, i) {
+      var lo = s - 62;
+      var hi = (i === st.length - 1) ? 1e9 : st[i + 1] - 62;
+
+      // その段の容量（P40形 など）
+      var cap = 0;
+      rows.forEach(function (r) {
+        if (cap) return;
+        var t = r.cells.filter(function (c) { return c.x >= lo && c.x < hi; })
+          .map(function (c) { return c.s; }).join('');
+        var m = t.match(/P(\d{2,3})\s*形/);
+        if (m) cap = Number(m[1]);
+      });
+      if (!cap) return;
+
+      rows.forEach(function (r) {
+        // **文字をつなげない。** つなげると「PLP-P160HWF」＋「74,000」が
+        // 「PLP-P160HWF7」＋「4,000」に化ける（ダイキンで踏んだのと同じ落とし穴）
+        var cells = r.cells.filter(function (c) { return c.x >= lo && c.x < hi; });
+        // 別売品の行は必ず「ラベル：品番 金額円」の形。
+        // 「：」が無い行を通すと、室外機の品番の切れ端（KA16 など）を拾ってしまう
+        var hasColon = false;
+        cells.forEach(function (c) { if (/[：:]/.test(c.s)) hasColon = true; });
+        if (!hasColon) return;
+
+        // 三菱の別売品の品番は必ず「英字3〜4文字＋ハイフン」で始まる（25種すべてで確認）。
+        // ハイフンを求めないと、室外機の品番の切れ端（KA16 など）を拾う
+        var MITSU_CODE = /^[A-Z]{2,4}-[A-Z0-9]{3,}$/;
+        var label = '', code = '', price = 0;
+        cells.forEach(function (c) {
+          var s = c.s.trim();
+          if (!code) {
+            if (MITSU_CODE.test(s)) { code = s; return; }
+            if (isJa(s)) label += s;
+            return;
+          }
+          if (!price) {
+            var m = s.match(OPT_MONEY);
+            if (m) price = yen(m[1]);
+          }
+        });
+        label = label.replace(/[：:].*$/, '').replace(/\s/g, '');
+        if (!code || !price || label.length < 2) return;
+        if (/室内|室外|セット価格|合計/.test(label)) return;   // 本体は別売品ではない
+        out.push({
+          page: page, name: label, code: code, y: price,
+          fits: [{ type: type, cap: [cap, cap] }]
+        });
+      });
+    });
+  }
+
+  /* --------------------------------------------------------------------
+     三菱電機の共通別売部品（分配管など・カタログ144ページ）
+
+       共通別売部品オプション
+       分配管（マルチディストリビュータ）
+       ■同時ツイン用（適応機種：P80〜P280形）
+       形名   SDD-50SR9    SDD-50WR9
+       価格   22,000円     27,000円
+       ＊SDD-50SR9（P80〜P160形用）・SDD-50WR9（P224・P280形用）
+
+     **縦並びの表**（形名の行と価格の行が別）なので、x で対応づける。
+     どの台数用か（同時ツイン／トリプル／フォー）は「■◯◯用」の見出しから、
+     容量は注釈の「（P80〜P160形用）」から取る。
+     分配管は同時マルチのときに必ず要る（BIGBOSS 2026-09-05 確認）。
+     -------------------------------------------------------------------- */
+  function optPageMitsuCommon(items, page, out) {
+    var rows = optRows(items);
+    var flat = items.map(function (o) { return o.s; }).join('').replace(/\s/g, '');
+    if (flat.indexOf('共通別売部品') < 0) return;
+
+    // 「＊SDD-50SR9（P80〜P160形用）」のような注釈から、品番ごとの容量を拾う
+    var capOf = {};
+    var re = /([A-Z]{2,4}-[A-Z0-9]{3,})\s*[（(]\s*P?(\d{2,3})\s*[形型]?\s*[～~〜・]\s*P?(\d{2,3})?\s*[形型]/g, m;
+    var joined = items.map(function (o) { return o.s; }).join('');
+    while ((m = re.exec(joined)) !== null) {
+      capOf[m[1]] = [Number(m[2]), Number(m[3] || m[2])];
+    }
+
+    var tp = '';
+    rows.forEach(function (r) {
+      var t = r.cells.map(function (c) { return c.s; }).join('').replace(/\s/g, '');
+
+      // 「■同時ツイン用（適応機種：P80〜P280形）」で、ここから下の表の台数が決まる
+      var h = t.match(/[■●]?(同時[ツトリプルフォーン]{2,6})用/);
+      if (h) tp = h[1];
+
+      // 「形名」で始まる行の品番を拾い、次の「価格」の行と x で突き合わせる
+      if (!/^形\s*名/.test(t.replace(/\s/g, '形名').slice(0, 4)) && t.indexOf('形名') !== 0) return;
+      var codes = r.cells.filter(function (c) { return /^[A-Z]{2,4}-[A-Z0-9]{3,}$/.test(c.s.trim()); });
+      if (!codes.length) return;
+
+      // すぐ下の「価格」の行
+      var idx = rows.indexOf(r), price = null;
+      for (var k = idx + 1; k < Math.min(rows.length, idx + 4); k++) {
+        var tt = rows[k].cells.map(function (c) { return c.s; }).join('');
+        if (tt.indexOf('価') >= 0 && /[\d,]{5,}/.test(tt)) { price = rows[k]; break; }
+      }
+      if (!price) return;
+
+      codes.forEach(function (c) {
+        var best = null, bd = 1e9;
+        price.cells.forEach(function (pc) {
+          if (!OPT_MONEY.test(pc.s.trim())) return;
+          var d = Math.abs(pc.x - c.x);
+          if (d < bd) { bd = d; best = pc; }
+        });
+        // 同じ列（真下）の金額だけを採る。ゆるくすると隣の表の金額を拾う
+        if (!best || bd > 40) return;
+        var code = c.s.trim();
+        var fit = { tp: tp || '同時ツイン' };
+        if (capOf[code]) fit.cap = capOf[code];
+        out.push({ page: page, name: '分配管（マルチディストリビュータ）', code: code, y: yen(best.s), fits: [fit] });
+      });
+    });
+  }
+
+  /* --------------------------------------------------------------------
+     ダイキンの「縦並び」の表（吹出ユニットなど・204〜206ページ）
+
+       品名        ｜ 2.5〜4.0 ｜ 4.0〜6.0 ｜ …      ← 列＝推奨風量
+       フレッシュホワイト ｜ K-DGS4EFF ｜ K-DGS5EFF ｜ …
+       ホワイト        ｜ K-DGS4EWW ｜ K-DGS5EWW ｜ …   ← 色ちがいで品番が5行
+       接続ダクト径     ｜ φ150 ｜ φ150 ｜ …
+       価格          ｜ 31,700円 ｜ 35,700円 ｜ …      ← 価格は1行だけ
+
+     **同じ列の品番は全部同じ価格**。行の中に金額が無いので、
+     ふつうの読み方では1件も取れない（292件を取りこぼしていた）。
+     「価格」の行を見つけて、その上の品番の行と x で突き合わせる。
+
+     2026-09-05、私は「このページには価格が載っていない」と判断した。
+     LMに聞いたら「載っている」と返ってきて、間違いに気づいた。
+     -------------------------------------------------------------------- */
+  function optPageDaikinVert(items, page, out) {
+    var rows = optRows(items);
+
+    rows.forEach(function (r, idx) {
+      var t = r.cells.map(function (c) { return c.s; }).join('').replace(/\s/g, '');
+      if (t.indexOf('価格') !== 0) return;
+      var prices = r.cells.filter(function (c) { return OPT_MONEY.test(c.s.trim()); });
+      if (prices.length < 2) return;
+
+      // その上にある品番の行をさかのぼって集める（色ちがいで何行もある）
+      for (var k = idx - 1; k >= 0 && k >= idx - 8; k--) {
+        var codes = rows[k].cells.filter(function (c) { return OPT_CODE.test(c.s.trim()); });
+        if (!codes.length) continue;
+        var left = codes[0].x - 20;
+        var name = rows[k].cells.filter(function (c) { return c.x < left && isJa(c.s); })
+          .map(function (c) { return c.s; }).join('').replace(/注\d+/g, '').trim();
+
+        codes.forEach(function (c) {
+          var best = null, bd = 1e9;
+          prices.forEach(function (p) { var d = Math.abs(p.x - c.x); if (d < bd) { bd = d; best = p; } });
+          if (!best || bd > 60) return;
+          out.push({
+            page: page, name: name, code: c.s.trim(), y: yen(best.s),
+            fits: [{ all: true }]     // 吹出ユニットは風量で選ぶ共通部材（機種を選ばない）
+          });
+        });
+      }
     });
   }
 
@@ -930,9 +1392,26 @@
       if (!map[o.code]) { map[o.code] = { code: o.code, name: o.name, y: o.y, fits: [] }; order.push(o.code); }
       var v = map[o.code];
       if (!v.name && o.name) v.name = o.name;
-      o.fits.forEach(function (f) { if (v.fits.indexOf(f) < 0) v.fits.push(f); });
+      o.fits.forEach(function (f) {
+        var key = JSON.stringify(f), dup = false;
+        v.fits.forEach(function (g) { if (JSON.stringify(g) === key) dup = true; });
+        if (!dup) v.fits.push(f);
+      });
     });
     return order.map(function (c) { return map[c]; });
+  }
+
+  /** 別売品の読み取り結果を、空調王に渡す形にそろえる */
+  function optResult(list, maker, brand) {
+    return {
+      rows: optFinish(list),
+      pricePages: 0,
+      head: {
+        maker: maker,
+        brand: brand,
+        note: '希望小売価格・税抜。社内利用限定（第三者提供不可）。'
+      }
+    };
   }
 
   /* --------------------------------------------------------------------
@@ -1055,19 +1534,93 @@
       ],
       url: 'https://ec.daikinaircon.com/cgi-bin/ecatalog/bindPDF.cgi?C=CP26016AXX&S=180&E=243&CT=1&CV=1',
       min: 500,
-      readPage: function (items, page) { var out = []; optPage(items, page, out); return out; },
-      finish: function (list) {
-        var rows = optFinish(list);
-        return {
-          rows: rows,
-          pricePages: 0,
-          head: {
-            maker: 'ダイキン',
-            brand: 'スカイエア 別売品',
-            note: '希望小売価格・税抜。社内利用限定（第三者提供不可）。'
-          }
-        };
-      }
+      readPage: function (items, page) {
+        var out = [];
+        optPage(items, page, out);            // 列の見出しが室内機の表
+        optPageDaikinVert(items, page, out); // 品番が縦に並び、価格が下に1行だけの表
+        return out;
+      },
+      finish: function (list) { return optResult(list, 'ダイキン', 'スカイエア 別売品'); }
+    },
+    {
+      id: 'panasonic-opt',
+      name: 'パナソニック（別売品）',
+      catalog: 'オフィス・店舗用エアコン総合カタログ の別売品',
+      size: '236ページ・53MBほど。読み取りに5分ほどかかります。',
+      kind: 'options',
+      layout: true,
+      howto: [
+        '機種データと同じPDFでかまいません',
+        'カタログを開いてPDFを保存し、「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://panasonic.icata.net/iportal/CatalogSearch.do?method=catalogSearchByAnyCategories&volumeID=PEWJ0001&categoryID=353090000',
+      min: 160,
+      readPage: function (items, page, ctx) { var out = []; optPagePana(items, page, out, null, ctx); return out; },
+      finish: function (list) { return optResult(list, 'パナソニック', 'オフィス・店舗用エアコン 別売品'); }
+    },
+    {
+      id: 'carrier-opt',
+      name: '日本キヤリア（別売品）',
+      catalog: '店舗・オフィス用カスタムエアコン の別売品',
+      size: '212ページ・59MBほど。読み取りに4分ほどかかります。',
+      kind: 'options',
+      layout: true,
+      howto: [
+        '機種データと同じPDFでかまいません',
+        'カタログを開いてPDFを保存し、「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://cjc.icata.net/iportal/oc.do?v=CJC00001&d=CJCD01&c=090_90_9999_1&p=1',
+      min: 80,
+      readPage: function (items, page, ctx) {
+        var out = [];
+        // キヤリアは表が2種類ある。室内機用（適用室内ユニット列）と室外機用（列＝シリーズ）
+        optPagePana(items, page, out, {
+          codeWord: /部品形名/, priceWord: /価格/,
+          types: ['天井カセット形4方向', '天井カセット形2方向', '天井カセット形1方向',
+                  '天井吊形', '壁掛形', 'ビルトイン', 'ダクト', '床置形', '厨房用天井吊形']
+        }, ctx);
+        // 室内機用の表が無いページは、室外機用（列＝シリーズ）として読み直す
+        if (!out.length) optPageCarrier(items, page, out);
+        return out;
+      },
+      finish: function (list) { return optResult(list, '日本キヤリア（旧東芝）', '店舗・オフィス用カスタムエアコン 別売品'); }
+    },
+    {
+      id: 'hitachi-opt',
+      name: '日立（別売品）',
+      catalog: '店舗・オフィス用パッケージエアコン総合カタログ の別売品',
+      size: '286ページ・380MBほど。読み取りに6分ほどかかり、そのあいだパソコンが重くなります。',
+      kind: 'options',
+      layout: true,
+      howto: [
+        '機種データと同じPDFでかまいません',
+        '下のリンクからPDFを保存し、「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://www.hitachi-gls.co.jp/catalog/office/book/data/Target.pdf',
+      min: 75,
+      readPage: function (items, page) { var out = []; optPageHitachi(items, page, out); return out; },
+      finish: function (list) { return optResult(list, '日立', '店舗・オフィス用パッケージエアコン 別売品'); }
+    },
+    {
+      id: 'mitsubishi-opt',
+      name: '三菱電機（別売品）',
+      catalog: 'Mr.SLIM 総合カタログ の別売品',
+      size: '136MBほど。読み取りに4分ほどかかります。',
+      kind: 'options',
+      layout: true,
+      howto: [
+        '下のリンクからカタログのPDFを保存する',
+        '保存したPDFを「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://dl.mitsubishielectric.co.jp/dl/ldg/wink/wink_doc/contents/doc/WEB_CATA/S1794CB020E/data/target.pdf',
+      min: 10,
+      readPage: function (items, page) {
+        var out = [];
+        optPageMitsu(items, page, out);          // 機種ページの構成品（パネル・リモコン）
+        optPageMitsuCommon(items, page, out);   // 共通別売部品（分配管など・144ページ）
+        return out;
+      },
+      finish: function (list) { return optResult(list, '三菱電機', 'Mr.SLIM 別売品'); }
     }
   ];
 
@@ -1150,7 +1703,7 @@
      1ページ読むごとに、その場で機種の塊にしてしまう。
      ページの文字は残さない（286ページぶん残すとメモリを食う）。
      -------------------------------------------------------------------- */
-  function readLayout(file, maker, onProgress) {
+  function readLayout(file, maker, onProgress, ctx) {
     var PP = window.PdfParse && window.PdfParse.PDFParse;
     if (!PP) return Promise.reject(new Error('PDFを読む部品が読み込めませんでした'));
     PP.setWorker('vendor/pdfparse/pdf.worker.mjs?v=' + (window.KUCHOO_APP_VERSION || ''));
@@ -1183,7 +1736,7 @@
                 // w（文字の幅）は別売品の品名を組み立てるときに使う
                 if (i.str) items.push({ s: i.str, x: i.transform[4], y: i.transform[5], w: i.width || 0 });
               });
-              var got = maker.readPage(items, n);
+              var got = maker.readPage(items, n, ctx);
               if (got && got.length) sets.push.apply(sets, got);
               pg.cleanup();
               if (onProgress) onProgress(n, total);
@@ -1266,7 +1819,7 @@
      入口
      run(file, makerId, onProgress) → { pack, count, … }
      -------------------------------------------------------------------- */
-  function run(file, makerId, onProgress) {
+  function run(file, makerId, onProgress, ctx) {
     var maker = null;
     MAKERS.forEach(function (mk) { if (mk.id === makerId) maker = mk; });
     if (!maker) return Promise.reject(new Error('メーカーが選ばれていません'));
@@ -1278,7 +1831,7 @@
     var job = maker.kind === 'json'
       ? readJsonFile(file).then(function (list) { return maker.finish(list); })
       : (maker.layout
-          ? readLayout(file, maker, onProgress).then(function (sets) { return maker.finish(sets); })
+          ? readLayout(file, maker, onProgress, ctx).then(function (sets) { return maker.finish(sets); })
           : readPages(file, maker, onProgress).then(function (pages) { return maker.build(pages); }));
 
     return job.then(function (res) {
@@ -1318,46 +1871,121 @@
     });
   }
 
-  /* --------------------------------------------------------------------
-     別売品が、その室内機に付くかどうかを見分ける
+  /* ====================================================================
+     別売品が、その機種に付くかどうかを見分ける
+     --------------------------------------------------------------------
+     **適用機種の書かれ方は5社で全部ちがう。** 紙面を見て確かめた。
 
-     紙面の見出しは「FHCP40〜71GA」のような**まとめ書き**なので、
-     機種データの室内機品番（FHCP40GA）とそのままでは比べられない。
-     容量のところを開いて比べる。
-     -------------------------------------------------------------------- */
-  var CAPS = [40, 45, 50, 56, 63, 71, 80, 90, 100, 112, 125, 140, 160, 180, 200, 224, 250, 280, 335, 400, 450, 500, 560];
+       ダイキン    列の見出しが室内機の品番（FHCP40〜71GA）
+       パナソニック「適用室内ユニット」列（「全機種」「P40〜P80」）＋ページの機種タイプ
+       日本キヤリア列の見出しがシリーズ、マスが能力ランク（P40形〜P50形）
+       日立        ページの機種タイプ（てんかせ4方向）＋列の見出しが容量（28型〜71型）
 
-  function optFits(head, imCode) {
-    if (!head || !imCode) return false;
-    if (head === OPT_COMMON) return true;               // 各機種共通の別売品
+     そこで、どの社の書き方も次の形に直してから比べる。
+       { all:true }                        …… 全機種に付く
+       { im:'FHCP40～71GA' }               …… 室内機の品番の範囲
+       { type:'てんかせ4方向', cap:[28,71] } …… 機種タイプ＋容量の範囲
+       { series:'ウルトラパワーエコ', cap:[40,50] } …… シリーズ＋容量の範囲
+     ==================================================================== */
+  // 日立には28型・32型など小さいものがある。ここに無い数字は容量とみなさないので、
+  // 抜けていると「28型〜71型」が「71型だけ」になってしまう
+  var CAPS = [20, 22, 25, 28, 32, 36, 40, 45, 50, 56, 63, 71, 80, 90, 100, 112, 125, 140, 160,
+              180, 200, 224, 250, 280, 335, 400, 450, 500, 560];
+
+  /** 機種データの1行から容量（40・112 など）を取る */
+  function capOfModel(x) {
+    if (!x) return 0;
+    var m = String(x.ab || '').match(/(\d{2,3})\s*[形型]/);
+    if (m) return Number(m[1]);
+    m = String(x.im || '').match(/(\d{2,3})/);
+    if (m) return Number(m[1]);
+    m = String(x.m || '').match(/(\d{2,3})/);
+    return m ? Number(m[1]) : 0;
+  }
+
+  /** ゆるく比べる（「てんかせ4方向」と「てんかせ4方向（Jr.除く）」を同じとみなす） */
+  function looseSame(a, b) {
+    if (!a || !b) return false;
+    var s = function (t) {
+      return String(t).replace(/[\s　・（）()［］\[\]【】]/g, '')
+        .replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); });
+    };
+    var x = s(a), y = s(b);
+    return x.indexOf(y) >= 0 || y.indexOf(x) >= 0;
+  }
+
+  /** 室内機の品番のまとめ書き（FHCP40〜71GA）に、その品番が入るか */
+  function imInRange(head, imCode) {
     var h = String(head).replace(/\s/g, '');
-    var im = String(imCode).replace(/\s/g, '').replace(/×\d+$/, '');
+    var im = String(imCode || '').replace(/\s/g, '').replace(/×\d+$/, '');
     var mh = h.match(/^([A-Z]+)([\d～~〜・,、]+)([A-Z]+)$/);
     var mi = im.match(/^([A-Z]+)(\d{2,3})([A-Z]+)$/);
     if (!mh || !mi) return false;
     if (mh[1] !== mi[1] || mh[3] !== mi[3]) return false;
-
-    var cap = Number(mi[2]);
-    var mid = mh[2];
+    var cap = Number(mi[2]), mid = mh[2];
     if (/[～~〜]/.test(mid)) {
       var ab = mid.split(/[～~〜]/);
-      var lo = Number(ab[0]), hi = Number(ab[1]);
-      return cap >= lo && cap <= hi && CAPS.indexOf(cap) >= 0;
+      return cap >= Number(ab[0]) && cap <= Number(ab[1]) && CAPS.indexOf(cap) >= 0;
     }
-    var list = mid.split(/[・,、]/).map(Number);
-    return list.indexOf(cap) >= 0;
+    return mid.split(/[・,、]/).map(Number).indexOf(cap) >= 0;
   }
 
-  /** ある室内機に付く別売品を返す */
-  function optionsFor(store, imCode) {
+  function optFits(fit, model) {
+    if (!fit || !model) return false;
+    if (fit.all) return true;
+    if (fit.im) return imInRange(fit.im, model.im);
+    if (fit.type && !looseSame(fit.type, model.i)) return false;
+    if (fit.series && !looseSame(fit.series, model.s)) return false;
+    if (fit.tp && !looseSame(fit.tp, model.tp)) return false;   // 同時ツイン用の分配管など
+    if (fit.cap) {
+      var c = capOfModel(model);
+      if (!c || c < fit.cap[0] || c > fit.cap[1]) return false;
+    }
+    return !!(fit.type || fit.series || fit.cap || fit.tp);
+  }
+
+  /** その機種に付く別売品を返す。model は［機器を選ぶ］で選んだ1行 */
+  function optionsFor(store, model) {
     var out = [];
     ((store && store.items) || []).forEach(function (o) {
       var ok = false;
-      (o.fits || []).forEach(function (f) { if (!ok && optFits(f, imCode)) ok = true; });
+      (o.fits || []).forEach(function (f) { if (!ok && optFits(f, model)) ok = true; });
       if (ok) out.push(o);
     });
     return out;
   }
 
-  window.KUCHOO_CATALOG = { makers: MAKERS, run: run, yen: yen, optionsFor: optionsFor, optFits: optFits };
+  /* --------------------------------------------------------------------
+     別売品のページが「どの機種タイプの別売品か」を決める
+
+     キヤリアのように、別売品のページに機種タイプが書いていない社がある
+     （章立てで決まっているので、紙面には書く必要がない）。
+     そこで**機種データのページ番号**を使う。機種データはどの価格ページから
+     読んだかを持っているので、別売品のページの手前にある価格ページの
+     機種タイプが、その別売品の相手になる。
+
+     2026-09-05、キヤリア p.67 の別売品（RBC-UW283PG など）が
+     機種データでは天井カセット形2方向の機種にしか使われていないことで確かめた。
+     （ページの端の文字から拾う方法は「ダクト」を誤って拾って失敗した）
+     -------------------------------------------------------------------- */
+  function typeAtPage(pageTypes, page) {
+    if (!pageTypes) return '';
+    var best = 0, type = '';
+    Object.keys(pageTypes).forEach(function (k) {
+      var n = Number(k);
+      if (n <= page && n > best) { best = n; type = pageTypes[k]; }
+    });
+    return type;
+  }
+
+  /** 「P40形〜P80形」「28型（1.0）〜160型（6.0）」から容量の範囲を取る */
+  function capRange(s) {
+    var t = String(s || '').replace(/（[^）]*）|\([^)]*\)/g, '').replace(/\s/g, '');
+    var nums = (t.match(/\d{2,3}/g) || []).map(Number).filter(function (n) { return CAPS.indexOf(n) >= 0; });
+    if (!nums.length) return null;
+    if (/[～~〜]/.test(t)) return [Math.min.apply(null, nums), Math.max.apply(null, nums)];
+    return [Math.min.apply(null, nums), Math.max.apply(null, nums)];
+  }
+
+  window.KUCHOO_CATALOG = { makers: MAKERS, run: run, yen: yen, optionsFor: optionsFor, optFits: optFits, typeAtPage: typeAtPage };
 })();
