@@ -9,12 +9,13 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609030220';
+  var APP_VERSION = '202609050642';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
   var KEY_DRAFT = 'airtec_draft_v1';
   var KEY_MDL   = 'airtec_models_v1';
+  var KEY_OPT   = 'airtec_options_v1';    // 別売品（どの室内機に付くかの情報つき）
   var KEY_SITE  = 'airtec_sites_v1';
   var KEY_INV   = 'airtec_invoices_v1';
   var KEY_COST  = 'airtec_showcost_v1';   // 原価を画面に出すかどうか（端末ごと）
@@ -3758,15 +3759,72 @@
         line.rate = modelRateFor(line);
         addLine(line);
         toast('「' + x.m + '」を追加しました');
+        showOptionsFor(x);
       });
       res.appendChild(b);
     });
     box.appendChild(res);
   }
 
+  /* ----------------------------------------------------------------------
+     選んだ機種に付けられる別売品を出す
+     ----------------------------------------------------------------------
+     カタログの表では、列の見出しが「その別売品の付く室内機」になっている。
+     見出しは「FHCP40〜71GA」のようなまとめ書きなので、
+     容量のところを開いて、選んだ機種の室内機品番と突き合わせる
+     （突き合わせは catalog.js の optionsFor がやる）。
+     ---------------------------------------------------------------------- */
+  function showOptionsFor(x) {
+    var box = $('#chooser-options');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!optStore || !window.KUCHOO_CATALOG || !KUCHOO_CATALOG.optionsFor) return;
+
+    var list = KUCHOO_CATALOG.optionsFor(optStore, x.im);
+    if (!list.length) return;
+
+    var head = el('div', 'opt-head');
+    head.appendChild(el('b', null, '「' + x.m + '」に付けられる別売品'));
+    head.appendChild(el('span', 'models-num', list.length + '品目'));
+    var close = el('button', 'icon-btn', '✕');
+    close.type = 'button';
+    close.title = '閉じる';
+    close.addEventListener('click', function () { box.innerHTML = ''; });
+    head.appendChild(close);
+    box.appendChild(head);
+
+    var wrap = el('div', 'picker-items');
+    list.forEach(function (o) {
+      var b = el('button', 'item-btn');
+      b.type = 'button';
+      b.appendChild(el('b', null, o.name || o.code));
+      b.appendChild(el('span', 'item-code', o.code));
+      b.appendChild(el('em', null, yen(o.y)));
+      b.addEventListener('click', function () {
+        var line = {
+          name: (optStore.maker || '') + '　' + (o.name || o.code),
+          spec: o.code,
+          listPrice: o.y,
+          qty: 1,
+          unit: '個',
+          price: o.y
+        };
+        line.base = num(o.y);
+        line.cost = lineCostFromSettings(line);
+        line.rate = modelRateFor(line);
+        addLine(line);
+        toast('「' + (o.name || o.code) + '」を追加しました');
+      });
+      wrap.appendChild(b);
+    });
+    box.appendChild(wrap);
+  }
+
   $('#btn-chooser-reset').addEventListener('click', function () {
     chooserSel = {};
     renderChooser();
+    var ob = $('#chooser-options');
+    if (ob) ob.innerHTML = '';
   });
 
   /**
@@ -3839,6 +3897,218 @@
     loadModels();
     toast('機種データを削除しました');
   });
+
+  /* ======================================================================
+     カタログPDFから機種データを作る
+     ----------------------------------------------------------------------
+     メーカーのデジタルカタログからPDFを保存して、ここに入れると、
+     その端末の中だけで読み取って機種データができる。
+
+     ・PDFも、読み取った中身も、どこにも送らない
+     ・よそのサイトも叩かない（社内のPCでも動く）
+     ・読む部品（480KB＋ワーカー2MB）は、押したときだけ読み込む
+
+     どの文字を手がかりに読むかは catalog.js に書いてある。
+     カタログの作りが変わって読めなくなったら、直すのはそちら。
+     ====================================================================== */
+  var catalogLibReady = false;
+
+  function ensureCatalogLib() {
+    if (catalogLibReady) return Promise.resolve();
+    return loadScript('vendor/pdfparse/pdf-parse.umd.js?v=' + APP_VERSION)
+      .then(function () { catalogLibReady = true; });
+  }
+
+  /** 途中経過や結果を出す。改行はそのまま行に分ける */
+  function catalogNote(msg, kind) {
+    var box = $('#catalog-status');
+    if (!box) return;
+    box.className = 'csv-note' + (kind ? ' ' + kind : '');
+    box.textContent = '';
+    String(msg).split('\n').forEach(function (line, i) {
+      if (i) box.appendChild(document.createElement('br'));
+      box.appendChild(document.createTextNode(line));
+    });
+  }
+
+  function catalogMakers() {
+    return (window.KUCHOO_CATALOG && KUCHOO_CATALOG.makers) || [];
+  }
+
+  function currentCatalogMaker() {
+    var sel = $('#catalog-maker');
+    var id = sel ? sel.value : '';
+    var found = null;
+    catalogMakers().forEach(function (m) { if (m.id === id) found = m; });
+    return found;
+  }
+
+  /** 選んだメーカーの「どこからPDFを取るか」を出す */
+  function renderCatalogHowto() {
+    var box = $('#catalog-howto');
+    if (!box) return;
+    box.innerHTML = '';
+    var mk = currentCatalogMaker();
+    if (!mk) return;
+
+    var ol = el('ol', 'catalog-howto');
+    mk.howto.forEach(function (s) { ol.appendChild(el('li', null, s)); });
+    box.appendChild(ol);
+
+    var a = el('a', 'catalog-link', mk.catalog + '（' + mk.name + '）のカタログを開く');
+    a.href = mk.url;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    box.appendChild(a);
+    box.appendChild(el('div', 'catalog-size', mk.size));
+  }
+
+  /* ----------------------------------------------------------------------
+     別売品（どの室内機に付くかの情報つき）
+     ---------------------------------------------------------------------- */
+  var optStore = null;
+
+  function loadOptions() {
+    optStore = load(KEY_OPT, null);
+    renderOptionsStatus();
+  }
+
+  function renderOptionsStatus() {
+    var box = $('#options-status');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!optStore || !optStore.items || !optStore.items.length) {
+      box.textContent = 'まだ読み込まれていません。';
+      return;
+    }
+    var row = el('div', 'models-row');
+    row.appendChild(el('b', null, optStore.maker + '　' + (optStore.brand || '別売品')));
+    row.appendChild(el('span', 'models-num', optStore.items.length + '品目'));
+    if (optStore.fetched) row.appendChild(el('span', null, '取得日 ' + optStore.fetched));
+    var del = el('button', 'icon-btn', '✕');
+    del.type = 'button';
+    del.title = '別売品のデータを削除';
+    del.addEventListener('click', function () {
+      if (!confirm('別売品のデータを削除します。よろしいですか？')) return;
+      removeKey(KEY_OPT);
+      loadOptions();
+      toast('別売品のデータを削除しました');
+    });
+    row.appendChild(del);
+    box.appendChild(row);
+  }
+
+  function adoptOptions(store, extra) {
+    if (save(KEY_OPT, store) === false) {
+      catalogNote('読み取れましたが、保存できませんでした。端末の空きが足りないかもしれません。', 'ng');
+      return;
+    }
+    loadOptions();
+    catalogNote(store.items.length + '品目の別売品を読み取りました。' + (extra || '') +
+                '\n機器を選ぶと、その機種に付く別売品が下に出ます。', 'ok');
+    toast(store.items.length + '品目を入れました');
+  }
+
+  /** 読み取れた機種データを入れる。r は catalog.js が返したもの */
+  function adoptCatalogPack(pack, count, extra) {
+    var line = adoptModelPack(pack);
+    if (!line) {
+      catalogNote('読み取れましたが、保存できませんでした。端末の空きが足りないかもしれません。', 'ng');
+      return;
+    }
+    chooserSel = {};
+    loadModels();
+    catalogNote(count + '機種を読み取って、機種データに入れました。' + (extra || '') +
+                '\n「見積を作る」の［機器を選ぶ］から使えます。', 'ok');
+    toast(count + '機種を入れました');
+  }
+
+  function initCatalogBox() {
+    var sel = $('#catalog-maker');
+    var file = $('#file-catalog');
+    if (!sel || !file) return;
+
+    var list = catalogMakers();
+    if (!list.length) {
+      catalogNote('この版では、まだカタログの読み取りが使えません。');
+      return;
+    }
+    list.forEach(function (m) {
+      var o = document.createElement('option');
+      o.value = m.id;
+      o.textContent = m.name;
+      sel.appendChild(o);
+    });
+    sel.addEventListener('change', renderCatalogHowto);
+    renderCatalogHowto();
+    loadOptions();
+
+    file.addEventListener('change', function (ev) {
+      var f = (ev.target.files || [])[0];
+      ev.target.value = '';
+      if (!f) return;
+      var mk = currentCatalogMaker();
+      if (!mk) { catalogNote('先にメーカーを選んでください。', 'ng'); return; }
+      // 三菱だけはPDFではなくデータファイル（.json）を読む
+      var wantJson = (mk.kind === 'json');
+      if (!(wantJson ? /\.(json|txt)$/i.test(f.name) : /\.pdf$/i.test(f.name))) {
+        catalogNote(wantJson
+          ? '保存したデータファイル（.json）を選んでください。'
+          : 'カタログのPDFを選んでください。', 'ng');
+        return;
+      }
+
+      // 大きいカタログは読み取りに数分かかり、そのあいだパソコン全体が重くなる。
+      // 黙って始めると「固まった」と思われるので、先に断る。
+      var mb = Math.round(f.size / 1024 / 1024);
+      if (f.size > 200 * 1024 * 1024) {
+        if (!confirm('このカタログは ' + mb + 'MB あります。\n\n' +
+                     '読み取りに数分かかり、そのあいだパソコンが重くなります。\n' +
+                     'ほかのアプリ（LINE・Discord・動画など）を先に閉じておくと安全です。\n\n' +
+                     '始めますか？')) {
+          catalogNote('やめました。ほかのアプリを閉じてから、もう一度選んでください。');
+          return;
+        }
+      }
+
+      var t0 = Date.now();
+      file.disabled = true;
+      catalogNote('読み取りの部品を用意しています…');
+
+      ensureCatalogLib().then(function () {
+        catalogNote(mk.name + ' のカタログを読んでいます…');
+        return KUCHOO_CATALOG.run(f, mk.id, function (done, total) {
+          catalogNote(mk.name + ' のカタログを読んでいます…　' + done + ' / ' + total + 'ページ' +
+                      '\nこの画面は閉じないでください。');
+        });
+      }).then(function (r) {
+        var sec = Math.round((Date.now() - t0) / 1000);
+        var time = (sec >= 60 ? Math.floor(sec / 60) + '分' + (sec % 60) + '秒' : sec + '秒');
+        // 紙のカタログのときだけ「価格ページ○枚」を出す（三菱はデータファイルなので枚数が無い）
+        var extra = (wantJson || !r.pricePages) ? '（' + time + '）'
+                                                : '（価格ページ ' + r.pricePages + '枚／' + time + '）';
+        if (r.options) adoptOptions(r.options, extra);
+        else adoptCatalogPack(r.pack, r.count, extra);
+      }).catch(function (e) {
+        var msg = (e && e.message) || 'うまく読み取れませんでした';
+        catalogNote(msg, 'ng');
+        // 「いつもより少ない」で止めたときだけ、人が見て入れられるようにする
+        if (e && e.soft && e.pack) {
+          var box = $('#catalog-status');
+          var btn = el('button', 'btn btn-ghost', 'それでも ' + e.rows + '件を入れる');
+          btn.type = 'button';
+          btn.style.marginTop = '8px';
+          btn.addEventListener('click', function () { adoptCatalogPack(e.pack, e.rows, ''); });
+          box.appendChild(document.createElement('br'));
+          box.appendChild(btn);
+        }
+      }).then(function () {
+        file.disabled = false;
+      });
+    });
+  }
+
+  initCatalogBox();
 
   /* ======================================================================
      見積書の印刷

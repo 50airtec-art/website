@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>空調王</title>
-<link rel="stylesheet" href="style.css?v=202609030220">
+<link rel="stylesheet" href="style.css?v=202609050642">
 </head>
 <body>
 
@@ -105,6 +105,8 @@
             <button class="btn btn-ghost btn-sm" id="btn-chooser-reset" type="button">最初から</button>
           </div>
           <div id="chooser-body"></div>
+          <!-- 選んだ機種に付けられる別売品 -->
+          <div id="chooser-options"></div>
         </div>
 
         <!-- 明細テーブル -->
@@ -269,6 +271,24 @@
             </div>
           </div>
           <div class="csv-note" id="models-status">まだ読み込まれていません。</div>
+        </div>
+
+        <div class="csv-box">
+          <div class="csv-head">
+            <strong>カタログPDFから機種データを作る</strong>
+            <span>メーカーのカタログPDFを入れると、<b>この端末の中だけで</b>読み取って機種データを作ります。
+              PDFも、読み取った中身も、どこにも送りません。<br>
+              <b>パソコンでやってください。</b>カタログが大きいので、スマホでは重すぎます。</span>
+          </div>
+          <div class="csv-row">
+            <div class="csv-btns">
+              <select id="catalog-maker" class="catalog-maker"></select>
+              <label class="btn btn-primary file-btn">カタログのファイルを選ぶ<input type="file" id="file-catalog" accept=".pdf,.json,application/pdf,application/json"></label>
+            </div>
+          </div>
+          <div class="csv-note" id="catalog-howto"></div>
+          <div class="csv-note" id="catalog-status">カタログPDFを選ぶと読み取りが始まります。</div>
+          <div class="csv-note" id="options-status">まだ読み込まれていません。</div>
         </div>
 
         <div id="master-editor"></div>
@@ -497,10 +517,11 @@
   </div>
 </div>
 
-<script src="pricebook.js?v=202609030220"></script>
-<script src="survey.js?v=202609030220"></script>
-<script src="firebase-config.js?v=202609030220"></script>
-<script src="app.js?v=202609030220"></script>
-<script src="sync.js?v=202609030220"></script>
+<script src="pricebook.js?v=202609050642"></script>
+<script src="survey.js?v=202609050642"></script>
+<script src="firebase-config.js?v=202609050642"></script>
+<script src="catalog.js?v=202609050642"></script>
+<script src="app.js?v=202609050642"></script>
+<script src="sync.js?v=202609050642"></script>
 </body>
 </html>

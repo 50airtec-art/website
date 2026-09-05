@@ -340,6 +340,19 @@ tr.line-auto td.c-rate .rate-sel { opacity: .4; }
   font-size: 11.5px; color: var(--text);
 }
 
+/* ---------- カタログPDFから機種データを作る ---------- */
+/* 高さはとなりのボタンに合わせる（select は放っておくと伸びない） */
+.catalog-maker {
+  height: 42px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px;
+  background: #fff; color: var(--text); font-size: 13px; min-width: 200px;
+}
+ol.catalog-howto { margin: 2px 0 8px; padding-left: 20px; }
+ol.catalog-howto li { margin: 2px 0; }
+.catalog-link { color: var(--accent); text-decoration: underline; word-break: break-all; }
+.catalog-size { margin-top: 6px; }
+.csv-note.ok { color: var(--ok); font-weight: 600; }
+.csv-note.ng { color: var(--danger); }
+
 /* 単価ピッカーの品番表示 */
 .item-btn .item-code {
   display: block; font-style: normal; font-size: 11px; color: var(--text-light);
@@ -805,3 +818,14 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
   color: #0a7d3c;
 }
 .line-list-hint.is-warn { color: #a35200; }
+
+/* ---------- 選んだ機種に付けられる別売品 ---------- */
+#chooser-options { margin-top: 10px; }
+#chooser-options:empty { display: none; }
+.opt-head {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 10px; margin-bottom: 8px;
+  background: var(--accent-soft); border-radius: 8px; font-size: 13px;
+}
+.opt-head .models-num { color: var(--text-sub); font-size: 12px; }
+.opt-head .icon-btn { margin-left: auto; }
