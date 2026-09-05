@@ -1358,6 +1358,16 @@
   function optPageDaikinVert(items, page, out) {
     var rows = optRows(items);
 
+    // 品名が品番と同じ行に無いことがある（表のマスが縦につながっているため）。
+    // 品番の左端より左を品名の場所として、共通の道具で組み立てる
+    var minCodeX = 1e9;
+    rows.forEach(function (r) {
+      r.cells.forEach(function (c) {
+        if (OPT_CODE.test(c.s.trim()) && c.x < minCodeX) minCodeX = c.x;
+      });
+    });
+    var nameAt = (minCodeX < 1e9) ? nameReader(rows, minCodeX - 20, 1e9) : null;
+
     rows.forEach(function (r, idx) {
       var t = r.cells.map(function (c) { return c.s; }).join('').replace(/\s/g, '');
       if (t.indexOf('価格') !== 0) return;
@@ -1371,6 +1381,7 @@
         var left = codes[0].x - 20;
         var name = rows[k].cells.filter(function (c) { return c.x < left && isJa(c.s); })
           .map(function (c) { return c.s; }).join('').replace(/注\d+/g, '').trim();
+        if (name.length < 2 && nameAt) name = nameAt(rows[k].y);   // 同じ行に無ければ上下から拾う
 
         codes.forEach(function (c) {
           var best = null, bd = 1e9;
@@ -1382,6 +1393,94 @@
           });
         });
       }
+    });
+  }
+
+  /* --------------------------------------------------------------------
+     三菱電機の室外ユニットオプション（143ページ前後）
+
+       室外ユニット オプション
+       形名 ｜ スリムZR ｜ ズバ暖スリム            ← 大きい区分（シリーズ）
+            ｜ P28〜P63形 ｜ P80形 ｜ P112〜P160形 …  ← その下が容量
+       部品名
+       エアガイド ｜ PAC-SJ06AG 24,000円 ｜ PAC-SJ03AG 24,000円 ｜ …
+
+     室外機に付くものなので、室内機のタイプでは決まらない。
+     **シリーズと室外機の容量**で決まる（NotebookLM でも確認。スリムERにも付く）。
+     -------------------------------------------------------------------- */
+  function optPageMitsuOutdoor(items, page, out) {
+    var flat = items.map(function (o) { return o.s; }).join('').replace(/\s/g, '');
+    if (flat.indexOf('室外ユニット') < 0 || flat.indexOf('オプション') < 0) return;
+    if (flat.indexOf('共通別売部品') >= 0) return;   // 分配管のページは別で読む
+
+    var rows = optRows(items);
+    var head = null;
+    rows.forEach(function (r) {
+      if (head) return;
+      r.cells.forEach(function (c) { if (!head && c.s.indexOf('部品名') >= 0) head = r; });
+    });
+    if (!head) return;
+
+    // 見出しの上（＝y が大きい）から、容量の列を拾う。
+    // 「P224」「・」「P280形」のようにマスが割れるので、隣どうしはつなげる
+    var caps = [];
+    rows.forEach(function (r) {
+      if (r.y <= head.y) return;
+      var cur = null;
+      r.cells.forEach(function (c) {
+        var s = c.s.replace(/\s/g, '');
+        if (/^[P\d～~〜・、,形型]+$/.test(s) && /\d/.test(s)) {
+          if (cur && c.x - cur.right < 30) { cur.s += s; cur.right = c.x + (c.w || 10); }
+          else { cur = { x: c.x, right: c.x + (c.w || 10), s: s }; caps.push(cur); }
+        } else cur = null;
+      });
+    });
+    var cols = caps.map(function (c) { return { x: c.x, cap: capRange(c.s) }; })
+      .filter(function (c) { return c.cap; })
+      .sort(function (a, b) { return a.x - b.x; });
+    if (!cols.length) return;
+
+    // シリーズの区分（大きい見出し）
+    var sers = [];
+    rows.forEach(function (r) {
+      if (r.y <= head.y) return;
+      r.cells.forEach(function (c) {
+        var s = c.s.replace(/\s/g, '');
+        if (/スリムZR|ズバ暖スリム|スリムER/.test(s)) sers.push({ x: c.x, s: s });
+      });
+    });
+    sers.sort(function (a, b) { return a.x - b.x; });
+
+    var nameAt = nameReader(rows, cols[0].x - 20, head.y + 1);
+
+    rows.forEach(function (r) {
+      if (r.y >= head.y) return;
+      var name = nameAt(r.y);
+
+      r.cells.forEach(function (o, i) {
+        var s = o.s.trim();
+        if (!/^[A-Z]{2,4}-[A-Z0-9]{3,}$/.test(s)) return;
+        var price = 0;
+        for (var j = i + 1; j < r.cells.length; j++) {
+          var t = r.cells[j].s.trim();
+          if (/^[A-Z]{2,4}-[A-Z0-9]{3,}$/.test(t)) break;
+          var mm = t.match(OPT_MONEY);
+          if (mm) { price = yen(mm[1]); break; }
+        }
+        if (!price) return;
+
+        var col = null, bd = 1e9;
+        cols.forEach(function (k) { var d = Math.abs(k.x - o.x); if (d < bd) { bd = d; col = k; } });
+        if (!col || bd > 70) return;
+
+        // その品番より左にある、いちばん近いシリーズ見出し
+        var ser = '';
+        sers.forEach(function (k) { if (k.x <= o.x + 40) ser = k.s; });
+
+        var fit = { cap: col.cap };
+        if (ser) fit.series = ser;
+        out.push({ page: page, name: name, code: s, y: price, fits: [fit] });
+      });
     });
   }
 
@@ -1618,6 +1717,7 @@
         var out = [];
         optPageMitsu(items, page, out);          // 機種ページの構成品（パネル・リモコン）
         optPageMitsuCommon(items, page, out);   // 共通別売部品（分配管など・144ページ）
+        optPageMitsuOutdoor(items, page, out);  // 室外ユニットオプション（143ページ）
         return out;
       },
       finish: function (list) { return optResult(list, '三菱電機', 'Mr.SLIM 別売品'); }
