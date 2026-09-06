@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609070700';
+  var APP_VERSION = '202609070900';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -232,6 +232,7 @@
     migrateTo9();
     migrateTo10();
     migrateTo11();
+    migrateTo12();
   }
 
   /** 分類に、その品名＋規格の項目が無ければ足す。すでにある行の金額には触らない */
@@ -285,6 +286,49 @@
    * 初期値の並びを手本にして、同じ品名・規格の行をその順に置き直すだけ。
    * 金額も規格も色も触らない。自分で足した項目は、順番を保ったまま分類の最後に残す。
    */
+  /**
+   * 2026-09-06。2つのことをする。
+   *
+   * 1. 初期値のまま使っている行に「目安」の印をつける。
+   *    空調王が最初から入れている金額を、自社の相場だと思い込ませないため。
+   *    金額を直してある行にはつけない（＝もうその人の金額なので）。
+   *
+   * 2. 標準取付工事に入っていた 0.1人工 を外す。
+   *    0.1人工＝1人が48分。標準取付が48分で終わるはずがなく、入れ間違い。
+   *    金額はいまのまま残して、打てる状態にするだけにする。
+   *    勝手に金額を上げると、出したばかりの見積と食い違う。
+   */
+  function migrateTo12() {
+    if (num(pb.version) >= 12) return;
+
+    var defBy = {};
+    DEFAULT_PRICEBOOK.categories.forEach(function (dc) {
+      (dc.items || []).forEach(function (di) {
+        defBy[dc.id + '｜' + di.name + '｜' + (di.spec || '')] = di;
+      });
+    });
+
+    pb.categories.forEach(function (c) {
+      (c.items || []).forEach(function (it) {
+        var di = defBy[c.id + '｜' + it.name + '｜' + (it.spec || '')];
+
+        // 1. 金額が初期値のままなら「目安」
+        if (di && di.est && num(it.price) === num(di.price)) it.est = 1;
+
+        /* 2. 入れ間違いの人工を外す。金額はいまのまま残す。
+              ただし、その金額は人工の掛け算で出ただけで、
+              本人が決めた額ではない。だから「目安」の札は付ける */
+        if (it.name === '標準取付工事' && num(it.manDay) && num(it.manDay) < 0.25) {
+          delete it.manDay;
+          it.est = 1;
+        }
+      });
+    });
+
+    pb.version = 12;
+    savePB();
+  }
+
   function migrateTo11() {
     if (num(pb.version) >= 11) return;
 
@@ -1148,6 +1192,16 @@
       var iPrice = el('input'); iPrice.type = 'number'; iPrice.step = '1'; iPrice.value = l.price;
       if (isAuto) iPrice.readOnly = true;
       tdPrice.appendChild(iPrice);
+      /* この行の単価が人工から出ていることを、画面に出す。
+         打ち替えは前からできたが、なぜその金額なのかが見えなかった */
+      var mdNote = el('small', 'line-mdnote');
+      function showMdNote() {
+        mdNote.textContent = num(l.manDay)
+          ? num(l.manDay) + '人工 × ' + yen(num(st.manDayYen))
+          : '';
+      }
+      showMdNote();
+      tdPrice.appendChild(mdNote);
       tr.appendChild(tdPrice);
 
       function showBaseHint() {
@@ -1211,6 +1265,9 @@
         l.rate = 100;
         l.rateFixed = true;          // 手で入れた単価は、設定を変えても動かさない
         sRate.value = '100';
+        /* この見積のこの行だけ、人工から外す。単価マスタには触らない。
+           次に作る見積では、また人工から出た金額で入ってくる */
+        if (num(l.manDay)) { l.manDay = 0; showMdNote(); }
         showBaseHint();
         recalc();
       });
@@ -3799,6 +3856,14 @@
       mdCell.appendChild(mdInput);
     }
     row.appendChild(mdCell);
+    // 「0.1人工 × ¥30,000」を画面に出す札（マウスを乗せなくても読める）
+    var mdNote = el('small', 'm-mdnote');
+
+    /* 空調王が最初から持っている金額は「目安」。
+       買った人が自社の金額だと思い込まないよう、直すまで札を出しておく。
+       単価を打った時点で外れる（＝その人の金額になった） */
+    var estNote = el('small', 'm-estnote', item.est ? '目安' : '');
+    if (item.est) estNote.title = '空調王が最初から入れている目安の金額です。自社の金額に直してください';
 
     // 原価（社内用）。空なら人工や仕入掛率から見当をつける
     var costCell = el('span', 'm-manday mcol-cost');
@@ -3811,7 +3876,18 @@
     row.appendChild(costCell);
     var priceInput = isAuto
       ? inp(item.autoPercent, 'm-price', 'number', function (v) { item.autoPercent = num(v); })
-      : inp(item.price, 'm-price', 'number', function (v) { item.price = num(v); });
+      : inp(item.price, 'm-price', 'number', function (v) {
+          item.price = num(v);
+          // 手で打った金額が、次に1人工の金額を変えたときに上書きされないよう、
+          // ここで人工を外す。人工で出したいなら人工の欄に入れ直せばよい
+          if (num(item.manDay)) {
+            delete item.manDay;
+            if (mdInput) mdInput.value = '';
+            mdNote.textContent = '';
+          }
+          delete item.est;          // 目安の札を外す（自分の金額になったので）
+          if (estNote) estNote.textContent = '';
+        });
     // 単価まで打ったら Enter で次の行へ。続けて打ち込めるようにする
     priceInput.addEventListener('keydown', function (ev) {
       if (ev.key !== 'Enter') return;
@@ -3819,18 +3895,27 @@
       savePB();
       if (onEnterAtEnd) onEnterAtEnd();
     });
-    /** 人工が入っているときは、単価は掛け算で決まるので手では打たせない */
+    /**
+     * 人工が入っている項目の単価は［人工 × 1人工の金額］で決まる。
+     * ただし打てなくはしない。前は readOnly にしていたが、
+     * スマホでは「なぜ打てないのか」を出す方法（マウスを乗せる）が無く、
+     * 理由の分からない数字がそこにあるだけになっていた。
+     * いまは打てる。打った時点で、その項目は人工から離れる。
+     */
     function syncPrice() {
       if (isAuto) return;
       var md = num(item.manDay);
-      priceInput.readOnly = md > 0;
       if (md > 0) {
         item.price = manDayPrice(md);
         priceInput.value = item.price;
-        priceInput.title = md + '人工 × ' + yen(num(st.manDayYen)) + ' ＝ ' + yen(item.price);
-      } else {
-        priceInput.title = '';
       }
+      priceInput.title = md > 0
+        ? md + '人工 × ' + yen(num(st.manDayYen)) + ' ＝ ' + yen(item.price) + '（単価を打つと人工から外れます）'
+        : '';
+      // マウスの無い端末でも分かるように、画面にも出す
+      mdNote.textContent = md > 0
+        ? md + '人工 × ' + yen(num(st.manDayYen))
+        : '';
       // 原価の見当（うすい文字）も、人工に合わせて出し直す
       costInput.placeholder = String(itemCost(item, cat) || '—');
     }
@@ -3844,7 +3929,11 @@
       pcell.appendChild(el('i', null, '% ' + AUTO_BASES[autoBaseOf(item)].short));
       row.appendChild(pcell);
     } else {
-      row.appendChild(priceInput);
+      var pcell2 = el('span', 'm-pricecell');
+      pcell2.appendChild(priceInput);
+      pcell2.appendChild(mdNote);
+      pcell2.appendChild(estNote);
+      row.appendChild(pcell2);
       syncPrice();
     }
 
