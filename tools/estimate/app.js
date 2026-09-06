@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609071200';
+  var APP_VERSION = '202609071430';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -701,6 +701,19 @@
   }
 
   /**
+   * その行が入っているカテゴリの名前。
+   * 行が覚えているのは id（c1787811020342324 のような文字）で、
+   * メーカー名は名前のほう（「因幡電工｜配管化粧カバー」）にしかない。
+   */
+  function lineCatName(l) {
+    var id = l && l.cat;
+    if (!id) return '';
+    var nm = '';
+    pb.categories.forEach(function (c) { if (c.id === id) nm = c.name || ''; });
+    return nm;
+  }
+
+  /**
    * 明細1行の原価（1単位あたり）を、いまの設定から出し直す。
    * 単価マスタに実額の原価（仕入見積から取り込んだ値など）が入っていれば、
    * それが最優先。ここを見落とすと、仕入掛率の推定値で本物の仕入値を潰してしまう。
@@ -713,8 +726,11 @@
 
     if (num(l.manDay) > 0) return Math.round(num(l.manDay) * num(pb.defaults.manDayCostYen));
 
-    // 仕入掛率は材料の話。「工」ボタンで作業費に数えている行には当てない
-    var pct = costRateFor((l.name || '') + ' ' + (l.spec || '')) ||
+    /* 仕入掛率は材料の話。「工」ボタンで作業費に数えている行には当てない。
+       カテゴリ名も見る。部材は品名が「ペアコイル」だけで、
+       「因幡電工」はカテゴリ名にしか無いため（2026-09-06、３８８の見積で気づいた） */
+    var pct = costRateFor((l.name || '') + ' ' + (l.spec || '') +
+                          ' ' + lineCatName(l)) ||
               num(pb.defaults.materialCostPercent);
     if (pct > 0 && !isWorkLine(l)) return Math.round(num(l.base) * pct / 100);
     return 0;
@@ -799,6 +815,26 @@
       if (num(l.manDay)) l.base = manDayPrice(l.manDay);   // 人工の行は掛け算し直す
       l.price = priceFromBase(l);
     });
+  }
+
+  /**
+   * まだ原価の入っていない行だけ、いまの設定から埋める。
+   *
+   * 原価は行を足した瞬間にしか出していなかったので、
+   * あとから仕入掛率を入れても、すでに保存してある見積は「未入力」のままだった。
+   * （2026-09-06、３８８の見積で分かった。掛率を入れても粗利が出てこない）
+   *
+   * 入っている原価には触らない。仕入見積から取り込んだ実額や、
+   * 手で打った額を、あとからの推定値で潰さないため。
+   */
+  function fillMissingLineCosts() {
+    var filled = 0;
+    (st.lines || []).forEach(function (l) {
+      if (num(l.cost) > 0) return;
+      var c = lineCostFromSettings(l);
+      if (c > 0) { l.cost = c; filled++; }
+    });
+    return filled;
   }
 
   /** 原価の設定を変えたときに、手で入れていない行の原価を出し直す */
@@ -3680,6 +3716,7 @@
     if (st.unitRound == null) st.unitRound = 0;   // この設定より前に保存した見積
     if (st.manDayYen == null) st.manDayYen = num(pb.defaults.manDayYen);
     syncManDayToQuote();
+    fillMissingLineCosts();      // 保存したあとに入れた仕入掛率を、この見積にも効かせる
     fillMeta(); renderLines(); save(KEY_DRAFT, st);
     $('.tab[data-view="edit"]').click();
     toast(msg || '読み込みました');
