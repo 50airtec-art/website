@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609070330';
+  var APP_VERSION = '202609070530';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -1916,6 +1916,21 @@
   /* ======================================================================
      全データのバックアップ（端末を移すとき用）
      ====================================================================== */
+  /**
+   * バックアップの中の機種／別売品を数える（読み込む前の確認画面用）。
+   * どちらもメーカーごとの束（packs / stores）で、中身は items に入っている。
+   * 束を持たない古い形（rows を直に持つ）も数えられるようにしておく。
+   */
+  function countPackItems(list, legacy) {
+    if (Array.isArray(list)) {
+      return list.reduce(function (a, p) {
+        return a + ((p && Array.isArray(p.items)) ? p.items.length : 0);
+      }, 0);
+    }
+    if (legacy && Array.isArray(legacy.rows)) return legacy.rows.length;
+    return 0;
+  }
+
   function buildAllData() {
     return {
       type: 'airtec-all',
@@ -1923,6 +1938,10 @@
       exportedAt: new Date().toISOString(),
       pricebook: pb,
       models: load(KEY_MDL, null),
+      /* 別売品は機種データとは別の引き出し（KEY_OPT）に入っている。
+         ここに入れ忘れると、書き出して読み込み直したときだけ
+         5社1,565品目が黙って消える。2026-09-06 に気づいて足した */
+      options: load(KEY_OPT, null),
       sites: loadSites(),
       estimates: load(KEY_EST, []),
       invoices: loadInvoices()
@@ -2213,7 +2232,8 @@
       }
       var n = {
         単価: (data.pricebook.categories || []).reduce(function (a, c) { return a + (c.items || []).length; }, 0),
-        機種: data.models && data.models.rows ? data.models.rows.length : 0,
+        機種: countPackItems(data.models && data.models.packs, data.models),
+        別売品: countPackItems(data.options && data.options.stores, null),
         現場: (data.sites || []).length,
         見積: (data.estimates || []).length,
         請求書: (data.invoices || []).length
@@ -2221,6 +2241,7 @@
       if (!confirm('この端末の内容を、読み込んだファイルで置き換えます。\n\n' +
         '　単価　：' + n.単価 + '件\n' +
         '　機種　：' + n.機種 + '件\n' +
+        '　別売品：' + n.別売品 + '件\n' +
         '　現場　：' + n.現場 + '件\n' +
         '　見積　：' + n.見積 + '件\n' +
         '　請求書：' + n.請求書 + '件\n\n' +
@@ -2234,6 +2255,10 @@
       if (savePB() === false) return;
 
       if (data.models) save(KEY_MDL, data.models); else removeKey(KEY_MDL);
+      /* 別売品を入れ忘れていた頃のバックアップには options が無い。
+         そのときは端末に入っている別売品をそのまま残す。
+         「無いから消す」にすると、古いファイルを読んだ人の別売品が巻き添えで消える */
+      if (data.options) save(KEY_OPT, data.options);
       saveSites(data.sites || []);
       save(KEY_EST, data.estimates || []);
       save(KEY_INV, data.invoices || []);
