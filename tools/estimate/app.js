@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609062230';
+  var APP_VERSION = '202609070130';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -1671,6 +1671,7 @@
     save(KEY_EST, load(KEY_EST, []).filter(function (e) { return e.siteId !== s.id; }));
     // 現場が消えたあとに写真だけ残ると、二度と出せないゴミになる
     photos.forEach(function (p) { photoDel(p.id); });
+    if (photos.length) photosChanged();          // もう一方の端末からも消す
     openSiteId = null;
     renderList();
     toast('削除しました');
@@ -2851,10 +2852,29 @@
   var PHOTO_KINDS = ['全景', '銘板', '配管', '電源', '搬入経路', 'その他'];
   var PHOTO_MAX = 1600;      // 長いほうの辺（これより大きい写真は縮める）
   var PHOTO_Q   = 0.72;      // JPEGの画質
+  /* 1枚の大きさの上限。連動は1件あたり約1MBまでしか預けられず、
+     暗号にすると3割ほど太る。420KBに収めておけば必ず入る。 */
+  var PHOTO_BYTES = 420000;
+  /* 上限に入らなかったときに、順にゆるめていく組み合わせ */
+  var PHOTO_STEPS = [
+    { max: PHOTO_MAX, q: PHOTO_Q },
+    { max: PHOTO_MAX, q: 0.60 },
+    { max: 1280,      q: 0.60 },
+    { max: 1024,      q: 0.55 }
+  ];
 
   function photoPut(rec)   { return idb('photos', 'readwrite', function (s) { return s.put(rec); }); }
   function photoDel(id)    { return idb('photos', 'readwrite', function (s) { return s.delete(id); }); }
   function photoAll()      { return idb('photos', 'readonly',  function (s) { return s.getAll(); }); }
+  function photoGet(id)    { return idb('photos', 'readonly',  function (s) { return s.get(id); }); }
+
+  /**
+   * 「この端末で写真をいじった」と連動に知らせる。
+   * 連動から届いた写真を入れるときは呼ばない（呼ぶと送り返してしまう）。
+   */
+  function photosChanged() {
+    if (window.AirtecSync) window.AirtecSync.changed('photos');
+  }
   function photosOf(siteId) {
     return idb('photos', 'readonly', function (s) { return s.index('siteId').getAll(siteId); })
       .then(function (list) {
@@ -2885,26 +2905,47 @@
     });
   }
 
-  /** 写真を縮めてJPEGにする。turn を渡すとその角度だけ回してから作り直す */
-  function shrinkImage(src, turn) {
+  /** 決めた寸法・画質で1枚のJPEGを作る。turn を渡すとその角度だけ回してから描く */
+  function encodeAt(img, turn, maxSide, q) {
+    var scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+    var dw = Math.round(img.width * scale), dh = Math.round(img.height * scale);
+    turn = ((turn || 0) % 360 + 360) % 360;
+    var sideways = (turn === 90 || turn === 270);
+    var cv = document.createElement('canvas');
+    cv.width  = sideways ? dh : dw;
+    cv.height = sideways ? dw : dh;
+    var cx = cv.getContext('2d');
+    cx.translate(cv.width / 2, cv.height / 2);
+    if (turn) cx.rotate(turn * Math.PI / 180);
+    cx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
+    return new Promise(function (res, rej) {
+      cv.toBlob(function (b) {
+        if (b) res({ blob: b, w: cv.width, h: cv.height });
+        else rej(new Error('画像を作れませんでした'));
+      }, 'image/jpeg', q);
+    });
+  }
+
+  /**
+   * 写真を縮めてJPEGにする。turn を渡すとその角度だけ回してから作り直す。
+   * 上限（PHOTO_BYTES）に入るまで、画質→寸法の順にゆるめる。
+   * ここで必ず収めておかないと、連動に乗せられない1枚ができてしまう。
+   */
+  function shrinkImage(src, turn, steps) {
+    steps = steps || PHOTO_STEPS;
     return loadBitmap(src).then(function (img) {
-      var scale = Math.min(1, PHOTO_MAX / Math.max(img.width, img.height));
-      var dw = Math.round(img.width * scale), dh = Math.round(img.height * scale);
-      turn = ((turn || 0) % 360 + 360) % 360;
-      var sideways = (turn === 90 || turn === 270);
-      var cv = document.createElement('canvas');
-      cv.width  = sideways ? dh : dw;
-      cv.height = sideways ? dw : dh;
-      var cx = cv.getContext('2d');
-      cx.translate(cv.width / 2, cv.height / 2);
-      if (turn) cx.rotate(turn * Math.PI / 180);
-      cx.drawImage(img, -dw / 2, -dh / 2, dw, dh);
-      if (img.close) img.close();
-      return new Promise(function (res, rej) {
-        cv.toBlob(function (b) {
-          if (b) res({ blob: b, w: cv.width, h: cv.height });
-          else rej(new Error('画像を作れませんでした'));
-        }, 'image/jpeg', PHOTO_Q);
+      function attempt(i) {
+        return encodeAt(img, turn, steps[i].max, steps[i].q).then(function (r) {
+          if (r.blob.size <= PHOTO_BYTES || i >= steps.length - 1) return r;
+          return attempt(i + 1);
+        });
+      }
+      return attempt(0).then(function (r) {
+        if (img.close) img.close();
+        return r;
+      }, function (e) {
+        if (img.close) img.close();
+        throw e;
       });
     });
   }
@@ -2955,6 +2996,7 @@
     });
 
     chain.then(function () {
+      photosChanged();
       if (after) after();
       if (full) toast('端末の空きが足りません。いらない写真を消してからやり直してください');
       else if (ng) toast(ok + '枚を入れました（' + ng + '枚は取り込めませんでした）');
@@ -3070,7 +3112,7 @@
         });
         sel.addEventListener('change', function () {
           p.kind = sel.value;
-          photoPut(p).then(function () { drawPhotos(site, grid, cnt); });
+          photoPut(p).then(function () { photosChanged(); drawPhotos(site, grid, cnt); });
         });
         bar.appendChild(sel);
 
@@ -3081,7 +3123,7 @@
           shrinkImage(p.blob, 90).then(function (r) {
             p.blob = r.blob; p.w = r.w; p.h = r.h; p.size = r.blob.size;
             return photoPut(p);
-          }).then(function () { drawPhotos(site, grid, cnt); },
+          }).then(function () { photosChanged(); drawPhotos(site, grid, cnt); },
                   function () { rot.disabled = false; toast('回転できませんでした'); });
         });
         bar.appendChild(rot);
@@ -3090,6 +3132,7 @@
         del.addEventListener('click', function () {
           if (!confirm('この写真を削除します。よろしいですか？')) return;
           photoDel(p.id).then(function () {
+            photosChanged();
             drawPhotos(site, grid, cnt);
             toast('削除しました');
           });
@@ -3104,7 +3147,7 @@
         memo.title = '写真の説明。印刷したときに写真の下に出ます（例：室外機の裏、サビあり）';
         memo.addEventListener('change', function () {
           p.memo = memo.value;
-          photoPut(p);
+          photoPut(p).then(photosChanged);
         });
         cell.appendChild(memo);
 
@@ -3234,11 +3277,91 @@
         });
       });
       chain.then(function () {
+        photosChanged();
         renderList();
         toast(ok + '枚を入れました' + (ng ? '（' + ng + '枚は入りませんでした）' : ''));
       });
     });
   });
+
+  /* ----------------------------------------------------------------------
+     連動（sync.js）から写真を出し入れするための窓口
+     ----------------------------------------------------------------------
+     写真は IndexedDB の中にあって sync.js からは触れない。
+     暗号のカギは sync.js の中にあって app.js からは触れない。
+     そこで「写真そのもの」だけをここでやり取りする。
+     持ち運ぶ形は data:image/jpeg;base64,… の文字列（JSONに入れられる形）。
+
+     大事なきまり：ここから入れた写真では photosChanged() を呼ばない。
+     呼ぶと「この端末で撮った」ことになって、もらった写真を送り返してしまう。
+     ---------------------------------------------------------------------- */
+  function photoMeta(p) {
+    return {
+      id: p.id, siteId: p.siteId, kind: p.kind, memo: p.memo || '',
+      at: p.at, w: p.w, h: p.h, size: p.size
+    };
+  }
+
+  window.AirtecPhotos = {
+    /** 写真そのものは付けずに、一覧だけ返す */
+    list: function () {
+      return photoAll().then(function (rows) { return (rows || []).map(photoMeta); });
+    },
+
+    /** 1枚を、持ち運べる形にして返す */
+    get: function (id) {
+      return photoGet(id).then(function (p) {
+        if (!p) return null;
+        return blobToDataUrl(p.blob).then(function (d) {
+          var m = photoMeta(p);
+          m.data = d;
+          return m;
+        });
+      });
+    },
+
+    /** もらった1枚を入れる（同じidがあれば上書き） */
+    put: function (rec) {
+      var blob = dataUrlToBlob(rec && rec.data);
+      if (!blob) return Promise.reject(new Error('画像として読めません'));
+      return photoPut({
+        id: rec.id,
+        siteId: rec.siteId,
+        kind: PHOTO_KINDS.indexOf(rec.kind) >= 0 ? rec.kind : 'その他',
+        memo: String(rec.memo || ''),
+        at: rec.at || new Date().toISOString(),
+        w: rec.w, h: rec.h, size: blob.size,
+        blob: blob
+      });
+    },
+
+    /** 相手の端末で直された種類・覚え書きを、こちらにも反映する */
+    setMeta: function (id, m) {
+      return photoGet(id).then(function (p) {
+        if (!p) return false;
+        if (PHOTO_KINDS.indexOf(m.kind) >= 0) p.kind = m.kind;
+        p.memo = String(m.memo || '');
+        if (m.siteId) p.siteId = m.siteId;
+        return photoPut(p).then(function () { return true; });
+      });
+    },
+
+    del: function (id) { return photoDel(id); },
+
+    /** 預けるには大きすぎた1枚を、もう一段小さくして入れ直す */
+    reshrink: function (id) {
+      return photoGet(id).then(function (p) {
+        if (!p) return false;
+        return shrinkImage(p.blob, 0, [{ max: 1024, q: 0.5 }]).then(function (r) {
+          p.blob = r.blob; p.w = r.w; p.h = r.h; p.size = r.blob.size;
+          return photoPut(p).then(function () { return true; });
+        }, function () { return false; });
+      });
+    },
+
+    /** 連動で写真が入れ替わったら、開いている現場を描き直す */
+    refresh: function () { if (openSiteId) renderList(); }
+  };
 
   /** 調査シートを紙と同じ形で印刷する。blank=true なら何も記入しない状態で出す */
   function printSurvey(site, blank) {

@@ -40,6 +40,14 @@
   var MAX_BLOB         = 900000;  // 1回に置ける上限（Firestore は約1MB）
   var TOMB_DAYS        = 120;     // 墓標を残しておく日数
 
+  /* 現場写真は1枚ずつ別の入れ物に預ける。
+     まとめて送ると1MBの上限に一発で当たるし、1枚ごとなら
+     途中で電波が切れても、送れたぶんは残る。
+     1周でまとめて何十枚も動かすと、その間ずっと待たされるので枚数を区切る。 */
+  var PH_UP_PER_ROUND   = 6;      // 1周で預ける枚数
+  var PH_DOWN_PER_ROUND = 10;     // 1周でもらう枚数
+  var PH_SOON_MS        = 4000;   // まだ残っているとき、次の周までの間
+
   /* ---------- ちいさな道具 ---------- */
   function lsGet(k, fb) {
     try { var r = localStorage.getItem(k); return r ? JSON.parse(r) : fb; }
@@ -79,7 +87,11 @@
       tomb:   { sites: {}, estimates: {}, invoices: {} },   // 消した印
       shadow: { sites: {}, estimates: {}, invoices: {} },   // 前回の中身（変更検知用）
       masterAt: 0,         // この端末で単価マスタを最後に直した時刻
-      remoteMasterAt: 0    // 取り込み済みのクラウド側マスタの時刻
+      remoteMasterAt: 0,   // 取り込み済みのクラウド側マスタの時刻
+      /* 現場写真。1枚ごとに見る。
+         up は「その写真そのものを預け終えたか」。回転すると中身が変わるので、
+         印には寸法と大きさ（見た目の指紋）を入れておき、違っていたら預け直す。 */
+      ph: { stamps: {}, tomb: {}, shadow: {}, up: {}, big: {}, count: 0, bytes: 0 }
     };
   }
   function loadState() {
@@ -87,6 +99,10 @@
     var d = defState();
     ['stamps', 'tomb', 'shadow'].forEach(function (g) {
       S[g] = Object.assign({}, d[g], S[g] || {});
+    });
+    S.ph = Object.assign({}, d.ph, S.ph || {});
+    ['stamps', 'tomb', 'shadow', 'up', 'big'].forEach(function (g) {
+      if (!S.ph[g] || typeof S.ph[g] !== 'object') S.ph[g] = {};
     });
     if (typeof S.masterAt !== 'number') S.masterAt = 0;
     if (typeof S.remoteMasterAt !== 'number') S.remoteMasterAt = 0;
@@ -216,6 +232,14 @@
     var j = await res.json();
     var f = j.fields || {};
     return { blob: f.blob ? f.blob.stringValue : '', at: f.at ? Number(f.at.integerValue) : 0 };
+  }
+  /** クラウドから消す。もう無ければそれでよし */
+  async function docDel(part) {
+    var res = await fetch(docUrl(part), {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + (await idToken()) }
+    });
+    if (!res.ok && res.status !== 404) throw new Error('del:' + res.status);
   }
   /** クラウドに書く（無ければ作られる） */
   async function docPut(part, blob, at) {
@@ -351,6 +375,9 @@
      同期の本体
      ====================================================================== */
   var busy = false, pushTimer = null, pushMaster = false, lastErr = '';
+  /* 写真の不調は別に持つ。見積や現場は通っているのに
+     「つながりません」と出ると、直すべき場所を見誤る */
+  var photoErr = '';
   var pendingReload = false;
 
   function markChanged(key) {
@@ -367,6 +394,209 @@
   function schedule(ms) {
     clearTimeout(pushTimer);
     pushTimer = setTimeout(function () { syncNow(); }, ms);
+  }
+
+  /* ======================================================================
+     現場写真の同期
+     ----------------------------------------------------------------------
+     置きかた
+       <置き場所>_plist   … 何が在るかの一覧（覚え書き・時刻・消した印）。小さい
+       <置き場所>_p_<id>  … 写真そのもの1枚。1件1枚ずつ
+
+     写真そのものは app.js の中（IndexedDB）にあって、ここからは触れない。
+     window.AirtecPhotos を通して受け渡す。暗号にするのはここの仕事。
+
+     1周でやること
+       ① この端末で増えた・直した・消したを見つける
+       ② 一覧をもらって突き合わせる（新しいほうが勝つ）
+       ③ 消えたものをこの端末からも消す
+       ④ 足りないものをもらう
+       ⑤ まだ預けていないものを預ける
+       ⑥ 一覧を書き戻す
+     ④⑤は枚数を区切る。残っていれば「まだある」と返して、すぐ次の周を回す。
+     ====================================================================== */
+  /** 写真の中身が入れ替わったかを見分ける印（回転すると変わる） */
+  function phMark(m) { return (m.w || 0) + 'x' + (m.h || 0) + ':' + (m.size || 0); }
+
+  function prunePhTombs() {
+    var limit = now() - TOMB_DAYS * 86400000;
+    Object.keys(S.ph.tomb).forEach(function (id) {
+      if (S.ph.tomb[id] < limit) {
+        delete S.ph.tomb[id];
+        delete S.ph.up[id];
+        delete S.ph.big[id];
+      }
+    });
+  }
+
+  /** 1周ぶんの写真の同期。まだ残っていれば true を返す */
+  async function syncPhotos(t) {
+    var api = window.AirtecPhotos;
+    if (!api) return false;
+
+    var localList = await api.list();
+    var localById = {};
+    localList.forEach(function (p) { localById[p.id] = p; });
+
+    /* ① この端末での増減 */
+    var touched = false;
+    Object.keys(localById).forEach(function (id) {
+      var h = strHash(JSON.stringify(localById[id]));
+      if (S.ph.shadow[id] !== h) {
+        S.ph.stamps[id] = t;
+        delete S.ph.tomb[id];
+        touched = true;
+      }
+    });
+    Object.keys(S.ph.shadow).forEach(function (id) {
+      if (!localById[id]) {
+        S.ph.tomb[id] = t;
+        delete S.ph.stamps[id];
+        delete S.ph.big[id];
+        // up はわざと残す。「クラウドにも1枚ある」という覚えで、
+        // これを頼りに下で本体を片付ける（消したら up も消える）
+        touched = true;
+      }
+    });
+
+    /* ② クラウドの一覧 */
+    var doc = await docGet('plist');
+    var remote = (doc && doc.blob) ? await unseal(doc.blob) : null;
+    var rMeta  = (remote && remote.meta)   || {};
+    var rStamp = (remote && remote.stamps) || {};
+    var rTomb  = (remote && remote.tomb)   || {};
+
+    var ids = {};
+    [localById, rMeta, S.ph.stamps, S.ph.tomb, rStamp, rTomb].forEach(function (o) {
+      Object.keys(o).forEach(function (id) { ids[id] = 1; });
+    });
+
+    var meta = {}, stamps = {}, tomb = {};
+    var want = [], drop = [], fix = [];
+    Object.keys(ids).forEach(function (id) {
+      var lS = S.ph.stamps[id] || 0, lT = S.ph.tomb[id] || 0;
+      var rS = rStamp[id] || 0,      rT = rTomb[id] || 0;
+      var st = Math.max(lS, rS), tb = Math.max(lT, rT);
+
+      if (tb && tb >= st) {                       // 消えている
+        tomb[id] = tb;
+        if (localById[id]) drop.push(id);
+        return;
+      }
+      if (!st) return;                            // どちらにも印が無い＝知らない
+      stamps[id] = st;
+
+      var useRemote = (rS > lS) && rMeta[id];
+      meta[id] = useRemote ? rMeta[id] : (localById[id] || rMeta[id]);
+      if (!meta[id]) { delete stamps[id]; return; }
+
+      if (!localById[id]) {
+        want.push(id);                            // この端末に無い → もらう
+      } else if (useRemote) {
+        // 相手のほうが新しい。写真そのものが入れ替わっている（回した）なら
+        // もらい直す。覚え書きだけの違いなら、その文字だけ入れ替える
+        if (phMark(rMeta[id]) !== phMark(localById[id])) want.push(id);
+        else fix.push(id);
+      }
+    });
+
+    var changed = false;
+
+    /* ③ 消えたもの */
+    for (var a = 0; a < drop.length; a++) {
+      await api.del(drop[a]);
+      changed = true;          // up はそのまま。クラウド側の本体は下で片付ける
+    }
+
+    /* 覚え書き・種類だけ直されたもの */
+    for (var b = 0; b < fix.length; b++) {
+      await api.setMeta(fix[b], meta[fix[b]]);
+      changed = true;
+    }
+
+    /* ④ 足りないものをもらう */
+    var pending = 0, got = {};
+    for (var i = 0; i < want.length; i++) {
+      if (i >= PH_DOWN_PER_ROUND) { pending += want.length - i; break; }
+      var id2 = want[i];
+      var d2 = await docGet('p_' + id2);
+      if (!d2 || !d2.blob) {                      // 一覧にはあるが本体がまだ無い
+        delete stamps[id2]; delete meta[id2];
+        continue;
+      }
+      var body = await unseal(d2.blob);
+      var m2 = meta[id2];
+      await api.put({
+        id: id2, siteId: m2.siteId, kind: m2.kind, memo: m2.memo,
+        at: m2.at, w: m2.w, h: m2.h, data: body.data
+      });
+      S.ph.up[id2] = phMark(m2);                  // もらった＝すでに預かってある
+      got[id2] = 1;
+      changed = true;
+    }
+
+    /* ⑤ まだ預けていないものを預ける */
+    var mine = Object.keys(meta).filter(function (id) {
+      if (got[id]) return false;                  // いまもらったばかり。送り返さない
+      if (!localById[id] || S.ph.big[id]) return false;
+      return S.ph.up[id] !== phMark(localById[id]);
+    });
+    var uploaded = 0;
+    for (var j = 0; j < mine.length; j++) {
+      if (j >= PH_UP_PER_ROUND) { pending += mine.length - j; break; }
+      var id3 = mine[j];
+      var full = await api.get(id3);
+      if (!full) continue;
+      var blob3 = await seal({ v: 1, data: full.data });
+      if (blob3.length > MAX_BLOB) {
+        // 大きすぎる → もう一段小さくして、もう一度だけ試す
+        if (await api.reshrink(id3)) {
+          full = await api.get(id3);
+          blob3 = full ? await seal({ v: 1, data: full.data }) : blob3;
+        }
+        if (!full || blob3.length > MAX_BLOB) { S.ph.big[id3] = 1; continue; }
+        meta[id3] = { id: id3, siteId: full.siteId, kind: full.kind, memo: full.memo,
+                      at: full.at, w: full.w, h: full.h, size: full.size };
+        changed = true;                           // 画面の枚数表示を直すため
+      }
+      await docPut('p_' + id3, blob3, t);
+      S.ph.up[id3] = phMark(full);      // いま預けた中身そのものの印を控える
+      uploaded++;
+    }
+
+    /* 消した写真の本体を、クラウドからも片付ける。
+       一覧から消えるだけでは置き場所（1GBまで）を食いつぶしてしまう。
+       預けたことを覚えている端末が片付ける。すでに無ければ何も起きない。 */
+    var swept = 0;
+    var junk = Object.keys(tomb).filter(function (id) { return S.ph.up[id]; });
+    for (var c = 0; c < junk.length && c < PH_UP_PER_ROUND; c++) {
+      try { await docDel('p_' + junk[c]); } catch (e3) { /* 次の周でまた試す */ continue; }
+      delete S.ph.up[junk[c]];
+      swept++;
+    }
+    if (junk.length > swept) pending += junk.length - swept;
+
+    /* ⑥ 一覧を書き戻す */
+    if (touched || uploaded || drop.length || fix.length || !doc ||
+        !sameMap(stamps, rStamp) || !sameMap(tomb, rTomb)) {
+      await docPut('plist', await seal({ v: 1, meta: meta, stamps: stamps, tomb: tomb }), t);
+    }
+
+    /* 覚え書きを取り直す（もらった・消したぶんを織り込む） */
+    var shadow = {};
+    (await api.list()).forEach(function (p) { shadow[p.id] = strHash(JSON.stringify(p)); });
+    S.ph.shadow = shadow;
+    S.ph.stamps = stamps;
+    S.ph.tomb   = tomb;
+    prunePhTombs();
+
+    S.ph.count = Object.keys(meta).length;
+    S.ph.bytes = Object.keys(meta).reduce(function (a2, id) {
+      return a2 + Number((meta[id] && meta[id].size) || 0);
+    }, 0);
+
+    if (changed && api.refresh) api.refresh();
+    return pending > 0;
   }
 
   async function pushWork(t) {
@@ -432,11 +662,20 @@
         pushMaster = false;
       }
 
+      /* ---- 現場写真（1枚ずつ） ----
+         写真は数が多いので1周ぶんずつ動かす。まだ残っていたら、
+         45秒待たずにすぐ次の周を回す。 */
+      var phMore = false, phErr = '';
+      try { phMore = await syncPhotos(t); }
+      catch (e2) { phErr = String(e2 && e2.message || e2); }
+
       S.lastSync = now();
-      lastErr = '';
+      lastErr = '';             // 現場・見積・単価マスタはここまでで通っている
+      photoErr = phErr;         // 写真だけの不調は、写真の行に出す
       saveState();
       if (changed) onRemoteChange();
       render();
+      if (phMore) schedule(PH_SOON_MS);
       return true;
     } catch (e) {
       lastErr = String(e && e.message || e);
@@ -491,13 +730,29 @@
     }
     $('sync-last').textContent = S ? fmtTime(S.lastSync) : 'まだ';
     $('sync-err').textContent = lastErr ? ('（' + errText(lastErr) + '）') : '';
+
+    /* 写真は預けられる量に上限（1GB）がある。近づいたら分かるように数を出す */
+    var ph = $('sync-photos');
+    if (ph) {
+      if (!on) ph.textContent = '—';
+      else if (photoErr) ph.textContent = '預けられません（' + errText(photoErr) + '）';
+      else if (!S.ph || !S.ph.count) ph.textContent = '0枚';
+      else {
+        var mb = S.ph.bytes / 1048576;
+        var size = mb < 1 ? Math.round(S.ph.bytes / 1024) + 'KB'
+                 : (mb < 10 ? mb.toFixed(1) : Math.round(mb)) + 'MB';
+        ph.textContent = S.ph.count + '枚（' + size + ' / 1,000MBまで）';
+      }
+      ph.className = photoErr ? 'sync-err' : '';
+    }
     $('sync-off-btns').style.display = on ? 'none' : '';
     $('sync-on-btns').style.display  = on ? '' : 'none';
     $('sync-code-view').textContent  = on ? fmtCode(S.code) : '';
   }
   function errText(e) {
     if (/too-big/.test(e))      return '単価マスタが大きすぎます。手動バックアップをお使いください';
-    if (/^get:40[13]/.test(e) || /^put:40[13]/.test(e)) return 'クラウド側の許可設定を見直してください';
+    if (/^put:40[13]/.test(e))  return 'クラウド側の許可設定（ルール）を見直してください。写真を足したときは貼り直しが必要です';
+    if (/^get:40[13]/.test(e)) return 'クラウド側の許可設定を見直してください';
     if (/login:/.test(e))       return 'ログインできません。設定を見直してください';
     if (/OperationError|decrypt/i.test(e)) return 'あいことばが違うようです';
     return e.slice(0, 60);
@@ -603,6 +858,7 @@
     S.code = '';
     S.vault = '';
     keyCache = null;
+    photoErr = '';
     saveState();
     localStorage.removeItem(K_AUTH);
     render();
