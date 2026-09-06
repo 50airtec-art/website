@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>空調王</title>
-<link rel="stylesheet" href="style.css?v=202609071030">
+<link rel="stylesheet" href="style.css?v=202609071200">
 
 <!-- ホーム画面に追加できるようにする。
      iPhoneのSafariは「7日間そのサイトを開かないと、保存した中身を消す」決まりがある。
      ホーム画面から開くアプリはその決まりの外に置かれるので、消えない。
      入れた見積を守るための仕込みであって、見た目の話ではない。 -->
-<link rel="manifest" href="manifest.json?v=202609071030">
+<link rel="manifest" href="manifest.json?v=202609071200">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <!-- black-translucent にすると、時計や電池の下に画面が潜り込んで
@@ -19,8 +19,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="空調王">
 <meta name="theme-color" content="#1a1a1a">
-<link rel="apple-touch-icon" href="icon-180.png?v=202609071030">
-<link rel="icon" href="icon-192.png?v=202609071030">
+<link rel="apple-touch-icon" href="icon-180.png?v=202609071200">
+<link rel="icon" href="icon-192.png?v=202609071200">
 </head>
 <body>
 
@@ -261,6 +261,12 @@
           <label class="check">
             <input type="checkbox" id="csv-replace">
             <span>取り込む前に、そのカテゴリの中身をいったん空にする（入れ直したいとき用）</span>
+          </label>
+          <label class="csv-check">
+            <input type="checkbox" id="csv-costonly">
+            <span><b>仕入先の見積を読ませる（原価だけ入れる・行は増やさない）</b><br>
+              <small>品番でいまの項目を探して、原価だけを書き込みます。定価も入っていれば掛率を計算して、
+              ［自社情報］の仕入掛率に入れるかどうかを聞きます。</small></span>
           </label>
           <p class="csv-note">
             見出し行は <code>カテゴリ / 品番 / 品名 / 規格 / 単位 / 定価</code>。並び順は自由で、無い列はとばせます。<br>
@@ -601,11 +607,11 @@
   </div>
 </div>
 
-<script src="pricebook.js?v=202609071030"></script>
-<script src="survey.js?v=202609071030"></script>
-<script src="firebase-config.js?v=202609071030"></script>
-<script src="catalog.js?v=202609071030"></script>
-<script src="app.js?v=202609071030"></script>
-<script src="sync.js?v=202609071030"></script>
+<script src="pricebook.js?v=202609071200"></script>
+<script src="survey.js?v=202609071200"></script>
+<script src="firebase-config.js?v=202609071200"></script>
+<script src="catalog.js?v=202609071200"></script>
+<script src="app.js?v=202609071200"></script>
+<script src="sync.js?v=202609071200"></script>
 </body>
 </html>

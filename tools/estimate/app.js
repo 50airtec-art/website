@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609071030';
+  var APP_VERSION = '202609071200';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -637,12 +637,64 @@
     return best;
   }
 
+  /* ======================================================================
+     仕入先の見積を読ませる
+     ----------------------------------------------------------------------
+     商社（西方商店など）の見積には［定価］と［仕切＝原価］が並んでいる。
+     この2つがあれば掛率が出る。掛率が分かれば、見積に載っていない
+     何千行の原価まで出せる。1本の見積が、単価マスタ全体を照らす。
+     ====================================================================== */
+  var COST_MAKERS = ['ダイキン', '三菱電機', '三菱', '日立', 'パナソニック', '東芝',
+                     '日本キヤリア', 'キヤリア', '因幡電工', '因幡', 'オーケー器材',
+                     'ユーシー産業', '日晴金属', 'キヤッチャー'];
+
+  /** 品名・規格・カテゴリ名から、どのメーカーの品かを見当てる */
+  function makerOf(text) {
+    var t = String(text || '');
+    for (var i = 0; i < COST_MAKERS.length; i++) {
+      if (t.indexOf(COST_MAKERS[i]) >= 0) return COST_MAKERS[i];
+    }
+    return '';
+  }
+
+  /**
+   * 読み取った行から掛率をまとめる。
+   * 同じメーカーの中で掛率がそろっていれば「日立は23%」と言えるが、
+   * ばらついていたら言えない（シリーズごとに違うため）。
+   * だから黙って平均を出さず、そろっているものだけを提案する。
+   */
+  function summarizeRates(pairs) {
+    var byMaker = {};
+    pairs.forEach(function (p) {
+      if (!(p.price > 0 && p.cost > 0)) return;
+      var mk = makerOf(p.text) || '（メーカー不明）';
+      (byMaker[mk] = byMaker[mk] || []).push(Math.round(p.cost / p.price * 1000) / 10);
+    });
+    var out = [];
+    Object.keys(byMaker).forEach(function (mk) {
+      var pcts = byMaker[mk];
+      var lo = Math.min.apply(null, pcts), hi = Math.max.apply(null, pcts);
+      out.push({
+        maker: mk,
+        count: pcts.length,
+        steady: (hi - lo) <= 1,                 // 1ポイント以内なら「そろっている」
+        pct: Math.round(((lo + hi) / 2) * 10) / 10,
+        kinds: pcts.filter(function (v, i, a) { return a.indexOf(v) === i; }).sort(function (a, b) { return a - b; })
+      });
+    });
+    return out.sort(function (a, b) { return b.count - a.count; });
+  }
+
   /** 単価マスタの項目から、1単位あたりの原価を見積もる */
   function itemCost(item, cat) {
     if (!item) return 0;
     if (num(item.cost) > 0) return num(item.cost);
     if (num(item.manDay) > 0) return Math.round(num(item.manDay) * num(pb.defaults.manDayCostYen));
-    var pct = costRateFor((item.name || '') + ' ' + (item.spec || '')) ||
+    /* 掛率は品名と規格で当てていたが、部材はカテゴリにしかメーカー名が無い
+       （品名は「ペアコイル」だけで、「因幡電工」はカテゴリ名のほう）。
+       カテゴリ名も見ないと、メーカーごとの掛率が当たらない */
+    var pct = costRateFor((item.name || '') + ' ' + (item.spec || '') +
+                          ' ' + ((cat && cat.name) || '')) ||
               num(pb.defaults.materialCostPercent);
     if (pct > 0 && (!cat || !cat.work)) return Math.round(num(item.price) * pct / 100);
     return 0;
@@ -4106,6 +4158,7 @@
 
     var fallbackName = $('#csv-target').value;
     var replace = $('#csv-replace').checked;
+    var costOnly = $('#csv-costonly') && $('#csv-costonly').checked;
     var touched = {};   // カテゴリ名 → 追加件数
     var staged = [];
     var skipped = 0;
@@ -4136,6 +4189,9 @@
     });
 
     if (!staged.length) { toast('取り込める行が見つかりませんでした'); return; }
+
+    // 仕入先の見積を読ませるとき。行は増やさず、原価だけを書き込む
+    if (costOnly) { importCostsOnly(staged); return; }
 
     // カテゴリが多いとダイアログが長くなり、ブラウザに途中で切られてしまう。
     // 内訳は先頭だけ出して、残りは件数でまとめる。
@@ -4184,6 +4240,110 @@
     }
     renderMaster(); renderPicker();
     toast(staged.length + '件を取り込みました');
+  }
+
+  /**
+   * 仕入先の見積から、原価だけを既存の項目に書き込む。
+   *
+   * 突き合わせは品番が第一。品番が無い行は品名＋規格で探す。
+   * 見つからない行は足さずに数えるだけ。勝手に増やすと、
+   * 商社の見積にしか無い品が単価マスタに紛れ込む。
+   */
+  function importCostsOnly(staged) {
+    // 4,000行を毎回なめないよう、先に索引を作る
+    var byCode = {}, byName = {};
+    pb.categories.forEach(function (c) {
+      (c.items || []).forEach(function (it) {
+        var cd = String(it.code || '').trim().toUpperCase();
+        if (cd && !byCode[cd]) byCode[cd] = { item: it, cat: c };
+        var k = (it.name || '') + '｜' + (it.spec || '');
+        if (!byName[k]) byName[k] = { item: it, cat: c };
+      });
+    });
+
+    var hit = [], miss = [], pairs = [];
+    staged.forEach(function (sg) {
+      var r = sg.item;
+      var cost = num(r.cost);
+      if (cost <= 0) return;                       // 原価が無い行は用が無い
+      var cd = String(r.code || '').trim().toUpperCase();
+      var found = (cd && byCode[cd]) || byName[(r.name || '') + '｜' + (r.spec || '')];
+      // 掛率は見積の定価と原価から出す。当たったかどうかとは関係なく使える
+      if (num(r.price) > 0) {
+        pairs.push({ price: num(r.price), cost: cost,
+                     text: (r.name || '') + ' ' + (r.spec || '') + ' ' + (sg.catName || '') });
+      }
+      if (found) hit.push({ ref: found, cost: cost, label: (r.code || r.name) });
+      else miss.push(r.code || r.name);
+    });
+
+    if (!hit.length && !pairs.length) {
+      alert('原価の入った行が見つかりませんでした。\n\n' +
+            '見出しに「原価」「仕切」「仕入」のどれかの列が要ります。');
+      return;
+    }
+
+    var sample = hit.slice(0, 3).map(function (h) {
+      return '　' + h.label + ' … ' + yen(num(h.ref.item.price)) + ' → 原価 ' + yen(h.cost);
+    }).join('\n');
+
+    var msg = '仕入先の見積として読みました。\n\n' +
+      '　いまの項目に当てはまった：' + hit.length + '件\n' +
+      '　見つからなかった：' + miss.length + '件（足しません）\n\n' +
+      (sample ? '【当てはまった例】\n' + sample + '\n\n' : '') +
+      (miss.length ? '【見つからなかった品番】\n　' + miss.slice(0, 5).join('、') +
+        (miss.length > 5 ? ' ほか' + (miss.length - 5) + '件' : '') + '\n\n' : '') +
+      '原価だけを書き込みます。定価と項目の数は変わりません。よろしいですか？';
+    if (!confirm(msg)) return;
+
+    hit.forEach(function (h) { h.ref.item.cost = h.cost; });
+    savePB();
+    renderMaster(); renderPicker(); renderLines();
+    toast(hit.length + '件に原価を入れました');
+
+    offerCostRates(pairs);
+  }
+
+  /** 読み取った掛率を、仕入掛率の表に入れるか聞く */
+  function offerCostRates(pairs) {
+    var sum = summarizeRates(pairs);
+    if (!sum.length) return;
+
+    var lines = sum.map(function (r) {
+      return r.steady
+        ? '　' + r.maker + '　' + r.pct + '%　（' + r.count + '件そろっています）'
+        : '　' + r.maker + '　' + r.kinds.join('% / ') + '%　（' + r.count + '件・ばらついています）';
+    }).join('\n');
+
+    var steady = sum.filter(function (r) { return r.steady && r.maker !== '（メーカー不明）'; });
+    if (!steady.length) {
+      alert('掛率はこう読めました。\n\n' + lines + '\n\n' +
+        'ばらついているので、自動では入れません。\n' +
+        'シリーズごとに違う掛率なら、［自社情報］の仕入掛率で\n' +
+        'シリーズ名を書いた行を足してください。');
+      return;
+    }
+
+    if (!confirm('掛率はこう読めました。\n\n' + lines + '\n\n' +
+      'そろっている ' + steady.length + '件を［自社情報］の仕入掛率に入れますか？\n\n' +
+      'ここに入れると、見積に載っていない同じメーカーの項目にも\n' +
+      '原価が出るようになります（1本の見積で数千行が埋まります）。\n' +
+      '※ すでに同じメーカーだけの行があれば、上書きします')) return;
+
+    ensureCostRates();
+    steady.forEach(function (r) {
+      var at = -1;
+      pb.defaults.costRates.forEach(function (x, i) {
+        if (String(x.maker || '').trim() === r.maker && !String(x.series || '').trim()) at = i;
+      });
+      var row = { maker: r.maker, series: '', percent: r.pct };
+      if (at >= 0) pb.defaults.costRates[at] = row;
+      else pb.defaults.costRates.push(row);
+    });
+    savePB();
+    renderCostRates();
+    renderMaster(); renderPicker(); renderLines();
+    toast(steady.length + '件の掛率を入れました');
   }
 
   function renderCsvTargets() {
