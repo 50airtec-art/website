@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609070530';
+  var APP_VERSION = '202609070700';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -1918,13 +1918,19 @@
      ====================================================================== */
   /**
    * バックアップの中の機種／別売品を数える（読み込む前の確認画面用）。
-   * どちらもメーカーごとの束（packs / stores）で、中身は items に入っている。
-   * 束を持たない古い形（rows を直に持つ）も数えられるようにしておく。
+   * どちらもメーカーごとの束だが、中身を入れている名前が違う。
+   *   機種   … packs[].rows   （読み込んだ生のまま）
+   *   別売品 … stores[].items
+   * 片方だけ見ていると、本物の5,681機種を「0件」と出して人を驚かせる。
+   * 2026-09-06、実際にそう出た。どちらの名前も見る。
    */
   function countPackItems(list, legacy) {
     if (Array.isArray(list)) {
       return list.reduce(function (a, p) {
-        return a + ((p && Array.isArray(p.items)) ? p.items.length : 0);
+        if (!p) return a;
+        if (Array.isArray(p.rows))  return a + p.rows.length;
+        if (Array.isArray(p.items)) return a + p.items.length;
+        return a;
       }, 0);
     }
     if (legacy && Array.isArray(legacy.rows)) return legacy.rows.length;
