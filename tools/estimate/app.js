@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609061900';
+  var APP_VERSION = '202609062230';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -2991,6 +2991,19 @@
     var cnt = el('span', 'survey-count', '');
     head.appendChild(cnt);
     wrap.appendChild(head);
+
+    /* --------------------------------------------------------------------
+       2026-09-06、実機で確かめた。
+       iPhoneのSafariで［写真を撮る］を選んで撮った写真は、
+       iPhoneの写真アプリには残らない。空調王の中の1枚きりになる。
+       いつものカメラで撮ってから［フォトライブラリ］で選べば、両方に残る。
+       押す場所のすぐそばで知らせないと、気づくのは無くしたあとになる。
+       -------------------------------------------------------------------- */
+    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) {
+      wrap.appendChild(el('p', 'photo-warn',
+        'その場で［写真を撮る］と、その写真はスマホの写真アプリには残りません（空調王の中だけになります）。' +
+        'あとで見返したい写真は、先にいつものカメラで撮ってから［フォトライブラリ］を選んでください。'));
+    }
 
     var pick = el('div', 'photo-pick');
     PHOTO_KINDS.forEach(function (k) {
