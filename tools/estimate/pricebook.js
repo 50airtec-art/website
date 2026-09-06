@@ -117,8 +117,8 @@ const DEFAULT_PRICEBOOK = {
         { name: '室外機 立ち下ろし（1階置き）', spec: '', unit: '台', price: 5000, color: '紫' , est: 1 },
         { name: '室外機 壁面金具設置', spec: '', unit: '台', price: 12000, color: '紫' , est: 1 },
         { name: '室外機 屋根置き設置', spec: '', unit: '台', price: 15000, color: '紫' , est: 1 },
-        { name: '室外機 二段置き金具', spec: '', unit: '台', price: 14000, color: '紫' , est: 1 },
-        { name: '室外機 天吊り金具', spec: '', unit: '台', price: 18000, color: '紫' , est: 1 },
+        { name: '室外機 二段置き設置', spec: '', unit: '台', price: 14000, color: '紫' , est: 1 },
+        { name: '室外機 天吊り設置', spec: '', unit: '台', price: 18000, color: '紫' , est: 1 },
         { name: '防振ゴム・据付ブロック', spec: '', unit: '台', price: 3000, color: '紫' , est: 1 },
         /* 現場の条件で足すもの */
         { name: 'ドレンポンプ設置', spec: '', unit: '台', price: 18000, color: '水' , est: 1 },
