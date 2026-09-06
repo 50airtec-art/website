@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609071430';
+  var APP_VERSION = '202609071730';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -4230,6 +4230,28 @@
     // 仕入先の見積を読ませるとき。行は増やさず、原価だけを書き込む
     if (costOnly) { importCostsOnly(staged); return; }
 
+    /* 原価の列があるのにチェックが入っていない、という取り違えを止める。
+       原価しか入っていない表は、まず間違いなく仕入先の見積であって、
+       新しい品物の一覧ではない。黙って151件足してしまったことがある
+       （2026-09-06）。人が覚えておく話ではないので、道具の側で聞く。 */
+    var withCost = staged.filter(function (x) { return num(x.item.cost) > 0; }).length;
+    var withPrice = staged.filter(function (x) { return num(x.item.price) > 0; }).length;
+    if (withCost > 0 && withCost >= staged.length / 2 && withPrice < staged.length / 2) {
+      var ans = confirm(
+        '原価の列が入っていて、定価がほとんど入っていません。\n' +
+        '仕入先の見積を読ませようとしていませんか？\n\n' +
+        '　このまま進むと … 新しい項目を ' + staged.length + '件 追加します\n' +
+        '　やめて直すと … いまある項目の原価だけを書き込みます（増えません）\n\n' +
+        '［OK］いまある項目の原価だけを書き込む（おすすめ）\n' +
+        '［キャンセル］このまま ' + staged.length + '件を新しく追加する');
+      if (ans) {
+        var box = $('#csv-costonly');
+        if (box) box.checked = true;         // 次からは押し忘れないよう、印も入れておく
+        importCostsOnly(staged);
+        return;
+      }
+    }
+
     // カテゴリが多いとダイアログが長くなり、ブラウザに途中で切られてしまう。
     // 内訳は先頭だけ出して、残りは件数でまとめる。
     var catNames = Object.keys(touched);
@@ -4509,7 +4531,13 @@
       activeCat = pb.categories.length ? pb.categories[0].id : null;
       savePB(); renderMaster(); renderPicker(); fillCompany();
       if (mdl) { save(KEY_MDL, mdl); chooserSel = {}; loadModels(); }
-      toast('読み込みました');
+      /* 単価マスタが入れ替わったら、開いている見積の原価も出し直す。
+         ここを呼ばないと、原価を入れた単価マスタを読み込んでも
+         画面の見積は「未入力」のまま。見積を開き直すまで気づけない
+         （2026-09-06、３８８の見積で分かった） */
+      var n = fillMissingLineCosts();
+      if (n) { persistDraft(); renderLines(); }
+      toast('読み込みました' + (n ? '（開いている見積の ' + n + '行にも原価が入りました）' : ''));
     });
   });
   $('#btn-reset-pb').addEventListener('click', function () {
