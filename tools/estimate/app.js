@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609070130';
+  var APP_VERSION = '202609070330';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -1940,9 +1940,60 @@
      OneDrive の中に置けば、そのままクラウドにも残る。
      （この機能はパソコンのChrome/Edge向け。スマホでは通常のダウンロードになる） */
   var KEY_BK = 'airtec_backup_meta_v1';
-  var BK_DAYS = 14;                       // 何日空いたら知らせるか
+  /* 何日空いたら知らせるか。
+     iPhoneのSafariは「7日そのサイトを開かないと保存した中身を消す」ので、
+     14日待っていては手遅れになる。7日に合わせる。 */
+  var BK_DAYS = 7;
   var canPickFile = (typeof window.showSaveFilePicker === 'function');
   var bkHandle = null;
+
+  /* ---------- 端末の側で内容が消える道と、その塞ぎ方 ----------
+     1. ブラウザの閲覧データ削除
+     2. iPhoneのSafariが7日で消す（Appleの決まり。ホーム画面のアプリは対象外）
+     3. 端末の故障・紛失・買い替え
+     連動を入れておけばクラウドに写しが残るので、1と3は塞げる。
+     2だけはホーム画面に追加してもらうしかない。 */
+  var KEY_A2HS = 'airtec_a2hs_hidden_v1';   // 案内を「あとで」した日
+
+  /** ホーム画面から開いているか（Safariのアプリ扱いか） */
+  function isStandalone() {
+    if (window.navigator.standalone === true) return true;               // iOS
+    try { return window.matchMedia('(display-mode: standalone)').matches; } catch (e) { return false; }
+  }
+  function isIOS() {
+    var ua = navigator.userAgent || '';
+    // iPadOSはMacintoshと名乗るので、指で触れるかどうかで見分ける
+    return /iP(hone|od|ad)/.test(ua) ||
+           (/Macintosh/.test(ua) && typeof document.ontouchend !== 'undefined');
+  }
+  /** 連動が入っているか（入っていればクラウドに写しがある） */
+  function syncOn() {
+    return !!(window.AirtecSync && window.AirtecSync.isOn && window.AirtecSync.isOn());
+  }
+
+  var A2HS_STEPS =
+    'iPhone・iPadでの追加のしかた\n\n' +
+    '１. Safariの下（または上）にある「共有」ボタンを押す\n' +
+    '　　　□ に ↑ の矢印が刺さった絵のボタンです\n' +
+    '２. 出てきた一覧を下にたどって「ホーム画面に追加」を押す\n' +
+    '３. 右上の「追加」を押す\n\n' +
+    'ホーム画面に空調王のアイコンができます。\n' +
+    '次からは、そのアイコンから開いてください。\n\n' +
+    '※ 大事なこと\n' +
+    'ホーム画面のアプリは、Safariとは別の入れ物になることがあります。\n' +
+    '空だったときは、先にSafariのほうで［自社情報］→ 連動を始め、\n' +
+    'ホーム画面のほうで同じあいことばを入れてください。中身が流れ込みます。';
+
+  function showA2HS() { alert(A2HS_STEPS); }
+
+  function renderA2HS() {
+    var bar = $('#a2hs-warn');
+    if (!bar) return;
+    var hide = load(KEY_A2HS, 0);
+    var shownRecently = hide && (Date.now() - hide) < 30 * 86400000;   // 「あとで」は30日黙る
+    // iPhoneで、Safariから開いていて、まだ言われていない人にだけ出す
+    bar.style.display = (isIOS() && !isStandalone() && !shownRecently) ? '' : 'none';
+  }
 
   /* --------------------------------------------------------------------
      IndexedDB（この端末の中の、大きいものを置ける入れ物）
@@ -2026,12 +2077,21 @@
 
     var d = daysSinceBackup();
     var warn = $('#bk-warn');
+
+    /* 連動が入っていれば、書いたそばからクラウドに写しが残る。
+       それでも急かすと「またこれか」で読まれなくなるので、黙る。
+       守りが1つも無いときだけ、はっきり言う。 */
+    if (syncOn()) { warn.style.display = 'none'; renderA2HS(); return; }
+
     if (d === Infinity || d >= BK_DAYS) {
       $('#bk-warn-text').textContent = (d === Infinity)
-        ? 'まだ一度もバックアップしていません。ブラウザの閲覧データを消すと、入力した内容はすべて消えます。'
-        : Math.floor(d) + '日バックアップしていません。';
+        ? 'まだ一度もバックアップしていません。連動も入っていません。' +
+          'いまブラウザの閲覧データを消すと、入れた単価も見積もすべて消えます。'
+        : Math.floor(d) + '日バックアップしていません（連動も入っていません）。';
       warn.style.display = '';
     } else warn.style.display = 'none';
+
+    renderA2HS();
   }
 
   async function pickBackupFile() {
@@ -2080,6 +2140,18 @@
       return false;
     }
   }
+
+  /* 連動（sync.js）は app.js のあとに読み込まれる。
+     先に警告を描いてしまうと「連動していない」と誤って判断したまま残るので、
+     全部そろったところで一度描き直す。 */
+  window.addEventListener('load', function () { renderBackupState(); });
+
+  $('#btn-a2hs-how').addEventListener('click', showA2HS);
+  $('#btn-a2hs-how2').addEventListener('click', showA2HS);
+  $('#btn-a2hs-hide').addEventListener('click', function () {
+    save(KEY_A2HS, Date.now());
+    $('#a2hs-warn').style.display = 'none';
+  });
 
   $('#btn-bk-pick').addEventListener('click', function () { pickBackupFile(); });
   $('#btn-bk-save').addEventListener('click', function () { writeBackup(false); });

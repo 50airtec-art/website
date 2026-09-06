@@ -5,7 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>空調王</title>
-<link rel="stylesheet" href="style.css?v=202609070130">
+<link rel="stylesheet" href="style.css?v=202609070330">
+
+<!-- ホーム画面に追加できるようにする。
+     iPhoneのSafariは「7日間そのサイトを開かないと、保存した中身を消す」決まりがある。
+     ホーム画面から開くアプリはその決まりの外に置かれるので、消えない。
+     入れた見積を守るための仕込みであって、見た目の話ではない。 -->
+<link rel="manifest" href="manifest.json?v=202609070330">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<!-- black-translucent にすると、時計や電池の下に画面が潜り込んで
+     いちばん上のタブ（見積作成・現場…）が隠れる。default なら隠れない -->
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="空調王">
+<meta name="theme-color" content="#1a1a1a">
+<link rel="apple-touch-icon" href="icon-180.png?v=202609070330">
+<link rel="icon" href="icon-192.png?v=202609070330">
 </head>
 <body>
 
@@ -39,6 +54,13 @@
   <div class="bk-warn sync-warn" id="sync-warn" style="display:none">
     <span>もう一方の端末の変更を受け取りました。</span>
     <button class="btn btn-primary btn-sm" id="btn-sync-reload">画面を新しくする</button>
+  </div>
+
+  <div class="bk-warn a2hs-warn" id="a2hs-warn" style="display:none">
+    <span><b>iPhoneをお使いの方へ。</b>Safariは<b>7日間開かないと、入れた内容を消してしまいます。</b>
+      ホーム画面に追加すると消えなくなります。</span>
+    <button class="btn btn-primary btn-sm" id="btn-a2hs-how">やり方を見る</button>
+    <button class="btn btn-ghost btn-sm" id="btn-a2hs-hide">あとで</button>
   </div>
 
   <div class="bk-warn new-warn" id="new-warn" style="display:none">
@@ -442,6 +464,56 @@
         </div>
       </div>
 
+      <!-- データを守る手立てのまとめ。ばらばらに置いてあると誰も全部は読まないので、
+           「消える経路」と「その塞ぎ方」を1か所に並べる -->
+      <div class="card" id="safety-card">
+        <h2 class="card-title">入れた内容を失わないために</h2>
+        <p class="hint">
+          空調王は<strong>お使いの端末の中</strong>に内容を保存します。速くて、電波が無くても動く代わりに、
+          <strong>端末の側の都合で消えることがあります。</strong>消える道は3つです。
+        </p>
+
+        <div class="safety-grid">
+          <div class="safety-row">
+            <b>1. ブラウザの閲覧データを消したとき</b>
+            <span>「履歴とWebサイトデータを消去」を押すと、入れた単価も見積も一緒に消えます。</span>
+            <em>塞ぎ方 → 下の連動を入れる／バックアップを取る</em>
+          </div>
+          <div class="safety-row" id="safety-ios">
+            <b>2. iPhoneで7日間開かなかったとき</b>
+            <span>SafariはAppleの決まりで、<strong>7日そのサイトを開かないと保存した中身を消します。</strong>
+              現場が続いて2週間ぶりに開いたら空だった、が起こり得ます。</span>
+            <em>塞ぎ方 → <strong>ホーム画面に追加する</strong>（追加したものはこの決まりの外になります）</em>
+          </div>
+          <div class="safety-row">
+            <b>3. 端末が壊れた・失くした・買い替えた</b>
+            <span>その端末しか持っていない内容は、一緒に無くなります。</span>
+            <em>塞ぎ方 → 連動を入れる（もう一方の端末とクラウドに残ります）</em>
+          </div>
+        </div>
+
+        <p class="hint" style="margin-top:14px">
+          <strong>いちばん確実なのは、連動を入れてホーム画面に追加することです。</strong>
+          この2つをやっておけば、3つの道すべてが塞がります。
+        </p>
+        <div class="csv-btns">
+          <button class="btn btn-primary" id="btn-a2hs-how2">ホーム画面への追加のしかた</button>
+        </div>
+
+        <div class="terms-box">
+          <b class="terms-title">ご利用にあたって</b>
+          <ul>
+            <li>空調王は<strong>現状のまま</strong>提供します。動作や計算結果について保証はいたしません。</li>
+            <li><strong>見積の金額・選んだ機種・必要な能力は、必ずご自身で確かめてください。</strong>
+              この道具が出す数字は目安であり、最終の判断はお使いになる方の責任で行ってください。</li>
+            <li>端末やクラウドに保存した内容が失われた場合について、責任を負いかねます。
+              上に書いた手立てをとってください。</li>
+            <li><strong>メーカーの機種データは、お使いになる方ご自身が取得したもの</strong>です。
+              各メーカーの利用条件に従ってお使いください。空調王はそれを配布しません。</li>
+          </ul>
+        </div>
+      </div>
+
       <div class="card">
         <h2 class="card-title">ロゴ（見積書の右上に入ります）</h2>
         <p class="hint">
@@ -529,11 +601,11 @@
   </div>
 </div>
 
-<script src="pricebook.js?v=202609070130"></script>
-<script src="survey.js?v=202609070130"></script>
-<script src="firebase-config.js?v=202609070130"></script>
-<script src="catalog.js?v=202609070130"></script>
-<script src="app.js?v=202609070130"></script>
-<script src="sync.js?v=202609070130"></script>
+<script src="pricebook.js?v=202609070330"></script>
+<script src="survey.js?v=202609070330"></script>
+<script src="firebase-config.js?v=202609070330"></script>
+<script src="catalog.js?v=202609070330"></script>
+<script src="app.js?v=202609070330"></script>
+<script src="sync.js?v=202609070330"></script>
 </body>
 </html>

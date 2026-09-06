@@ -831,6 +831,34 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
 }
 .bk-warn span { flex: 1; min-width: 200px; }
 @media print { .bk-warn { display: none !important; } }
+
+/* ===== 入れた内容を失わないために ===== */
+.a2hs-warn { background: #e8f1fb; border-bottom-color: #a8c8ea; color: #14406e; }
+.safety-grid { display: grid; gap: 10px; margin-top: 12px; }
+.safety-row {
+  border: 1px solid var(--border); border-left: 3px solid #c9a227;
+  border-radius: 8px; background: #fffdf6; padding: 10px 14px;
+}
+.safety-row b { display: block; font-size: 13px; margin-bottom: 4px; }
+.safety-row span { display: block; font-size: 12px; color: var(--text-sub); line-height: 1.8; }
+.safety-row em {
+  display: block; margin-top: 6px; font-style: normal;
+  font-size: 12px; color: #14406e;
+}
+/* ご利用にあたって（免責）。bk-box を借りると strong が block になって
+   文の途中で改行してしまうので、専用にする */
+.terms-box {
+  border: 1px solid var(--border); border-radius: 8px;
+  background: #fafbfc; padding: 12px 14px; margin-top: 16px;
+}
+.terms-title { display: block; font-size: 13px; margin-bottom: 6px; }
+.terms-box ul { margin: 0; padding-left: 1.2em; }
+.terms-box li {
+  font-size: 12px; color: var(--text-sub); line-height: 1.9; margin-bottom: 4px;
+}
+.terms-box li strong { color: var(--text); }
+
+@media print { #safety-card { display: none !important; } }
 /* 写真を開いたまま印刷しても、紙には出さない */
 @media print { .photo-view { display: none !important; } }
 
