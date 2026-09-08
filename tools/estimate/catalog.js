@@ -788,6 +788,39 @@
     return rows;
   }
 
+  /* 品番の値段を探す。
+     まず同じ行の右どなり。無ければ**すぐ下の行**の、真下あたりを見る。
+     日立の表は「品番の行」と「金額の行」が上下に分かれていることがあり、
+     前は同じ行しか見ていなかったので、その表の品目がまるごと落ちていた
+     （2026-09-09、日立 p.88 てんつり BG-56NUP2／67,000円 で分かった）。 */
+  function optPriceRightOrBelow(rows, r, i, o) {
+    var money = false;
+    for (var j = i + 1; j < r.cells.length; j++) {
+      var t = r.cells[j].s.trim();
+      if (OPT_CODE.test(t)) break;
+      var mm = t.match(OPT_MONEY);
+      if (mm) return { y: yen(mm[1]), x: r.cells[j].x };
+    }
+    // その行のどこかに金額があるなら、値段は同じ行に書く表。下の行は見ない（となりの品番の値段を取ってしまう）
+    r.cells.forEach(function (c) { if (OPT_MONEY.test(c.s.trim())) money = true; });
+    if (money) return null;
+
+    var best = null, bd = 1e9;
+    rows.forEach(function (q) {
+      var dy = r.y - q.y;                     // y は下から上。dy>0 が「下の行」
+      if (dy <= 0 || dy > 14) return;
+      q.cells.forEach(function (c) {
+        var m = c.s.trim().match(OPT_MONEY);
+        if (!m) return;
+        var dx = Math.abs(c.x - o.x);
+        if (dx > 40) return;
+        var d = dy * 2 + dx;
+        if (d < bd) { bd = d; best = { y: yen(m[1]), x: c.x }; }
+      });
+    });
+    return best;
+  }
+
   /** 列の見出し（＝付く室内機）を集める */
   function optColumns(rows) {
     var cols = [];
@@ -876,6 +909,9 @@
         var best = null, bd = 1e9;
         b.at.forEach(function (l) {
           if (!l.s || l.s.length < 2) return;
+          // 表の下や横に書かれた注記の文章は品名ではない
+          // （「『エアーフィルター』は室内ユニットに標準で…です。」が品名に付いていた）
+          if (l.s.length > 12 && /[。］」]/.test(l.s)) return;
           if (mode === 'above' && l.y < y - 2) return;
           var d = Math.abs(l.y - y);
           if (d < bd) { bd = d; best = l; }
@@ -900,6 +936,7 @@
         .replace(/\b[A-Z][A-Z0-9\-]{3,}\b/g, ' ')
         .replace(/適用機種/g, ' ')
         .replace(/[ -]/g, ' ')
+        .replace(/[（(]\s*[）)]/g, ' ')      // 注記を消したあとに残る空の（）
         .replace(/^[・、。\s]+|[・、。\s]+$/g, '')
         .replace(/\s+/g, ' ')
         .trim();
@@ -1133,29 +1170,59 @@
   function optPageHitachi(items, page, out) {
     var rows = optRows(items);
 
-    var type = '';
+    var type = '', titleY = 0;
     rows.forEach(function (r) {
       if (type) return;
       var t = r.cells.map(function (o) { return o.s; }).join('').replace(/\s/g, '');
       var m = t.match(/オプション一覧[（(]([^）)]{2,20})[）)]/);
-      if (m) type = m[1];
+      if (m) { type = m[1]; titleY = r.y; }
     });
     if (!type) return;
 
-    var head = null;
-    rows.forEach(function (r) {
-      if (head) return;
-      var t = r.cells.map(function (o) { return o.s; }).join('').replace(/\s/g, '');
-      if (/容量[・･]型名/.test(t)) head = r;
-    });
-    if (!head) return;
+    /* 列の見出し（容量の並び）は、「■ オプション一覧（…）」の**すぐ下**にある。
 
-    // 見出しの行を x のすき間で切って、列（容量の範囲）にする
+       ここを間違えていた。前は
+       ・ページの中でいちばん最初の「容量・型名」の行を見出しにしていた
+       ・「容量・型名（相当馬力）」だけが1行に置かれ、容量は次の行にあるページを読めなかった
+       この2つで、10タイプ中6タイプがまるごと落ちていた
+       （2026-09-09、BIGBOSSの「天吊型にもでないぞ」で分かった。
+         てんかせ1方向のページは、先に「化粧パネル」の表が載っている） */
+    /* 見出しの容量は**3行に割れていることがある**（てんうめのページ）。
+
+         22型（0.8）〜        45型（1.8）〜
+       品名                63型（2.5）〜90型（3.3）  112型（4.0）〜…
+         40型（1.5）          56型（2.3）
+
+       なので「見出しの行を1つ選ぶ」のではなく、
+       見出しの帯にある容量の字をぜんぶ集めて、x（横の位置）でまとめる。
+       「40型（1.5）」の形に書いてあるものだけを容量と見なす。数字だけで見ると
+       「20,000円」の20や「F-160LB1」の160まで容量に見えてしまう。 */
+    var hcells = [];
+    rows.forEach(function (r) {
+      if (r.y >= titleY || r.y < titleY - 40) return;
+      r.cells.forEach(function (c) {
+        if (/\d{2,3}\s*[型形]/.test(c.s) && capRange(c.s)) hcells.push(c);
+      });
+    });
+    if (!hcells.length) return;
+    var headY = 1e9;
+    hcells.forEach(function (c) { if (c.y < headY) headY = c.y; });
+    var head = { y: headY };
+
+    // 表の終わりは、見出しより下にある次の「■」（次の節の始まり）
+    var endY = -1e9;
+    rows.forEach(function (r) {
+      if (r.y >= head.y) return;
+      var t = r.cells.map(function (o) { return o.s; }).join('').trim();
+      if (t.charAt(0) === '■' && r.y > endY) endY = r.y;
+    });
+
+    // 集めた容量の字を x でまとめて、列（容量の範囲）にする
+    hcells.sort(function (a, b) { return a.x - b.x || b.y - a.y; });
     var cols = [], cur = null;
-    head.cells.forEach(function (c) {
-      if (/容量|型名|相当馬力/.test(c.s)) return;
-      if (!cur || c.x - cur.right > 60) { cur = { x: c.x, right: c.x, s: c.s }; cols.push(cur); }
-      else { cur.s += c.s; cur.right = c.x; }
+    hcells.forEach(function (c) {
+      if (!cur || c.x - cur.x > 30) { cur = { x: c.x, right: c.x, s: c.s }; cols.push(cur); }
+      else { cur.s += c.s; cur.right = Math.max(cur.right, c.x); }
     });
     cols = cols.map(function (c) { return { x: c.x, cap: capRange(c.s) }; })
       .filter(function (c) { return c.cap; });
@@ -1163,25 +1230,42 @@
 
     var nameAt = nameReader(rows, cols[0].x - 20, head.y);
 
+    // 表ぜんぶにかかる容量（1行に品番が1つだけのときに使う）
+    var wide = [1e9, 0];
+    cols.forEach(function (k) {
+      if (k.cap[0] < wide[0]) wide[0] = k.cap[0];
+      if (k.cap[1] > wide[1]) wide[1] = k.cap[1];
+    });
+
     rows.forEach(function (r) {
-      if (r.y >= head.y - 2) return;
+      if (r.y >= head.y - 2 || r.y <= endY) return;
       var name = nameAt(r.y);
+
+      /* リモコンやドレンアップメカのように、**容量に関係なく1つだけ**の品番は、
+         マスを何列もまたいで真ん中あたりに書かれている。
+         前はいちばん近い列に押し込んでいたので、
+         「かべかけ4馬力に多機能デザインリモコンが出ない」ことになっていた
+         （2026-09-09、BIGBOSSの指摘で分かった）。1行に品番が1つなら表ぜんぶに付くとみなす */
+      var nCode = 0;
+      r.cells.forEach(function (c) { if (OPT_CODE.test(c.s.trim())) nCode++; });
 
       r.cells.forEach(function (o, i) {
         var s = o.s.trim();
         if (!OPT_CODE.test(s)) return;
-        var price = 0;
-        for (var j = i + 1; j < r.cells.length; j++) {
-          var t = r.cells[j].s.trim();
-          if (OPT_CODE.test(t)) break;
-          var mm = t.match(OPT_MONEY);
-          if (mm) { price = yen(mm[1]); break; }
-        }
+        var price = optPriceRightOrBelow(rows, r, i, o);
         if (!price) return;
-        var col = null, bd = 1e9;
-        cols.forEach(function (k) { var d = Math.abs(k.x - o.x); if (d < bd) { bd = d; col = k; } });
-        if (!col || bd > 110) return;
-        out.push({ page: page, name: name, code: s, y: price, fits: [{ type: type, cap: col.cap }] });
+        // どの列かは**金額の位置**で決める。品番は長さがまちまちで、
+        // 長い品番ほどマスの中で左に伸び、1つ左の列に取られてしまう
+        // （2026-09-09、F-112LPK2-AGV が50〜63型の列に入っていた）
+        var atX = price.x;
+        var cap = wide;
+        if (nCode > 1) {
+          var col = null, bd = 1e9;
+          cols.forEach(function (k) { var d = Math.abs(k.x - atX); if (d < bd) { bd = d; col = k; } });
+          if (!col || bd > 110) return;
+          cap = col.cap;
+        }
+        out.push({ page: page, name: name, code: s, y: price.y, fits: [{ type: type, cap: cap }] });
       });
     });
   }
@@ -1642,6 +1726,12 @@
       url: 'https://ec.daikinaircon.com/cgi-bin/ecatalog/bindPDF.cgi?C=CP26016AXX&S=180&E=243&CT=1&CV=1',
       min: 500,
       readPage: function (items, page) {
+        var txt = items.map(function (i) { return i.s; }).join('').replace(/\s/g, '');
+        /* 耐塩害・耐重塩害の「機種の選び方」ページは別売品ではない。
+           室外機の品番と本体価格が並んでいるので、放っておくと
+           機種そのものが「どの機種にも付く別売品」として72件入ってしまう
+           （2026-09-09、RZRP40CV 581,000円 などで分かった） */
+        if (/耐重塩害仕様/.test(txt)) return [];
         var out = [];
         optPage(items, page, out);            // 列の見出しが室内機の表
         optPageDaikinVert(items, page, out); // 品番が縦に並び、価格が下に1行だけの表
@@ -2000,12 +2090,20 @@
   var CAPS = [20, 22, 25, 28, 32, 36, 40, 45, 50, 56, 63, 71, 80, 90, 100, 112, 125, 140, 160,
               180, 200, 224, 250, 280, 335, 400, 450, 500, 560];
 
-  /** 機種データの1行から容量（40・112 など）を取る */
+  /** 機種データの1行から容量（40・112 など）を取る。
+      **室内機の品番を先に見る。**
+      別売品（パネル・フィルター・グリル）は室内機に付くもので、
+      表の列も室内機の容量で並んでいる。
+      ab（224型＝8馬力相当）はシステム全体＝室外機の容量なので、
+      ツイン・トリプルのときに実物より何倍も大きくなり、
+      **どの列にも当たらず別売品が1つも出なくなる**
+      （2026-09-09、RAS-GP224RGH2／RPK-GP56KA×4 で分かった。室内機は56型） */
   function capOfModel(x) {
     if (!x) return 0;
-    var m = String(x.ab || '').match(/(\d{2,3})\s*[形型]/);
-    if (m) return Number(m[1]);
-    m = String(x.im || '').match(/(\d{2,3})/);
+    var im = String(x.im || '').replace(/×\s*\d+\s*$/, '');
+    var m = im.match(/(\d{2,3})/);
+    if (m && CAPS.indexOf(Number(m[1])) >= 0) return Number(m[1]);
+    m = String(x.ab || '').match(/(\d{2,3})\s*[形型]/);
     if (m) return Number(m[1]);
     m = String(x.m || '').match(/(\d{2,3})/);
     return m ? Number(m[1]) : 0;
