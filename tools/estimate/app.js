@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609071730';
+  var APP_VERSION = '202609091200';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -5316,11 +5316,24 @@
      容量のところを開いて、選んだ機種の室内機品番と突き合わせる
      （突き合わせは catalog.js の optionsFor がやる）。
      ---------------------------------------------------------------------- */
+  /* 別売品の欄に一言だけ出す。
+     何も出ないと「壊れている」のか「まだ入れていない」のか分からない
+     （2026-09-09、BIGBOSSが「機種えらんでも別売品でないよ」で気づかせてくれた） */
+  function optNote(box, msg) {
+    box.appendChild(el('p', 'picker-empty', msg));
+  }
+
   function showOptionsFor(x) {
     var box = $('#chooser-options');
     if (!box) return;
     box.innerHTML = '';
-    if (!optStores.length || !window.KUCHOO_CATALOG || !KUCHOO_CATALOG.optionsFor) return;
+    if (!window.KUCHOO_CATALOG || !KUCHOO_CATALOG.optionsFor) return;
+    if (!optStores.length) {
+      optNote(box, 'パネル・リモコンなどの別売品は、まだ読み込まれていません。' +
+        '［単価マスタ］の「カタログPDFから機種データを作る」で、' +
+        'メーカー名のうしろに「（別売品）」と付いたものを選んで読ませると、ここに出ます。');
+      return;
+    }
 
     /* そのメーカーの別売品だけを見る。
        ダイキンの機種にパナソニックのパネルを出してはいけない。 */
@@ -5335,7 +5348,17 @@
         list.push({ code: o.code, name: o.name, y: o.y, fits: o.fits, maker: s.maker });
       });
     });
-    if (!list.length) return;
+    if (!list.length) {
+      var mine = false, have = [];
+      optStores.forEach(function (s) {
+        have.push(s.maker);
+        if (same(x.mk, s.maker)) mine = true;
+      });
+      optNote(box, mine
+        ? '読み込んである ' + have.join('・') + ' の別売品の中に、「' + x.m + '」に付くものは見つかりませんでした。'
+        : (x.mk || 'このメーカー') + ' の別売品はまだ読み込まれていません（いま入っているのは ' + have.join('・') + '）。');
+      return;
+    }
 
     var head = el('div', 'opt-head');
     head.appendChild(el('b', null, '「' + x.m + '」に付けられる別売品'));
@@ -5595,6 +5618,58 @@
       row.appendChild(del);
       box.appendChild(row);
     });
+  }
+
+  /* 読み取った別売品を、ファイルにして持ち出す／別の端末で読み込む。
+     カタログPDFの読み取りは1社で数分かかる。1度読めばファイルにできるので、
+     2台目のパソコンやスマホでは、選ぶだけで済む。 */
+  $('#btn-options-save').addEventListener('click', function () {
+    if (!optStores.length) { toast('別売品がまだ読み込まれていません'); return; }
+    download('空調王-別売品-' + todayISO() + '.json', JSON.stringify({ v: 1, stores: optStores }));
+    toast('別売品データを書き出しました');
+  });
+
+  $('#file-options').addEventListener('change', function (ev) {
+    var files = Array.prototype.slice.call(ev.target.files || []);
+    ev.target.value = '';
+    if (!files.length) return;
+
+    var done = [], failed = [], i = 0;
+    // 1つずつ順に読む（まとめて読むと、同じ保存先を取り合って上書きし合う）
+    (function next() {
+      if (i >= files.length) { finish(); return; }
+      var f = files[i++];
+      readJsonFile(f, function (data) {
+        var packs = optPacksOf(data);
+        if (!packs.length) { failed.push(f.name); next(); return; }
+        packs.forEach(function (s) { putOptStore(s); done.push(s.maker + ' ' + (s.items || []).length + '品目'); });
+        next();
+      });
+    })();
+
+    function finish() {
+      loadOptions();
+      if (done.length) toast('別売品を入れました（' + done.join('／') + '）' +
+                             (failed.length ? '　読めなかった: ' + failed.join('、') : ''));
+      else toast('別売品データとして読めませんでした（' + failed.join('、') + '）');
+    }
+  });
+
+  /** ファイルの中から別売品の束を取り出す。書き出したファイルでも、全データでも読めるように */
+  function optPacksOf(data) {
+    if (!data) return [];
+    var raw = data.options || data;          // 全データの中の options でも、別売品だけのファイルでも
+    var list = raw.stores || (raw.items ? [raw] : []);
+    return list.filter(function (s) { return s && s.maker && (s.items || []).length; });
+  }
+
+  /** 1社ぶんを入れる（同じメーカーがあれば入れ替え）。保存はまとめて1回 */
+  function putOptStore(store) {
+    var stores = optStores.slice(), at = -1;
+    stores.forEach(function (s, i) { if (s.maker === store.maker) at = i; });
+    if (at >= 0) stores[at] = store; else stores.push(store);
+    save(KEY_OPT, { v: 1, stores: stores });
+    optStores = stores;
   }
 
   function adoptOptions(store, extra) {
