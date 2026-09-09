@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609100330';
+  var APP_VERSION = '202609100430';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -1379,12 +1379,21 @@
       iCost.placeholder = '—';
       iCost.title = '1' + (l.unit || '個') + 'あたりの原価。空のままだと粗利を多めに見せてしまいます';
       tdCost.appendChild(iCost);
+      /* 入れるのは1つあたりの原価。でもとなりの「金額」は数量を掛けた額なので、
+         並べて見ると数量を掛け忘れているように見える。
+         9m×¥1,425 の行で、原価の欄に 1425 だけ出ていた
+         （2026-09-09、BIGBOSSの「数量関係なく単価の原価？」で分かった）。
+         粗利の計算は前から数量を掛けていて正しい。**見え方だけ**の話 */
+      var costSum = el('div', 'cost-sum');
+      tdCost.appendChild(costSum);
       tr.appendChild(tdCost);
       tr.appendChild(tdMargin);
 
       function showMargin() {
         var amt = lineAmount(l, st.unitRound);
         var cst = num(l.qty) * num(l.cost);
+        costSum.textContent = (num(l.cost) && num(l.qty) !== 1)
+          ? '×' + num(l.qty) + '＝' + yen(cst) : '';
         if (!amt || !num(l.cost)) {
           tdMargin.textContent = num(l.cost) ? '—' : '未入力';
           tdMargin.classList.remove('is-thin');
