@@ -1931,14 +1931,18 @@
   };
 
   /** 位置つきの文字を「行」にまとめる。pdf.js の y は下から上なので、上の行＝y が大きい */
-  function inabaLines(items) {
+  function inabaLines(items, chain) {
     var live = items.filter(function (i) { return String(i.s).trim() !== ''; });
     live.sort(function (a, b) { return b.y - a.y; });
     var lines = [], cur = [], y = null;
     live.forEach(function (i) {
       if (y === null || Math.abs(i.y - y) < 2.5) {
         cur.push(i);
-        if (y === null) y = i.y;
+        // chain のときは、直前の文字と比べて次へつなぐ。
+        // 1行の中で y が少しずつ下がっていく紙面（オーケー器材）は、
+        // 行の頭とだけ比べていると、行の後ろのほうが2.5を超えて別の行にされる。
+        // 品番と値段が別々の行になって丸ごと落ちる（2026-09-10、17件で分かった）
+        if (y === null || chain) y = i.y;
       } else {
         lines.push(cur); cur = [i]; y = i.y;
       }
@@ -2153,7 +2157,7 @@
     lines.forEach(function (ws) {
       ws.forEach(function (it) {
         var t = ucFlat(it.s);
-        if (t === '品番' && cx.code == null) cx.code = it.x;
+        if (t === '品番' && cx.code == null) { cx.code = it.x; cx.headY = it.y; }
         if (t === '単価' && cx.price == null) cx.price = it.x;
         if (t === '品名' && cx.name == null) cx.name = it.x;
       });
@@ -2170,6 +2174,10 @@
           if (!t || t === '品名') return;
           if (Math.abs(it.x - cx.name) > near) return;
           if (t.charAt(0) === '→') return;             // 「→P.05」は参照ページ
+          if (t.charAt(0) === '■') return;             // 「■排水部材・産業資材」は章の見出し
+          if (t.length < 3) return;                    // 割れて残った「・」などは品名ではない
+          // 表の見出しより上にあるものは、章の題（「■排水部材・産業資材」）であって品名ではない
+          if (cx.headY != null && it.y > cx.headY - 2) return;
           names.push({ x: it.x, y: it.y, name: t });
         });
       });
@@ -2198,13 +2206,181 @@
   }
 
   function ucFinish(sets) {
-    var rows = [], seen = {};
-    sets.forEach(function (r) { if (!seen[r.m]) { seen[r.m] = 1; rows.push(r); } });
+    // 同じ品番が「品番表」と「単価表」の両方に出る。値段は同じだが、
+    // 品名が入っているのは単価表のほうだけ。**品名のあるほうを残す**
+    var rows = [], at = {};
+    sets.forEach(function (r) {
+      var i = at[r.m];
+      if (i == null) { at[r.m] = rows.length; rows.push(r); return; }
+      if (rows[i].name === rows[i].m && r.name !== r.m) rows[i] = r;
+    });
     return {
       head: {
         maker: 'ユーシー産業',
         brand: '単価表',
         note: '定価・税抜。総合カタログの単価表から読み取ったもの。'
+      },
+      rows: rows,
+      pricePages: sets.length ? 1 : 0
+    };
+  }
+
+  /* --------------------------------------------------------------------
+     オーケー器材（ダイキン系の部材）
+     ----------------------------------------------------------------------
+     空調工事部材カタログ。612ページ・163MBある大物で、値段は製品の表の
+     あちこちに「12,100円/本」の形で散っている。¥ は使わない。
+
+     紙面の作り
+       ・1ページに表が1〜4つ。縦に並ぶことも、左右に並ぶこともある
+       ・列の位置は見出し「品　番」「希望小売価格」が教えてくれる
+       ・**見出しの y は「品番」と「希望小売価格」で3ポイントほどずれる**（同じ行ではない）
+       ・**品番と値段の y も1ポイントほどずれる**
+
+     だから「行にまとめてから読む」をやめた。紙面のへり（縦書きの見出し）に
+     引っぱられて、品番と値段が別の行に割れる。
+     **値段のほうを起点にして、同じ列でいちばん y の近い品番を組にする。**
+     -------------------------------------------------------------------- */
+
+  var OK_PRICE = /^([\d,]+)円(?:\/(\S+))?$/;
+  var OK_CODE  = /^[A-Z][A-Za-z0-9\-]{2,}$/;
+  var OK_NEAR  = 45;      // 値段の列のずれ
+  var OK_WIDE  = 90;      // 品番の列は見出しがまん中ぞろえで、実物より右に出る
+  var OK_BAND  = 10;      // 見出しの y のずれ
+  // 品番の形をしているが品番ではないもの。BIMは「BIMデータあり」の印
+  var OK_NOT_CODE = { BIM: 1, NEW: 1, PDF: 1, CAD: 1 };
+
+  /** 見出しを y でまとめ、品番と希望小売価格を左から順に組にする */
+  function okBands(ws) {
+    var marks = [];
+    ws.forEach(function (w) {
+      var t = ucFlat(w.s);
+      if (t === '品番') marks.push({ kind: 'code', x: w.x, y: w.y });
+      else if (t === '希望小売価格') marks.push({ kind: 'price', x: w.x, y: w.y });
+    });
+    marks.sort(function (a, b) { return b.y - a.y; });    // pdf.js の y は下から上。上の見出しから
+
+    var bands = [], cur = [], y = null;
+    marks.forEach(function (m) {
+      if (y === null || Math.abs(m.y - y) < OK_BAND) {
+        cur.push(m);
+        if (y === null) y = m.y;
+      } else { bands.push({ y: y, marks: cur }); cur = [m]; y = m.y; }
+    });
+    if (cur.length) bands.push({ y: y, marks: cur });
+
+    var out = [];
+    bands.forEach(function (b) {
+      b.marks.sort(function (a, c) { return a.x - c.x; });
+      var pairs = [];
+      b.marks.forEach(function (m, i) {
+        if (m.kind !== 'code') return;
+        for (var j = i + 1; j < b.marks.length; j++) {
+          if (b.marks[j].kind === 'price') { pairs.push({ cx: m.x, px: b.marks[j].x }); break; }
+        }
+      });
+      if (pairs.length) out.push({ y: b.y, pairs: pairs });
+    });
+    return out;
+  }
+
+  var OK_GLUED = /^([A-Z][A-Za-z0-9\-]{2,})[\s　]+([\d,]+)$/;
+
+  /** 値段の文字の来かたが3通りある。どれも1つの語にそろえる。
+        「12,100円/本」……そのまま
+        「13,700」＋「円/本」……数字のうしろに円が来る
+        「KHR58S211 21,100」＋「円」……**品番と値段が1つの文字になっている**（分岐管のページ）
+      3つ目は品番と値段に切り分ける。値段の x は、うしろに来る「円」の位置を使う */
+  function okWords(ln) {
+    var ws = ucWords(ln), out = [];
+    for (var i = 0; i < ws.length; i++) {
+      var w = ws[i], nx = ws[i + 1];
+      var yen = nx && nx.s.charAt(0) === '円' && nx.x - (w.x + w.w) < 6;
+      var glued = w.s.match(OK_GLUED);
+      if (glued && yen) {
+        out.push({ s: glued[1], x: w.x, y: w.y, w: w.w / 2 });
+        out.push({ s: glued[2] + nx.s, x: nx.x - 1, y: w.y, w: nx.w });
+        i++;
+      } else if (yen && /^[\d,]+$/.test(w.s)) {
+        out.push({ s: w.s + nx.s, x: w.x, y: w.y, w: (nx.x + nx.w) - w.x });
+        i++;
+      } else out.push(w);
+    }
+    return out;
+  }
+
+  function okReadPage(items, pageNo) {
+    if (!items.length) return [];
+    // 見出しは1文字ずつ、値段は数字と「円/本」に割れて来る。つなぎ直してから見る
+    var ws = [], byLine = [];
+    inabaLines(items, true).forEach(function (ln) {
+      var w = okWords(ln);
+      byLine.push(w);
+      ws = ws.concat(w);
+    });
+
+    var bands = okBands(ws);
+    if (!bands.length) return [];
+
+    /* ページのいちばん上の柱（「クイックパイパー」など）を、そのページの品名にする。
+       **1語だけ採ると尻切れになる。**「スカイダクト」が「スカイダク」＋「ト」に
+       割れて来るので、いちばん上の行をまるごとつなぐ（2026-09-10） */
+    var top = '';
+    for (var li = 0; li < byLine.length && !top; li++) {
+      var t = byLine[li].map(function (w) { return ucFlat(w.s); })
+                        .filter(function (v) { return v && !/^[\d,.\-]+$/.test(v); })
+                        .join('');
+      if (t.length >= 3) top = t;
+    }
+
+    var prices = [], codes = [];
+    ws.forEach(function (w) {
+      var t = ucFlat(w.s);
+      var m = t.match(OK_PRICE);
+      if (m) prices.push({ x: w.x, y: w.y, val: Number(m[1].replace(/,/g, '')), unit: m[2] || '' });
+      else if (OK_CODE.test(t) && !OK_NOT_CODE[t]) codes.push({ x: w.x, y: w.y, s: t });
+    });
+
+    var out = [];
+    prices.forEach(function (p) {
+      // その値段より上にある見出しのうち、**値段の列が合うもので**いちばん近いもの。
+      // 左右2つの表が縦にずれて並ぶページがあり、「いちばん近い見出し」だけで選ぶと
+      // 右の表の見出しで左の表を読もうとして、列が合わず丸ごと落ちる
+      var pair = null, all = null;
+      bands.forEach(function (b) {
+        if (b.y < p.y - 1) return;                 // 上＝y が大きい
+        b.pairs.forEach(function (q) {
+          if (Math.abs(p.x - q.px) < OK_NEAR) { pair = q; all = b.pairs; }
+        });
+      });
+      if (!pair) return;
+
+      var best = null, bestDy = 99;
+      codes.forEach(function (c) {
+        if (Math.abs(c.x - pair.cx) >= OK_WIDE) return;
+        // 品番の列がいくつもあるページでは、いちばん近い列のものだけを採る
+        var own = all[0];
+        all.forEach(function (q) { if (Math.abs(c.x - q.cx) < Math.abs(c.x - own.cx)) own = q; });
+        if (own.cx !== pair.cx) return;
+        var dy = Math.abs(c.y - p.y);
+        if (dy < bestDy) { bestDy = dy; best = c.s; }
+      });
+      if (best && bestDy < 4) {
+        out.push({ m: best, y: p.val, code: '', name: top || best, series: top || '部材',
+                   ref: 'P' + pageNo, unit: p.unit, page: pageNo });
+      }
+    });
+    return out;
+  }
+
+  function okFinish(sets) {
+    var rows = [], seen = {};
+    sets.forEach(function (r) { if (!seen[r.m]) { seen[r.m] = 1; rows.push(r); } });
+    return {
+      head: {
+        maker: 'オーケー器材',
+        brand: '空調工事部材カタログ',
+        note: '希望小売価格・税抜。カタログの表から読み取ったもの。'
       },
       rows: rows,
       pricePages: sets.length ? 1 : 0
@@ -2459,6 +2635,23 @@
       min: 30,
       readPage: ucReadPage,
       finish: ucFinish
+    },
+    {
+      id: 'okkizai-parts',
+      name: 'オーケー器材（部材）',
+      catalog: '空調工事部材カタログ 2026〜2027',
+      size: '612ページ・163MBほど。読み取りに5〜8分かかり、そのあいだパソコンが重くなります。ほかのアプリを閉じてから始めてください。',
+      kind: 'parts',
+      layout: true,
+      howto: [
+        '下のリンクを押すと、カタログ1冊ぶんのPDFが落ちてくる（163MBあるので数分かかります）',
+        '落ちてきたPDFを「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://dcs.gamedios.com/webapi/v4.7/stream/get/file/data?appkey=JOSGCVAITEAWL&volumeid=OKK10001&id=22045240000&dg=30F7CC7E890BF5C045EDC2D9126960E5967CE365&age=orig',
+      urlNote: 'リンクが切れていたら、オーケー器材のデジタルカタログ（https://ok-kizai.co.jp/system/catalog/index）の「空調工事部材カタログ」から取り直してください。',
+      min: 800,
+      readPage: okReadPage,
+      finish: okFinish
     }
   ];
 
@@ -2880,5 +3073,6 @@
     return [Math.min.apply(null, nums), Math.max.apply(null, nums)];
   }
 
-  window.KUCHOO_CATALOG = { makers: MAKERS, run: run, yen: yen, optionsFor: optionsFor, optFits: optFits, typeAtPage: typeAtPage, optCategory: optCategory, catOrder: OPT_CAT_ORDER };
+  window.KUCHOO_CATALOG = { makers: MAKERS, run: run, yen: yen, optionsFor: optionsFor, optFits: optFits, typeAtPage: typeAtPage, optCategory: optCategory, catOrder: OPT_CAT_ORDER,
+                            _readPage: { ok: okReadPage, inaba: inabaReadPage, uc: ucReadPage } };
 })();
