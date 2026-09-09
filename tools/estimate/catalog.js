@@ -853,7 +853,13 @@
   function nameReader(rows, leftEnd, headY, mode) {
     function chops(cells) {
       var seg = [], cur = null;
-      cells.filter(function (o) { return o.x < leftEnd; })
+      cells.filter(function (o) {
+        if (o.x >= leftEnd) return false;
+        // 紙面のいちばん端（x<25）に1文字ずつ縦に並んでいるのはページの見出し。
+        // 品名の列ではないので入れない（「カセット形」が品名に混ざっていた）
+        if (o.x < 25 && o.s.trim().length <= 1) return false;
+        return true;
+      })
         .sort(function (p, q) { return p.x - q.x; })
         .forEach(function (o) {
           if (!cur || o.x > cur.right + 4) { cur = { x: o.x, right: o.x + o.w, s: o.s }; seg.push(cur); }
@@ -1021,38 +1027,60 @@
     if (xFit == null || xCode == null) return;
     if (xPrice == null) xPrice = xCode + 80;
 
-    // ページの端の縦書きが、その表の機種タイプ
+    /* この表がどの機種タイプのものかを決める。
+
+       タイプの一覧をもらっているときは、**その名前が紙面にあるかどうか**で決める。
+       まずページのノド（右端）を見て、無ければページ全体から探す。
+       長い名前から先に見る（「高天井用1方向カセット形」を「1方向…」より先に当てる）。
+
+       前はページの端の縦書きを先に使っていて、
+       ・キヤリア……「70㎥/h以下、P112形」をタイプとして拾い、28品目がどこにも当たらない
+       ・パナソニック……1方向天井カセット形のページを天井ビルトインカセット形と取り違え、
+         18機種に別売品が出ない
+       という取り違えが起きていた（2026-09-09）。 */
+    var norm = function (t) {
+      return String(t).replace(/[\s　]/g, '')
+        .replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); });
+    };
     var type = '';
-    items.forEach(function (o) {
-      if (o.x > xPrice + 30 && /形$/.test(o.s) && o.s.length >= 4 && isJa(o.s)) type = o.s;
-    });
-    /* 端の縦書きは当てにならないことがある。
-       キヤリアでは「70㎥/h以下、P112形」を機種タイプとして拾っていて、
-       その28品目はどの機種にも当たらなかった（2026-09-09）。
-       タイプの一覧を渡してもらっているときは、その中の名前でなければ捨てる */
-    if (type && types) {
-      var known = false;
-      types.forEach(function (t) { if (looseSame(t, type)) known = true; });
-      if (!known) type = '';
+    if (types) {
+      var sorted = types.slice().sort(function (a, b) { return b.length - a.length; });
+
+      /* ①「そのマスがタイプ名そのもの」を、ページのいちばん上から探す。
+         これが節の見出し。ページの中の参照（「天井ビルトインカセット形はP.81」など）に
+         引っかからないので、いちばん確か */
+      var top = -1e9;
+      items.forEach(function (o) {
+        var t = norm(o.s);
+        sorted.forEach(function (k) {
+          if (norm(k) !== t) return;
+          if (o.y > top) { top = o.y; type = k; }
+        });
+      });
+
+      // ② ページのノド（端）に入っている小さな見出し
+      if (!type) {
+        var side = norm(items.filter(function (o) { return o.x > xPrice + 30 || o.x < 40; })
+          .map(function (o) { return o.s; }).join(''));
+        sorted.forEach(function (t) { if (!type && side.indexOf(norm(t)) >= 0) type = t; });
+      }
+
+      // ③ それでも決まらなければページ全体から。長い名前を先に見る
+      if (!type) {
+        var whole = norm(items.map(function (o) { return o.s; }).join(''));
+        sorted.forEach(function (t) { if (!type && whole.indexOf(norm(t)) >= 0) type = t; });
+      }
+    }
+    // タイプの一覧が無い社は、ページの端の縦書きを使う
+    if (!type && !types) {
+      items.forEach(function (o) {
+        if (o.x > xPrice + 30 && /形$/.test(o.s) && o.s.length >= 4 && isJa(o.s)) type = o.s;
+      });
     }
     // 機種データのページ番号から決めるのがいちばん確か（紙面に書いていない社があるため）
     if (ctx && ctx.pageTypes) {
       var byPage = typeAtPage(ctx.pageTypes, page);
       if (byPage) type = byPage;
-    }
-    if (!type && types) {
-      /* ページのどこかに書いてある機種タイプを拾う。
-         パナソニックは紙面のノド（内側）に「54 ４方向天井カセット形」と入っている。
-         全角の数字と空白をそろえてから探す。
-         長い名前から先に見る（「高天井用1方向カセット形」を「1方向…」より先に当てる）。
-         ここは前は replace(/s/g,'') と書いてあり、空白ではなく英字のsを消していた */
-      var norm = function (t) {
-        return String(t).replace(/[\s　]/g, '')
-          .replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); });
-      };
-      var flat = norm(items.map(function (o) { return o.s; }).join(''));
-      types.slice().sort(function (a, b) { return b.length - a.length; })
-        .forEach(function (t) { if (!type && flat.indexOf(norm(t)) >= 0) type = t; });
     }
 
     // 品名は「大分類 ｜ 品名 ｜ 色」の縦の列。色だけの行でも品名を拾えるようにする
