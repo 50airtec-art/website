@@ -2083,6 +2083,134 @@
     };
   }
 
+  /* --------------------------------------------------------------------
+     ユーシー産業（エバック）
+     ----------------------------------------------------------------------
+     総合カタログ76ページの、うしろのほうにある「単価表」だけを読む。
+     1段の素直な表で、列がきれいにそろっている。
+
+       品　名          品　番     ホース呼び径 ホース長 梱　包  単　価
+       エバフリーAFP型  AFP-20     φ20         400mm   30本   ¥1,120
+
+     **列の x は、紙面の見出し（品　番／単　価）から覚える。**
+     見出しの無いページは単価表ではないので、まるごと読み飛ばす。
+     こうしておくと、カタログの前半（写真と説明のページ）を
+     値段だと読み違えることがない。
+     -------------------------------------------------------------------- */
+
+  function ucFlat(t) {
+    return String(t == null ? '' : t).replace(/[\s\u3000]/g, '');
+  }
+
+  /** 全角の英数字を半角にそろえる。品番が「ＢＦＰ-30-1000Ｌ」で来ることがある */
+  function ucHalf(t) {
+    return String(t).replace(/[Ａ-Ｚａ-ｚ０-９－]/g, function (c) {
+      if (c === '－') return '-';
+      return String.fromCharCode(c.charCodeAt(0) - 0xFEE0);
+    });
+  }
+
+  /* pdf.js は見出しを1文字ずつに割ってよこす（「品」「 」「番」）。
+     文字の幅（w）を見て、となりとくっついているものをつなぎ直す。
+     これをしないと「品番」という見出しが永遠に見つからず、0件で終わる。 */
+  function ucWords(ln) {
+    var out = [], cur = null, GAP = 12;   // 文字1つぶんの幅。列と列のすき間は70以上ある
+    ln.forEach(function (it) {
+      var t = String(it.s);
+      var blank = !t.trim();
+      // **つなぐのは1文字ずつ来たものだけ。**
+      // 見出しは「品」「 」「番」と1文字ずつ来るのでつなぐ必要があるが、
+      // 明細の文字（「エバフリーAFP型」「LJH-25」）はまとまって来る。
+      // 何でもつなぐと、品名の右はしと品番がくっついて品番が見つからなくなる
+      var single = blank || t.length === 1;
+      if (cur && single && cur.single && it.x - (cur.x + cur.w) < GAP) {
+        if (!blank) cur.s += t;
+        cur.w = (it.x + (it.w || 0)) - cur.x;
+        return;
+      }
+      if (blank) { cur = null; return; }
+      cur = { s: t, x: it.x, y: it.y, w: it.w || 0, single: single };
+      out.push(cur);
+    });
+    return out;
+  }
+
+  /** 品名は数行ぶんの高さの真ん中に置かれている。上でも下でもなく、いちばん近いものを採る */
+  function ucNearest(list, y) {
+    var best = null, bestDy = 1e9;
+    list.forEach(function (h) {
+      var dy = Math.abs(h.y - y);
+      if (dy < bestDy) { bestDy = dy; best = h; }
+    });
+    return best && bestDy < 90 ? best.name : '';
+  }
+
+  function ucReadPage(items, pageNo) {
+    var cx = {}, near = 60;
+    var lines = inabaLines(items).map(ucWords);
+
+    // 1回目：紙面の見出しから、列の x を覚える
+    lines.forEach(function (ws) {
+      ws.forEach(function (it) {
+        var t = ucFlat(it.s);
+        if (t === '品番' && cx.code == null) cx.code = it.x;
+        if (t === '単価' && cx.price == null) cx.price = it.x;
+        if (t === '品名' && cx.name == null) cx.name = it.x;
+      });
+    });
+    if (cx.code == null || cx.price == null) return [];   // 単価表ではないページ
+
+    // 2回目：品名を先に全部ひろう。品名は行の真ん中に置かれていて、
+    // 上から順に読んでいる途中では「まだ出てきていない」ことがある
+    var names = [];
+    if (cx.name != null) {
+      lines.forEach(function (ws) {
+        ws.forEach(function (it) {
+          var t = ucFlat(it.s);
+          if (!t || t === '品名') return;
+          if (Math.abs(it.x - cx.name) > near) return;
+          if (t.charAt(0) === '→') return;             // 「→P.05」は参照ページ
+          names.push({ x: it.x, y: it.y, name: t });
+        });
+      });
+    }
+
+    // 3回目：明細
+    var out = [];
+    lines.forEach(function (ws) {
+      if (!ws.length) return;
+      var price = 0, model = '';
+      ws.forEach(function (it) {
+        var t = ucFlat(it.s);
+        var m = t.match(/^[¥￥]([\d,]+)$/);
+        if (m && Math.abs(it.x - cx.price) < near) { price = Number(m[1].replace(/,/g, '')); return; }
+        if (!model && Math.abs(it.x - cx.code) < near && /[A-Za-zＡ-Ｚａ-ｚ]/.test(t)) model = ucHalf(t);
+      });
+      if (!price || !model) return;
+
+      out.push({
+        m: model, y: price, code: '',
+        name: ucNearest(names, ws[0].y) || model,
+        series: 'ユーシー産業', ref: 'P' + pageNo, page: pageNo
+      });
+    });
+    return out;
+  }
+
+  function ucFinish(sets) {
+    var rows = [], seen = {};
+    sets.forEach(function (r) { if (!seen[r.m]) { seen[r.m] = 1; rows.push(r); } });
+    return {
+      head: {
+        maker: 'ユーシー産業',
+        brand: '単価表',
+        note: '定価・税抜。総合カタログの単価表から読み取ったもの。'
+      },
+      rows: rows,
+      pricePages: sets.length ? 1 : 0
+    };
+  }
+
   var MAKERS = [
     {
       id: 'carrier',
@@ -2314,6 +2442,23 @@
       min: 200,
       readPage: inabaReadPage,
       finish: inabaFinish
+    },
+    {
+      id: 'uc-parts',
+      name: 'ユーシー産業（部材）',
+      catalog: 'エバック 総合カタログ（うしろの単価表を読みます）',
+      size: '76ページ・24MBほど。読み取りに20秒ほどかかります。',
+      kind: 'parts',
+      layout: true,
+      howto: [
+        '下のリンクを押すと、総合カタログのPDFが落ちてくる',
+        '落ちてきたPDFを「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://microbecms-microbe-cms-evuc-uploads.s3.ap-northeast-1.amazonaws.com/uploads/2026/05/1779965937194-70c95f460c37d093.pdf',
+      urlNote: 'リンクが切れていたら、ユーシー産業のサイト（https://www.evuc.co.jp/e-catalog/）のWEBカタログから取り直してください。',
+      min: 30,
+      readPage: ucReadPage,
+      finish: ucFinish
     }
   ];
 
