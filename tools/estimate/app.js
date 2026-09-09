@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609100430';
+  var APP_VERSION = '202609100530';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -1375,25 +1375,29 @@
       // 原価と粗利率（社内用）。見積書には出ない
       var tdCost = el('td', 'c-cost');
       var tdMargin = el('td', 'c-margin');
-      var iCost = el('input'); iCost.type = 'number'; iCost.step = '1'; iCost.value = num(l.cost) || '';
+      /* 欄に入れるのは**その行ぶんの原価**（数量を掛けた額）。
+         となりの「金額」も数量を掛けた額なので、これで左右がそろう。
+         9m×¥1,425 の行なら、金額 ¥27,000 に対して原価 ¥12,825 と出る。
+
+         中では1つあたりで持っている（単価マスタも人工も1つあたりのため）。
+         入れられた額は数量で割って l.cost に入れる
+         （2026-09-09、BIGBOSSの「欄に数量かけた金額」） */
+      var iCost = el('input'); iCost.type = 'number'; iCost.step = '1';
       iCost.placeholder = '—';
-      iCost.title = '1' + (l.unit || '個') + 'あたりの原価。空のままだと粗利を多めに見せてしまいます';
+      iCost.title = 'この行ぶんの原価（数量を掛けた額）。空のままだと粗利を多めに見せてしまいます';
       tdCost.appendChild(iCost);
-      /* 入れるのは1つあたりの原価。でもとなりの「金額」は数量を掛けた額なので、
-         並べて見ると数量を掛け忘れているように見える。
-         9m×¥1,425 の行で、原価の欄に 1425 だけ出ていた
-         （2026-09-09、BIGBOSSの「数量関係なく単価の原価？」で分かった）。
-         粗利の計算は前から数量を掛けていて正しい。**見え方だけ**の話 */
-      var costSum = el('div', 'cost-sum');
-      tdCost.appendChild(costSum);
+      var costEach = el('div', 'cost-sum');
+      tdCost.appendChild(costEach);
       tr.appendChild(tdCost);
       tr.appendChild(tdMargin);
 
       function showMargin() {
         var amt = lineAmount(l, st.unitRound);
         var cst = num(l.qty) * num(l.cost);
-        costSum.textContent = (num(l.cost) && num(l.qty) !== 1)
-          ? '×' + num(l.qty) + '＝' + yen(cst) : '';
+        // 打っている最中の欄は書き換えない
+        if (document.activeElement !== iCost) iCost.value = num(l.cost) ? Math.round(cst) : '';
+        costEach.textContent = (num(l.cost) && num(l.qty) !== 1)
+          ? '1' + (l.unit || '個') + 'あたり ' + yen(Math.round(num(l.cost))) : '';
         if (!amt || !num(l.cost)) {
           tdMargin.textContent = num(l.cost) ? '—' : '未入力';
           tdMargin.classList.remove('is-thin');
@@ -1403,9 +1407,12 @@
         tdMargin.textContent = r.toFixed(1) + '%';
         tdMargin.classList.toggle('is-thin', r < 15);
       }
+      showMargin();
 
       iCost.addEventListener('input', function () {
-        l.cost = num(iCost.value);
+        // 入れられたのは行ぶんの額。1つあたりに戻して持つ
+        var q = num(l.qty) || 1;
+        l.cost = num(iCost.value) / q;
         l.costFixed = num(iCost.value) > 0;   // 手で入れた原価は設定変更で上書きしない
         showMargin();
         renderTotals();
