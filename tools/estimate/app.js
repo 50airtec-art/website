@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609100130';
+  var APP_VERSION = '202609100230';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -5389,6 +5389,17 @@
       { has: x.rm, word: /リモコン/, skip: /ケース|ケーブル|カバー|受光部|ホルダ|架台/, nm: 'リモコン' },
       { has: x.pm, word: /パネル/,   skip: /フィルタ|スペーサ|カバー|ろ材/,           nm: '化粧パネル' }
     ];
+    /** 品番から、読み込んである別売品を探す（付いてくるものの定価を知るため） */
+    function optByCode(code) {
+      var hit = null;
+      optStores.forEach(function (st2) {
+        (st2.items || []).forEach(function (it) {
+          if (!hit && String(it.code) === String(code)) hit = it;
+        });
+      });
+      return hit;
+    }
+
     list.forEach(function (o) {
       var onm = o.name || '';
       INCLUDED.forEach(function (k) {
@@ -5402,10 +5413,27 @@
         }
         if (k.word.test(onm) && !k.skip.test(onm)) {
           o.dup = '入れ替え';
-          o.dupMsg = 'この機種には ' + k.has + ' が付いています。\n' +
-                     'これに取り替えるなら、差額だけを入れてください。\n' +
-                     '（定価をそのまま足すと、' + k.nm + 'を2つ買ったことになります）\n\n' +
-                     'それでも定価 ' + yen(o.y) + ' で入れますか？';
+          o.swapKind = k.nm;
+          var inc = optByCode(k.has);
+          o.swapCode = k.has;
+          o.swapName = (inc && inc.name) || k.has;
+          o.swapY = inc ? num(inc.y) : 0;
+          if (o.swapY > 0) {
+            /* 付いてくるものの定価が分かるので、差し引く明細も一緒に入れられる。
+               「差額を入れてください」と人にやらせると、まず忘れる
+               （2026-09-09、BIGBOSSの案） */
+            o.dupMsg = 'この機種には ' + o.swapName + '（' + o.swapCode + '）が付いています。\n' +
+                       'こちらに取り替えるので、付いてくるぶんを差し引きます。\n\n' +
+                       '　' + (o.name || o.code) + '　＋' + yen(o.y) + '\n' +
+                       '　' + o.swapName + '　−' + yen(o.swapY) + '\n' +
+                       '　差引　' + (o.y - o.swapY < 0 ? '−' + yen(o.swapY - o.y) : '＋' + yen(o.y - o.swapY)) + '\n\n' +
+                       'よろしいですか？';
+          } else {
+            o.dupMsg = 'この機種には ' + k.has + ' が付いています。\n' +
+                       'これに取り替えるなら、差額だけを入れてください。\n' +
+                       '（' + k.has + ' の定価が別売品データに無いので、差し引きは自動でできません）\n\n' +
+                       'それでも定価 ' + yen(o.y) + ' で入れますか？';
+          }
         }
       });
     });
@@ -5468,6 +5496,24 @@
         line.cost = lineCostFromSettings(line);
         line.rate = modelRateFor(line);
         addLine(line);
+
+        // 取り替えるときは、機種の値段に入っているぶんをマイナスの行で戻す
+        if (o.swapY > 0) {
+          var back = {
+            name: (o.maker || '') + '　' + o.swapName + '（本体付属分を差引）',
+            spec: o.swapCode,
+            listPrice: -o.swapY,
+            qty: 1,
+            unit: '個',
+            price: -o.swapY
+          };
+          back.base = -o.swapY;
+          back.rate = modelRateFor(back);
+          back.cost = -Math.abs(num(lineCostFromSettings({ name: back.name, spec: back.spec, base: o.swapY, price: o.swapY })));
+          addLine(back);
+          toast('「' + (o.name || o.code) + '」を追加し、' + o.swapName + ' を差し引きました');
+          return;
+        }
         toast('「' + (o.name || o.code) + '」を追加しました');
       });
       wrap.appendChild(b);
