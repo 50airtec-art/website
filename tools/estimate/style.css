@@ -1005,3 +1005,12 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
   .sz-meas-foot .btn { flex: 1 1 auto; }
 }
 .sz-meas-total.sz-warn { color: #b45; font-size: 13px; }
+
+/* 別売品のうち、すでにセット価格に入っているもの（リモコン・化粧パネル）。
+   押すと二重取りになるので、見た目でも分かるようにする（2026-09-09） */
+.item-btn.is-included { border-color: #e0a800; background: #fffbe9; }
+.item-btn .item-dup {
+  display: inline-block; margin-top: 3px; padding: 1px 6px;
+  font-size: 11px; font-weight: 600; color: #8a6100;
+  background: #ffe9a8; border-radius: 999px;
+}

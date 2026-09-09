@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609092330';
+  var APP_VERSION = '202609100030';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -5377,6 +5377,39 @@
 
     /* 1台に700品目も出ると現場では選べない。品名で仲間に分けて絞れるようにする */
     var cats = {};
+    /* セット価格にすでに入っているものを見分ける。
+
+       リモコンを選んで機種を決めたのに、別売品にそのリモコンが出てきて、
+       押すと定価がまるごと足されていた。日立のかべかけなら
+       セットに PC-ARFG4 が入っているのに、別売品の
+       「多機能デザインリモコン PC-ARFG4 ¥42,000」を押すと二重取りになる。
+       機種データの rm（付属リモコン）と pm（付属パネル）が、その印になる
+       （2026-09-09、BIGBOSSの指摘） */
+    var INCLUDED = [
+      { has: x.rm, word: /リモコン/, skip: /ケース|ケーブル|カバー|受光部|ホルダ|架台/, nm: 'リモコン' },
+      { has: x.pm, word: /パネル/,   skip: /フィルタ|スペーサ|カバー|ろ材/,           nm: '化粧パネル' }
+    ];
+    list.forEach(function (o) {
+      var onm = o.name || '';
+      INCLUDED.forEach(function (k) {
+        if (o.dup || !k.has) return;
+        if (String(o.code) === String(k.has)) {
+          o.dup = 'この機種に付いてくるもの';
+          o.dupMsg = 'この機種の値段には、この' + k.nm + '（' + k.has + '）がもう入っています。\n' +
+                     'そのまま足すと二重取りになります。\n\n' +
+                     'それでも明細に入れますか？';
+          return;
+        }
+        if (k.word.test(onm) && !k.skip.test(onm)) {
+          o.dup = '入れ替え';
+          o.dupMsg = 'この機種には ' + k.has + ' が付いています。\n' +
+                     'これに取り替えるなら、差額だけを入れてください。\n' +
+                     '（定価をそのまま足すと、' + k.nm + 'を2つ買ったことになります）\n\n' +
+                     'それでも定価 ' + yen(o.y) + ' で入れますか？';
+        }
+      });
+    });
+
     var COMMON_CAT = 'どの機種にも使えるもの';
     list.forEach(function (o) {
       o.cat = o.common ? COMMON_CAT
@@ -5415,12 +5448,14 @@
     function drawItems() {
       wrap.innerHTML = '';
       list.filter(function (o) { return !pick || o.cat === pick; }).forEach(function (o) {
-      var b = el('button', 'item-btn');
+      var b = el('button', 'item-btn' + (o.dup ? ' is-included' : ''));
       b.type = 'button';
       b.appendChild(el('b', null, o.name || o.code));
       b.appendChild(el('span', 'item-code', o.code));
+      if (o.dup) b.appendChild(el('span', 'item-dup', o.dup));
       b.appendChild(el('em', null, yen(o.y)));
       b.addEventListener('click', function () {
+        if (o.dupMsg && !confirm(o.dupMsg)) return;
         var line = {
           name: (o.maker || '') + '　' + (o.name || o.code),
           spec: o.code,
