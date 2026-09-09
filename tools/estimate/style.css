@@ -352,6 +352,8 @@ ol.catalog-howto li { margin: 2px 0; }
 .catalog-size { margin-top: 6px; }
 .csv-note.ok { color: var(--ok); font-weight: 600; }
 .csv-note.ng { color: var(--danger); }
+/* ボタンを取り違えたときの案内。1ファイル1行で出すので改行を活かす */
+.csv-note.file-hint { white-space: pre-line; font-weight: 600; }
 
 /* 単価ピッカーの品番表示 */
 .item-btn .item-code {

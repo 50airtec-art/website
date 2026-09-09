@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>空調王</title>
-<link rel="stylesheet" href="style.css?v=202609100530">
+<link rel="stylesheet" href="style.css?v=202609101000">
 
 <!-- ホーム画面に追加できるようにする。
      iPhoneのSafariは「7日間そのサイトを開かないと、保存した中身を消す」決まりがある。
      ホーム画面から開くアプリはその決まりの外に置かれるので、消えない。
      入れた見積を守るための仕込みであって、見た目の話ではない。 -->
-<link rel="manifest" href="manifest.json?v=202609100530">
+<link rel="manifest" href="manifest.json?v=202609101000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <!-- black-translucent にすると、時計や電池の下に画面が潜り込んで
@@ -19,8 +19,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="空調王">
 <meta name="theme-color" content="#1a1a1a">
-<link rel="apple-touch-icon" href="icon-180.png?v=202609100530">
-<link rel="icon" href="icon-192.png?v=202609100530">
+<link rel="apple-touch-icon" href="icon-180.png?v=202609101000">
+<link rel="icon" href="icon-192.png?v=202609101000">
 </head>
 <body>
 
@@ -298,6 +298,7 @@
               <button class="btn btn-ghost btn-danger" id="btn-models-clear">機種データを削除</button>
             </div>
           </div>
+          <div class="csv-note ng file-hint" id="models-hint" hidden></div>
           <div class="csv-note" id="models-status">まだ読み込まれていません。</div>
         </div>
 
@@ -323,6 +324,7 @@
             </div>
           </div>
           <div class="csv-note">別売品（パネル・リモコンなど）は、上のメーカー選びで「（別売品）」と付いたものを読むと入ります。1度読んだら書き出しておくと、次の端末では選ぶだけで済みます。</div>
+          <div class="csv-note ng file-hint" id="options-hint" hidden></div>
           <div class="csv-note" id="options-status">まだ読み込まれていません。</div>
         </div>
 
@@ -614,11 +616,11 @@
   </div>
 </div>
 
-<script src="pricebook.js?v=202609100530"></script>
-<script src="survey.js?v=202609100530"></script>
-<script src="firebase-config.js?v=202609100530"></script>
-<script src="catalog.js?v=202609100530"></script>
-<script src="app.js?v=202609100530"></script>
-<script src="sync.js?v=202609100530"></script>
+<script src="pricebook.js?v=202609101000"></script>
+<script src="survey.js?v=202609101000"></script>
+<script src="firebase-config.js?v=202609101000"></script>
+<script src="catalog.js?v=202609101000"></script>
+<script src="app.js?v=202609101000"></script>
+<script src="sync.js?v=202609101000"></script>
 </body>
 </html>

@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609100530';
+  var APP_VERSION = '202609101000';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -5577,12 +5577,58 @@
     r.readAsText(f);
   }
 
+  /* ----------------------------------------------------------------------
+     ボタンの取り違いを止める
+     ----------------------------------------------------------------------
+     単価マスタの画面には、ファイルを選ぶボタンが3つ並んでいる。
+     機種データ／別売品データ／全データ。ファイルの名前は似ているし、
+     どれがどのボタンのものかは書いていない。2026-09-09、BIGBOSSが
+     4つのファイルを別売品のボタンで選び、別売品1つだけが通って
+     機種データ3つが黙って弾かれた。画面は「読めませんでした」としか
+     言わなかったので、入っていないことに丸一日気づかなかった。
+     だから、弾くときは「これは何のデータで、どのボタンから入れるのか」を言う。
+     ---------------------------------------------------------------------- */
+
+  /** 選んだファイルが何のデータかを見分ける。分からなければ null */
+  function fileKind(data) {
+    if (!data || typeof data !== 'object') return null;
+    if (data.type === 'airtec-all') return 'all';
+    if (Array.isArray(data.fields) && Array.isArray(data.rows)) return 'models';
+    if (Array.isArray(data.stores) || (data.maker && Array.isArray(data.items))) return 'options';
+    return null;
+  }
+
+  var KIND_NAME  = { models: '機種データ', options: '別売品データ', all: '全データのバックアップ' };
+  var KIND_WHERE = {
+    models:  '「機種データを選ぶ」',
+    options: '「別売品データを選ぶ」',
+    all:     '［設定］の「まとめて読み込む」'
+  };
+
+  /** ボタンの下に赤い案内を出す（空文字で消す） */
+  function setFileHint(id, msg) {
+    var box = $('#' + id);
+    if (!box) return;
+    box.textContent = msg || '';
+    box.hidden = !msg;
+  }
+
+  /** 取り違えたファイルの案内文を組み立てる */
+  function wrongFileHint(wrong) {
+    if (!wrong.length) return '';
+    return wrong.map(function (w) {
+      return '「' + w.name + '」は' + KIND_NAME[w.kind] + 'です。'
+           + KIND_WHERE[w.kind] + 'から入れてください。';
+    }).join('\n');
+  }
+
   $('#file-models').addEventListener('change', function (ev) {
     var files = Array.prototype.slice.call(ev.target.files || []);
     ev.target.value = '';
     if (!files.length) return;
+    setFileHint('models-hint', '');
 
-    var done = [], failed = [], i = 0;
+    var done = [], failed = [], wrong = [], i = 0;
 
     // 1つずつ順に読む（まとめて読むと、同じ保存先を取り合って上書きし合うため）
     (function next() {
@@ -5590,7 +5636,10 @@
       var f = files[i++];
       readJsonFile(f, function (data) {
         var line = data ? adoptModelPack(data) : null;
-        if (line) done.push(line); else failed.push(f.name);
+        if (line) { done.push(line); next(); return; }
+        var kind = fileKind(data);
+        if (kind && kind !== 'models') wrong.push({ name: f.name, kind: kind });
+        else failed.push(f.name);
         next();
       });
     })();
@@ -5598,14 +5647,14 @@
     function finish() {
       chooserSel = {};
       loadModels();
-      if (done.length && !failed.length) {
-        toast(done.length === 1 ? done[0] + ' を入れました'
-                                : done.length + 'メーカーを入れました（' + done.join('／') + '）');
-      } else if (done.length) {
-        toast(done.length + 'メーカーを入れました。読めなかったファイル: ' + failed.join('、'));
-      } else {
-        toast('機種データとして読めませんでした（' + failed.join('、') + '）');
-      }
+      setFileHint('models-hint', wrongFileHint(wrong));
+
+      var msg = [];
+      if (done.length) msg.push(done.length === 1 ? done[0] + ' を入れました'
+                                                  : done.length + 'メーカーを入れました（' + done.join('／') + '）');
+      if (wrong.length) msg.push('ボタンが違うものが' + wrong.length + '件（下の赤い字を見てください）');
+      if (failed.length) msg.push('読めなかった: ' + failed.join('、'));
+      toast(msg.join('　') || '機種データとして読めませんでした');
     }
   });
 
@@ -5739,15 +5788,22 @@
     var files = Array.prototype.slice.call(ev.target.files || []);
     ev.target.value = '';
     if (!files.length) return;
+    setFileHint('options-hint', '');
 
-    var done = [], failed = [], i = 0;
+    var done = [], failed = [], wrong = [], i = 0;
     // 1つずつ順に読む（まとめて読むと、同じ保存先を取り合って上書きし合う）
     (function next() {
       if (i >= files.length) { finish(); return; }
       var f = files[i++];
       readJsonFile(f, function (data) {
         var packs = optPacksOf(data);
-        if (!packs.length) { failed.push(f.name); next(); return; }
+        if (!packs.length) {
+          var kind = fileKind(data);
+          if (kind && kind !== 'options') wrong.push({ name: f.name, kind: kind });
+          else failed.push(f.name);
+          next();
+          return;
+        }
         packs.forEach(function (s) { putOptStore(s); done.push(s.maker + ' ' + (s.items || []).length + '品目'); });
         next();
       });
@@ -5755,9 +5811,13 @@
 
     function finish() {
       loadOptions();
-      if (done.length) toast('別売品を入れました（' + done.join('／') + '）' +
-                             (failed.length ? '　読めなかった: ' + failed.join('、') : ''));
-      else toast('別売品データとして読めませんでした（' + failed.join('、') + '）');
+      setFileHint('options-hint', wrongFileHint(wrong));
+
+      var msg = [];
+      if (done.length) msg.push('別売品を入れました（' + done.join('／') + '）');
+      if (wrong.length) msg.push('ボタンが違うものが' + wrong.length + '件（下の赤い字を見てください）');
+      if (failed.length) msg.push('読めなかった: ' + failed.join('、'));
+      toast(msg.join('　') || '別売品データとして読めませんでした');
     }
   });
 
