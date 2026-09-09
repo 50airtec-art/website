@@ -850,6 +850,30 @@
      ② 断片を列に割り当て、同じ列のものはつなげる
      ③ 行ごとに、列（帯）ごとの「いちばん近い文字」を拾ってつなげる
      -------------------------------------------------------------------- */
+  /* 品名として通してよい文字かどうか。
+
+     狭い欄に折り返して書かれた注意書きが、品名の列に紛れ込む。
+
+       右記以外のフレキ        ← 注意書きの1行目
+       シブルダクト（丸ダク    ← 2行目。ここだけ拾うと品名が「シブルダクト（丸ダク」になる
+       ト）関連部材につい
+       てはP.204以降を
+
+     途中で切れた行は**かっこの数が合わない**か、**助詞で終わる**。そこで見分ける。
+     （2026-09-09、ダイキン K-SGRS18A2FF とキヤリア TCB-PCNT31TL で分かった） */
+  function nameLike(s) {
+    var t = String(s || '').trim();
+    if (!t) return false;
+    if (/[■●▲◆]/.test(t)) return false;                 // 紙面の飾り記号
+    if (/P\.\s*\d/.test(t)) return false;                // 「P.204以降を」のような参照
+    if (/[をにはがのてでと、]$/.test(t)) return false;     // 助詞で終わる＝文の途中
+    if (/^(右記|左記|上記|下記|前記|同左|同上|その他の)/.test(t)) return false;  // 注意書きの書き出し
+    var open = (t.match(/[（(]/g) || []).length;
+    var close = (t.match(/[）)]/g) || []).length;
+    if (open !== close) return false;                     // かっこが片方だけ＝行の途中で切れている
+    return true;
+  }
+
   function nameReader(rows, leftEnd, headY, mode) {
     function chops(cells) {
       var seg = [], cur = null;
@@ -918,6 +942,7 @@
           // 表の下や横に書かれた注記の文章は品名ではない
           // （「『エアーフィルター』は室内ユニットに標準で…です。」が品名に付いていた）
           if (l.s.length > 12 && /[。］」]/.test(l.s)) return;
+          if (!nameLike(l.s)) return;
           if (mode === 'above' && l.y < y - 2) return;
           var d = Math.abs(l.y - y);
           if (d < bd) { bd = d; best = l; }
