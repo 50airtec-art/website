@@ -657,6 +657,26 @@
     return 'その他';
   }
 
+  /* セットに除菌ユニットが入っているかどうか。
+
+     SSRH112D と SSRJH112D は、室外機も室内機もリモコンも同じで
+     値段だけ17万円ちがう。SSRJH のほうに
+     ストリーマ除菌ユニット BAEF50A160（¥170,000）が入っているためで、
+     1,536,000＋170,000＝1,706,000 でぴったり合う。
+
+     形名の頭で見分けられる（D-SEARCHの1,063機種ぜんぶで確かめた。混ざりは0）
+
+       …RJH / …RUC  → ストリーマ除菌ユニット      91機種
+       …RJM         → ダクト接続式除菌ユニット    44機種
+
+     印を出さないと、見た目が同じ機種が2つ並んで、
+     安いほうと高いほうを取り違える（2026-09-09、BIGBOSSの指摘） */
+  function daikinKit(m) {
+    if (/^S[DSZ]R(JH|UC)/.test(m)) return 'ストリーマ除菌ユニットつき';
+    if (/^S[DSZ]RJM/.test(m)) return 'ダクト接続式除菌ユニットつき';
+    return '';
+  }
+
   function daikinFinish(sets) {
     var rows = [], seen = {}, pages = {};
     sets.forEach(function (x) {
@@ -675,7 +695,7 @@
         pw: /V/.test(tail) ? '単相' : '三相',
         rc: !x.rm ? 'リモコン別売' : (/^BRC1/.test(x.rm) ? 'ワイヤード' : 'ワイヤレス'),
         tp: DAIKIN_TP[x.imN] || 'シングル',
-        opt: x.br ? '別売分岐管 ' + x.br : '',
+        opt: [daikinKit(x.m), x.br ? '別売分岐管 ' + x.br : ''].filter(Boolean).join('　'),
         om: x.om, im: x.im + (x.imN > 1 ? '×' + x.imN : ''), pm: x.pm, rm: x.rm
       });
     });
