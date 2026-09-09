@@ -1898,6 +1898,191 @@
     '天井吊形', '壁掛形', '床置形', '天井埋込形'
   ];
 
+  /* ======================================================================
+     材料メーカー（部材）
+     ----------------------------------------------------------------------
+     機器の5社とは入れ物が違う。読み取った中身は機種データでも別売品でもなく、
+     **単価マスタの行**になる。だから run() は kind:'parts' のときだけ
+     { parts: … } を返し、app.js 側でCSVと同じ道に流し込む。
+     ====================================================================== */
+
+  /* --------------------------------------------------------------------
+     因幡電工
+     ----------------------------------------------------------------------
+     読むのは総合カタログではなく「価格改定表」。
+     総合カタログは1,000ページ近くあって値段が紙面の絵の中に散っているが、
+     価格改定表は品番と値段だけが並んだ表で、値上げのたびに必ず出る。
+     しかも2種類とも公式サイトから直にPDFで落とせる。
+
+     紙面は2段組。左の帯と右の帯を、別々に上から読む。
+
+       ● スリムダクトＬＤ           ← シリーズ（分類になる）
+       ・ウォールコーナー             ← 品名
+       コード 型番 新標準単価 掲載      ← 見出し
+       2302  LDW-70  ¥920  P 6      ← ここが1行
+
+     **同じ行でも y が 0.1 ずれることがある。**行に分けたあと、
+     必ず x の順に並べ直す。これをしないと、ずれた1語だけが行の末尾に回り、
+     型番が空のまま「値段だけの行」ができる（2026-09-10、20件で分かった）。
+     -------------------------------------------------------------------- */
+
+  var INABA_HEAD = {
+    'コード': 1, '型番': 1, '新標準単価': 1, '掲載': 1, '新標準価格': 1, '品番': 1
+  };
+
+  /** 位置つきの文字を「行」にまとめる。pdf.js の y は下から上なので、上の行＝y が大きい */
+  function inabaLines(items) {
+    var live = items.filter(function (i) { return String(i.s).trim() !== ''; });
+    live.sort(function (a, b) { return b.y - a.y; });
+    var lines = [], cur = [], y = null;
+    live.forEach(function (i) {
+      if (y === null || Math.abs(i.y - y) < 2.5) {
+        cur.push(i);
+        if (y === null) y = i.y;
+      } else {
+        lines.push(cur); cur = [i]; y = i.y;
+      }
+    });
+    if (cur.length) lines.push(cur);
+    lines.forEach(function (ln) { ln.sort(function (a, b) { return a.x - b.x; }); });
+    return lines;
+  }
+
+  /** 「¥」と数字が別々に来ることがあるので、くっつけてから見る */
+  function inabaTokens(line) {
+    var raw = line.map(function (i) { return String(i.s).trim(); })
+                  .filter(function (t) { return t !== ''; });
+    var out = [];
+    for (var i = 0; i < raw.length; i++) {
+      if ((raw[i] === '¥' || raw[i] === '￥') && i + 1 < raw.length && /^[\d,]+$/.test(raw[i + 1])) {
+        out.push('¥' + raw[i + 1]); i++;
+      } else out.push(raw[i]);
+    }
+    return out;
+  }
+
+  /* 段組みの数はページによって違う（最後のほうは1段）。
+     そこで「段に切ってから読む」のをやめた。
+     **1行の中に ¥ が出てくるたびに1件**と数える。これなら1段でも2段でも同じ手で読める。
+     左右の端から真ん中を割る手では、1段のページで1つの段を2つに割ってしまい、
+     品番と値段が別々になって丸ごと落ちた（2026-09-10、5件）。 */
+  function inabaRecords(toks) {
+    var isCode = function (t) { return /^\d{3,7}$/.test(t); };
+    var recs = [], start = 0;
+    for (var i = 0; i < toks.length; i++) {
+      var hit = toks[i].match(/^[¥￥]([\d,]+)$/);
+      if (!hit) continue;
+      // 値段のついていない件（「オープン」価格など）が手前にあると、
+      // その語がそのまま次の件の型番にくっつく。**いちばん近いコードから拾う**
+      var from = start;
+      for (var k = i - 1; k >= start; k--) { if (isCode(toks[k])) { from = k; break; } }
+      var seg = toks.slice(from, i);
+      // 値段のうしろは掲載ページ（「P 6」「オープン P32」など）。
+      // **次の件の頭＝コードに当たるまで読み飛ばす。**
+      // 「P とその次の1語」だけ飛ばす作りだと、「オープン」のような
+      // 余分な語が次の件の型番にくっつく（2026-09-10）
+      var j = i + 1, tail = [];
+      while (j < toks.length && !isCode(toks[j])) { tail.push(toks[j]); j++; }
+      var pm = tail.join('').match(/[PＰ]\s*([\dA-Za-z\-]+)/);
+      recs.push({ seg: seg, price: Number(hit[1].replace(/,/g, '')), ref: pm ? 'P' + pm[1] : '' });
+      i = j - 1;
+      start = j;
+    }
+    return recs;
+  }
+
+  /** 品名の見出しは段の左端に立っている。件も同じ段の左端から始まる。
+      だから x がいちばん近い見出しが、その件の品名。 */
+  function inabaNearest(list, x, y) {
+    var best = null, bestDx = 1e9;
+    list.forEach(function (h) {
+      if (h.y < y - 0.5) return;              // pdf.js の y は下から上。見出しは件より上（y が大きい）
+      var dx = Math.abs(h.x - x);
+      if (dx > 120) return;                   // となりの段の見出しは拾わない
+      if (dx < bestDx || (dx === bestDx && h.y < best.y)) { best = h; bestDx = dx; }
+    });
+    return best ? best.name : '';
+  }
+
+  function inabaReadPage(items, pageNo, ctx) {
+    if (!items.length) return [];
+    ctx = ctx || {};
+    var out = [], names = [];
+
+    inabaLines(items).forEach(function (ln) {
+      var toks = inabaTokens(ln);
+      if (!toks.length) return;
+
+      // 見出しは行の途中にも混じる（左の段が見出し、右の段が明細、という行がある）。
+      // ● は紙面の大見出しなので、段にも行にも縛られず、そのまま次の件に効かせる
+      ln.forEach(function (it, k) {
+        var t = String(it.s).trim();
+        if (t.charAt(0) === '●') {
+          // 「●」だけで1つの文字として来ることがある。そのときは行の残りが見出し
+          var nm = t.slice(1).trim();
+          if (!nm) {
+            // 行の残りをつなぐ。ただし**となりの段に入る手前で止める**。
+            // 止めないと「スリムダクトＬＤ・ひねり90°エルボ」のように
+            // 右の段の品名まで見出しに入ってしまう
+            for (var q = k + 1; q < ln.length; q++) {
+              var v = String(ln[q].s).trim();
+              if (!v || INABA_HEAD[v]) continue;
+              if (v.charAt(0) === '・' || v.charAt(0) === '●' || /^\d{3,7}$/.test(v)) break;
+              nm += v;
+            }
+          }
+          if (nm) ctx.inabaSeries = nm;
+        } else if (t.charAt(0) === '・') {
+          names.push({ x: it.x, y: it.y, name: t.slice(1).trim() });
+        }
+      });
+
+      // 見出しと表の見出し語は、明細の並びから外す。
+      // 外さないと「・スリムダクトＬＤ2314LDN-70」のように型番にくっつく
+      var body = toks.filter(function (t) {
+        return t.charAt(0) !== '●' && t.charAt(0) !== '・' && t.charAt(0) !== '（' && !INABA_HEAD[t];
+      });
+
+      // 件が紙面のどのあたりから始まるかは、品番の文字を行の中から探して x を取る
+      inabaRecords(body).forEach(function (rec) {
+        if (!rec.price || !rec.seg.length) return;
+        var code = /^\d{3,7}$/.test(rec.seg[0]) ? rec.seg[0] : '';
+        var model = rec.seg.slice(code ? 1 : 0).join('').replace(/\s+/g, '');
+        if (!model) return;
+        var x = 0;
+        for (var k = 0; k < ln.length; k++) {
+          if (String(ln[k].s).trim() === rec.seg[0]) { x = ln[k].x; break; }
+        }
+        var nm = inabaNearest(names, x, ln[0].y);
+        var sr = ctx.inabaSeries || '';
+        out.push({
+          m: model, y: rec.price, code: code,
+          name: nm || sr || model, series: sr, ref: rec.ref, page: pageNo
+        });
+      });
+    });
+    return out;
+  }
+
+  function inabaFinish(sets) {
+    var rows = [], seen = {};
+    sets.forEach(function (r) {
+      // 総合とエアコン配管部材の2冊に同じ品番が出る。先に読んだほうを残す
+      if (seen[r.m]) return;
+      seen[r.m] = 1;
+      rows.push(r);
+    });
+    return {
+      head: {
+        maker: '因幡電工',
+        brand: '価格改定表',
+        note: '新標準単価・税抜。工事費は含まず。カタログの価格改定表から読み取ったもの。'
+      },
+      rows: rows,
+      pricePages: sets.length ? 1 : 0
+    };
+  }
+
   var MAKERS = [
     {
       id: 'carrier',
@@ -2110,6 +2295,25 @@
         return out;
       },
       finish: function (list) { return optResult(list, '三菱電機', 'Mr.SLIM 別売品'); }
+    },
+    {
+      id: 'inaba-parts',
+      name: '因幡電工（部材）',
+      catalog: '価格改定表（総合カタログ／エアコン配管部材カタログ）',
+      size: '2冊で2MBほど。読み取りはすぐ終わります。',
+      kind: 'parts',           // 機種データでも別売品でもなく、単価マスタに入る
+      layout: true,
+      howto: [
+        '下のリンクを押すと「価格改定表」のPDFが落ちてくる（軽いのですぐ終わります）',
+        'エアコンの配管部材だけでよければ、下のもう1本のほうが小さい',
+        '落ちてきたPDFを「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://www.inaba-denko.com/storage/files/202606_price.pdf',
+      url2: 'https://www.inaba-denko.com/common/broadcast/feature/img/202606_aircon_price.pdf',
+      urlNote: '因幡電工のデジタルカタログのページ（https://www.inaba-denko.com/ja/catalog）に、いつも最新の「価格改定表」が並んでいます。値上げがあったら、そこから取り直してください。',
+      min: 200,
+      readPage: inabaReadPage,
+      finish: inabaFinish
     }
   ];
 
@@ -2335,6 +2539,16 @@
         if (chk.warn && res.rows.length) e.pack = pack(res.head, res.rows);
         throw e;
       }
+      // 部材は単価マスタに入る。機種データの形（pack）には通さない
+      if (maker.kind === 'parts') {
+        return {
+          parts: { maker: res.head.maker, brand: res.head.brand, note: res.head.note, rows: res.rows },
+          count: res.rows.length,
+          pricePages: res.pricePages,
+          noPrice: chk.noPrice
+        };
+      }
+
       // 別売品は機種データとは別の入れ物にする
       if (maker.kind === 'options') {
         var d = new Date(), p2 = function (x) { return String(x).length < 2 ? '0' + x : String(x); };

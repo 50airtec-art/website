@@ -5729,7 +5729,17 @@
     a.target = '_blank';
     a.rel = 'noopener';
     box.appendChild(a);
+
+    // 因幡のように、軽いほうの冊子がもう1本あるメーカー用
+    if (mk.url2) {
+      var b = el('a', 'catalog-link', 'エアコン配管部材だけの価格表を開く（軽いほう）');
+      b.href = mk.url2;
+      b.target = '_blank';
+      b.rel = 'noopener';
+      box.appendChild(b);
+    }
     box.appendChild(el('div', 'catalog-size', mk.size));
+    if (mk.urlNote) box.appendChild(el('div', 'catalog-size', mk.urlNote));
   }
 
   /* ----------------------------------------------------------------------
@@ -5869,6 +5879,101 @@
     toast(count + '機種を入れました');
   }
 
+  /**
+   * 材料メーカーのカタログ（価格改定表）から読み取った部材を、単価マスタに入れる。
+   *
+   * 機器のカタログと違って、これは**入れ替えではなく値段の更新**が本筋。
+   * 部材はすでに単価マスタに入っていて、値上げのたびに同じ品番の値段だけが変わる。
+   * だからCSVの取り込み（後ろに足す）をそのまま使うと、2回目で行が倍になる。
+   *
+   *   すでにある品番 → 値段を書き替える（いくらから いくらに、を見せてから）
+   *   無い品番       → 新しく足す
+   *   値段が同じ     → 触らない
+   */
+  function adoptCatalogParts(parts, extra) {
+    var rows = (parts && parts.rows) || [];
+    if (!rows.length) { catalogNote('部材が1件も読み取れませんでした。', 'ng'); return; }
+
+    // いまの単価マスタを品番で引けるようにする
+    var byCode = {};
+    pb.categories.forEach(function (c) {
+      c.items.forEach(function (it) {
+        var k = String(it.code || '').trim().toUpperCase();
+        if (k && !byCode[k]) byCode[k] = { cat: c, item: it };
+      });
+    });
+
+    var changed = [], added = [], odd = [], same = 0;
+    rows.forEach(function (r) {
+      var code = String(r.m || '').trim();
+      var price = num(r.y);
+      if (!code || !price) return;
+      var hit = byCode[code.toUpperCase()];
+      if (hit) {
+        var old = num(hit.item.price);
+        if (old === price) { same++; return; }
+        /* けたが違うものは、値上げではなく**単位の違い**。
+           ペアコイルは紙面が「1巻 ¥71,800（20m）」で、単価マスタは1mあたり ¥3,590。
+           そのまま書き替えると、20mの配管が20倍の値段になる。
+           2026-09-10、BIGBOSSの実データで15件（すべて単位が m）がこれだった。
+           勝手に直さず、別に数えて見せるだけにする。 */
+        var ratio = old ? price / old : 99;
+        if (ratio > 3 || ratio < 1 / 3) {
+          odd.push({ item: hit.item, from: old, to: price, code: code, unit: hit.item.unit || '' });
+          return;
+        }
+        changed.push({ item: hit.item, from: old, to: price, code: code });
+      } else {
+        added.push({
+          catName: parts.maker + '｜' + (r.series || 'その他'),
+          item: {
+            code: code, name: r.name || code, spec: r.ref || '',
+            url: '', color: '', unit: '個', price: price
+          }
+        });
+      }
+    });
+
+    if (!changed.length && !added.length && !odd.length) {
+      catalogNote(rows.length + '件を読み取りました。' + (extra || '') +
+                  '\n値段はすべて、いま入っているものと同じでした。直すところはありません。', 'ok');
+      toast('値段の変わったものはありませんでした');
+      return;
+    }
+
+    // 何がどう変わるのかを、数字で見せてから聞く
+    var sample = changed.slice(0, 5).map(function (c) {
+      return '　' + c.code + '　' + yen(c.from) + ' → ' + yen(c.to);
+    }).join('\n');
+    var oddSample = odd.slice(0, 3).map(function (c) {
+      return '　' + c.code + '　' + yen(c.from) + '（' + (c.unit || '単位なし') + '） ↔ 紙面 ' + yen(c.to);
+    }).join('\n');
+    var msg = parts.maker + ' の価格表から ' + rows.length + '件を読み取りました。\n\n' +
+      '　値段が変わるもの　' + changed.length + '件\n' +
+      '　新しく増えるもの　' + added.length + '件\n' +
+      '　そのままのもの　　' + same + '件\n' +
+      (odd.length ? '　けた違い（さわりません）　' + odd.length + '件\n' : '') +
+      (changed.length ? '\n【値段が変わるもの（最初の' + Math.min(5, changed.length) + '件）】\n' + sample + '\n' : '') +
+      (odd.length ? '\n【けた違い＝単位が違うと思われるもの（最初の' + Math.min(3, odd.length) + '件）】\n' + oddSample +
+                    '\nペアコイルのように、紙面は「1巻いくら」で単価マスタは「1mいくら」のものです。\n' +
+                    'ここは直しません。必要なら手で直してください。\n' : '') +
+      '\nこの内容で入れますか？';
+    if (!confirm(msg)) { catalogNote('やめました。単価マスタは何も変えていません。'); return; }
+
+    changed.forEach(function (c) { c.item.price = c.to; });
+    added.forEach(function (a) { findOrCreateCategory(a.catName).items.push(a.item); });
+
+    if (savePB() === false) {
+      catalogNote('読み取れましたが、保存できませんでした。端末の空きが足りないかもしれません。', 'ng');
+      return;
+    }
+    renderMaster(); renderPicker();
+    catalogNote(changed.length + '件の値段を直し、' + added.length + '件を足しました。' + (extra || '') +
+                (odd.length ? '\nけた違いの ' + odd.length + '件は、単位が違うのでさわっていません。' : '') +
+                '\n［単価マスタ］の一覧で確かめられます。', 'ok');
+    toast('値段' + changed.length + '件・追加' + added.length + '件');
+  }
+
   function initCatalogBox() {
     var sel = $('#catalog-maker');
     var file = $('#file-catalog');
@@ -5933,7 +6038,8 @@
         // 紙のカタログのときだけ「価格ページ○枚」を出す（三菱はデータファイルなので枚数が無い）
         var extra = (wantJson || !r.pricePages) ? '（' + time + '）'
                                                 : '（価格ページ ' + r.pricePages + '枚／' + time + '）';
-        if (r.options) adoptOptions(r.options, extra);
+        if (r.parts) adoptCatalogParts(r.parts, extra);
+        else if (r.options) adoptOptions(r.options, extra);
         else adoptCatalogPack(r.pack, r.count, extra);
       }).catch(function (e) {
         var msg = (e && e.message) || 'うまく読み取れませんでした';
