@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609091400';
+  var APP_VERSION = '202609091900';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -5345,7 +5345,12 @@
     optStores.forEach(function (s) {
       if (x.mk && s.maker && !same(x.mk, s.maker)) return;
       KUCHOO_CATALOG.optionsFor(s, x).forEach(function (o) {
-        list.push({ code: o.code, name: o.name, y: o.y, fits: o.fits, maker: s.maker });
+        /* 「どの機種にも付く」ものと、この機種のために選ばれたものを分ける。
+           ダイキンは吹出口やチャンバなど353品目が「どの機種にも」に入るので、
+           混ぜると、この機種のパネルやリモコンが埋もれてしまう */
+        var common = (o.fits || []).length > 0 &&
+          (o.fits || []).every(function (f) { return f && f.all; });
+        list.push({ code: o.code, name: o.name, y: o.y, fits: o.fits, maker: s.maker, common: common });
       });
     });
     if (!list.length) {
@@ -5372,14 +5377,18 @@
 
     /* 1台に700品目も出ると現場では選べない。品名で仲間に分けて絞れるようにする */
     var cats = {};
+    var COMMON_CAT = 'どの機種にも使えるもの';
     list.forEach(function (o) {
-      o.cat = (KUCHOO_CATALOG.optCategory ? KUCHOO_CATALOG.optCategory(o.name) : 'その他');
+      o.cat = o.common ? COMMON_CAT
+                       : (KUCHOO_CATALOG.optCategory ? KUCHOO_CATALOG.optCategory(o.name) : 'その他');
       cats[o.cat] = (cats[o.cat] || 0) + 1;
     });
     // 仕事でよく使う順に並べる（catalog.js が持っている順）
     var fixed = (KUCHOO_CATALOG.catOrder || []);
     var order = Object.keys(cats).sort(function (a, b) {
-      var ia = fixed.indexOf(a), ib = fixed.indexOf(b);
+      // 「どの機種にも」はいちばん後ろ。先に出すのはこの機種のためのもの
+      var ia = a === COMMON_CAT ? 999 : fixed.indexOf(a);
+      var ib = b === COMMON_CAT ? 999 : fixed.indexOf(b);
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
     });
     var pick = order.length > 1 ? order[0] : '';   // 最初はいちばん多い仲間だけ出す

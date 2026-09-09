@@ -1026,15 +1026,33 @@
     items.forEach(function (o) {
       if (o.x > xPrice + 30 && /形$/.test(o.s) && o.s.length >= 4 && isJa(o.s)) type = o.s;
     });
+    /* 端の縦書きは当てにならないことがある。
+       キヤリアでは「70㎥/h以下、P112形」を機種タイプとして拾っていて、
+       その28品目はどの機種にも当たらなかった（2026-09-09）。
+       タイプの一覧を渡してもらっているときは、その中の名前でなければ捨てる */
+    if (type && types) {
+      var known = false;
+      types.forEach(function (t) { if (looseSame(t, type)) known = true; });
+      if (!known) type = '';
+    }
     // 機種データのページ番号から決めるのがいちばん確か（紙面に書いていない社があるため）
     if (ctx && ctx.pageTypes) {
       var byPage = typeAtPage(ctx.pageTypes, page);
       if (byPage) type = byPage;
     }
     if (!type && types) {
-      // ページのどこかに書いてある機種タイプを拾う（キヤリアは端の縦書きが無い）
-      var flat = items.map(function (o) { return o.s; }).join('').replace(/s/g, '');
-      types.forEach(function (t) { if (!type && flat.indexOf(t.replace(/s/g, '')) >= 0) type = t; });
+      /* ページのどこかに書いてある機種タイプを拾う。
+         パナソニックは紙面のノド（内側）に「54 ４方向天井カセット形」と入っている。
+         全角の数字と空白をそろえてから探す。
+         長い名前から先に見る（「高天井用1方向カセット形」を「1方向…」より先に当てる）。
+         ここは前は replace(/s/g,'') と書いてあり、空白ではなく英字のsを消していた */
+      var norm = function (t) {
+        return String(t).replace(/[\s　]/g, '')
+          .replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); });
+      };
+      var flat = norm(items.map(function (o) { return o.s; }).join(''));
+      types.slice().sort(function (a, b) { return b.length - a.length; })
+        .forEach(function (t) { if (!type && flat.indexOf(norm(t)) >= 0) type = t; });
     }
 
     // 品名は「大分類 ｜ 品名 ｜ 色」の縦の列。色だけの行でも品名を拾えるようにする
@@ -1072,6 +1090,63 @@
      シリーズ名は2行に割れて書かれている（「ウルトラ」＋「パワーエコ®」）ので、
      見出しのまわり数行を x でまとめてから読む。
      -------------------------------------------------------------------- */
+  /* --------------------------------------------------------------------
+     キヤリアの「別売部品一覧、および組合せ可否」のページ（p.57 など）
+
+       部品名                    部品形名           価格（税別）
+       天井パネル（標準）          RBC-U43PG★       ¥67,000
+       オートグリルパネル          RBC-UA43PG（W）   ¥100,000
+
+     右半分は組合せの○×がびっしり並ぶが、そこは読まない。
+     どの機種に付くかは、手前の価格ページから覚えたタイプで決める。
+
+     **室内機に付く別売品（パネル・フィルター・リモコン）はここにしか無い。**
+     前はこの表を読んでおらず、天井カセット形4方向の240機種には
+     室外機の架台しか出ていなかった（2026-09-09）。
+     -------------------------------------------------------------------- */
+  function optPageCarrierParts(items, page, out, ctx) {
+    var rows = optRows(items);
+    var head = null;
+    rows.forEach(function (r) {
+      if (head) return;
+      var t = r.cells.map(function (o) { return o.s; }).join('');
+      if (/部品形名/.test(t) && /価格/.test(t)) head = r;
+    });
+    if (!head) return;
+
+    var type = (ctx && ctx.pageTypes) ? typeAtPage(ctx.pageTypes, page) : '';
+    if (!type) return;
+
+    var xCode = null, xPrice = null;
+    head.cells.forEach(function (c) {
+      if (xCode === null && c.s.indexOf('部品形名') >= 0) xCode = c.x;
+      if (xPrice === null && c.s.indexOf('価格') >= 0) xPrice = c.x;
+    });
+    if (xCode === null) return;
+    if (xPrice === null) xPrice = xCode + 45;
+
+    var nameAt = nameReader(rows, xCode - 15, head.y);
+    rows.forEach(function (r) {
+      if (r.y >= head.y - 2) return;
+      var code = '', price = 0;
+      r.cells.forEach(function (c) {
+        var t = c.s.trim();
+        if (!code && Math.abs(c.x - xCode) < 30) {
+          var m = t.match(/^([A-Z][A-Z0-9]*-[A-Z0-9\-]{2,})/);
+          if (m) code = m[1];
+        }
+        if (!price && c.x >= xPrice - 20 && c.x < xPrice + 60) {
+          var mm = t.match(/^[¥￥]?\s*([\d,]{4,})/);
+          if (mm) price = yen(mm[1]);
+        }
+      });
+      if (!code || !price) return;
+      var nm = nameAt(r.y);
+      if (!nm || nm.length < 2) return;
+      out.push({ page: page, name: nm, code: code, y: price, fits: [{ type: type }] });
+    });
+  }
+
   function optPageCarrier(items, page, out) {
     var rows = optRows(items);
 
@@ -1374,6 +1449,73 @@
      容量は注釈の「（P80〜P160形用）」から取る。
      分配管は同時マルチのときに必ず要る（BIGBOSS 2026-09-05 確認）。
      -------------------------------------------------------------------- */
+  /* --------------------------------------------------------------------
+     三菱の「オプション構成図」のページ（p.132〜142）
+
+       室内ユニット　オプション
+       4方向天井カセット形〈i-スクエアタイプ〉
+       部品名                          形　名          価格
+       ムーブアイセンサーパネル          PLP-P160HWF     74,000円
+
+     **これが三菱でいちばん品数の多い別売品の表**。
+     前はセット価格ページの構成品しか読んでいなかったので、
+     いちばん台数の多い「4方向天井カセット形」のパネルが1つも入っていなかった
+     （2026-09-09、361機種／1,097機種）。
+     -------------------------------------------------------------------- */
+  function optPageMitsuList(items, page, out) {
+    var rows = optRows(items);
+    if (rows.length < 6) return;
+
+    // 上のほうに「オプション」と「部品名」が両方あるページだけ
+    var top = rows.slice(0, 8).map(function (r) { return r.cells.map(function (c) { return c.s; }).join(''); }).join('');
+    if (top.indexOf('オプション') < 0) return;
+    var all = rows.map(function (r) { return r.cells.map(function (c) { return c.s; }).join(''); }).join('');
+    if (all.indexOf('部品名') < 0) return;
+
+    /* 室内機のタイプ。「4方向天井カセット形〈i-スクエアタイプ〉」のように
+       〈〉の中がタイプ名のこともあれば、〈PL-RP・LA22〉のように品番のこともある。
+       品番のほうは捨てる（機種データのタイプ名は品番を持っていない） */
+    var type = '', headY = 0;
+    rows.slice(0, 8).forEach(function (r) {
+      r.cells.forEach(function (c) {
+        if (type) return;
+        var t = c.s.trim();
+        if (!/形[〈（(]|形$/.test(t)) return;
+        if (!/カセット|天吊|壁掛|床置|ビルトイン|埋込|厨房/.test(t)) return;
+        if (!/タイプ/.test(t)) t = t.replace(/[〈（(].*$/, '');
+        type = t;
+        headY = r.y;
+      });
+    });
+    if (!type) return;
+
+    // 品名はいちばん左の列。形名と価格はその右
+    var nameEnd = 250;
+    rows.forEach(function (r) {
+      if (r.y >= headY) return;
+      var name = [], code = '', price = 0, at = -1;
+      r.cells.forEach(function (c, i) {
+        var t = c.s.trim();
+        if (c.x < nameEnd && !/^[0-9]/.test(t)) { name.push(t); return; }
+        if (!code) {
+          var m = t.match(/^([A-Z][A-Z0-9]*-[A-Z0-9\-]{2,})/);
+          if (m) { code = m[1]; at = i; return; }
+        }
+        if (code && !price && i > at) {
+          var mm = t.match(OPT_MONEY);
+          if (mm) price = yen(mm[1]);
+        }
+      });
+      if (!code || !price) return;
+      var nm = name.join(' ')
+        .replace(/[①-⓿]/g, ' ')          // 丸数字（①②③…）は品名ではない
+        .replace(/[※注][\d,\s]*/g, ' ')
+        .replace(/\s+/g, ' ').trim();
+      if (nm.length < 2) return;
+      out.push({ page: page, name: nm, code: code, y: price, fits: [{ type: type }] });
+    });
+  }
+
   function optPageMitsuCommon(items, page, out) {
     var rows = optRows(items);
     var flat = items.map(function (o) { return o.s; }).join('').replace(/\s/g, '');
@@ -1634,6 +1776,14 @@
      min＝これを下回ったら「読めていない」とみなす件数。
      2026-09-04 の実績（キヤリア870件・日立626件・パナ946件）の8割を目安にしてある。
      -------------------------------------------------------------------- */
+  // パナソニックの室内機タイプ（機種データの呼び方にそろえてある）
+  var PANA_TYPES = [
+    '天吊形厨房用エアコン（高温吸込み対応）', '高温吸込み天吊形厨房用エアコン', '天吊形厨房用エアコン',
+    '高天井用1方向カセット形', 'ビルトインオールダクト形', '天井ビルトインカセット形',
+    '4方向天井カセット形', '2方向天井カセット形', '1方向天井カセット形',
+    '天井吊形', '壁掛形', '床置形', '天井埋込形'
+  ];
+
   var MAKERS = [
     {
       id: 'carrier',
@@ -1752,7 +1902,14 @@
       ],
       url: 'https://panasonic.icata.net/iportal/CatalogSearch.do?method=catalogSearchByAnyCategories&volumeID=PEWJ0001&categoryID=353090000',
       min: 160,
-      readPage: function (items, page, ctx) { var out = []; optPagePana(items, page, out, null, ctx); return out; },
+      readPage: function (items, page, ctx) {
+        var out = [];
+        /* 別売品一覧表のページには機種タイプが書いていない。
+           紙面のノドに入っている「54 ４方向天井カセット形」を手がかりにする。
+           これが無いと、壁掛形にも天井パネルが出てしまう（2026-09-09） */
+        optPagePana(items, page, out, { types: PANA_TYPES }, ctx);
+        return out;
+      },
       finish: function (list) { return optResult(list, 'パナソニック', 'オフィス・店舗用エアコン 別売品'); }
     },
     {
@@ -1770,6 +1927,23 @@
       min: 80,
       readPage: function (items, page, ctx) {
         var out = [];
+        /* 別売品のページには機種タイプが書いていない（章立てで決まっているため）。
+           手前の**価格ページの形名**からタイプを割り出して覚えておき、
+           別売品のページはその続きとみなす。
+           この覚え書き（ctx.pageTypes）は前から使うつもりで書いてあったのに、
+           入れるほうを作っていなかった。そのため化粧パネルもリモコンも
+           どの機種にも当たらず、室外機の架台しか出ていなかった（2026-09-09） */
+        var flat = items.map(function (i) { return i.s; }).join(' ');
+        if (ctx && carrierIsPricePage(flat)) {
+          var cnt = {}, re = /\b([A-Z]{4}\d{5}[A-Z0-9]*)\b/g, m;
+          while ((m = re.exec(flat)) !== null) {
+            var t = CARRIER_TYPE[m[1].charAt(1)];
+            if (t) cnt[t] = (cnt[t] || 0) + 1;
+          }
+          var best = '', bn = 0;
+          Object.keys(cnt).forEach(function (k) { if (cnt[k] > bn) { bn = cnt[k]; best = k; } });
+          if (best) { ctx.pageTypes = ctx.pageTypes || {}; ctx.pageTypes[page] = best; }
+        }
         // キヤリアは表が2種類ある。室内機用（適用室内ユニット列）と室外機用（列＝シリーズ）
         optPagePana(items, page, out, {
           codeWord: /部品形名/, priceWord: /価格/,
@@ -1778,6 +1952,8 @@
         }, ctx);
         // 室内機用の表が無いページは、室外機用（列＝シリーズ）として読み直す
         if (!out.length) optPageCarrier(items, page, out);
+        // 「別売部品一覧」の表（室内機に付くパネル・フィルターはここにしか無い）
+        if (!out.length) optPageCarrierParts(items, page, out, ctx);
         return out;
       },
       finish: function (list) { return optResult(list, '日本キヤリア（旧東芝）', '店舗・オフィス用カスタムエアコン 別売品'); }
@@ -1813,6 +1989,7 @@
       min: 10,
       readPage: function (items, page) {
         var out = [];
+        optPageMitsuList(items, page, out);      // オプション構成図のページ（132〜142ページ）
         optPageMitsu(items, page, out);          // 機種ページの構成品（パネル・リモコン）
         optPageMitsuCommon(items, page, out);   // 共通別売部品（分配管など・144ページ）
         optPageMitsuOutdoor(items, page, out);  // 室外ユニットオプション（143ページ）
@@ -2018,6 +2195,7 @@
      run(file, makerId, onProgress) → { pack, count, … }
      -------------------------------------------------------------------- */
   function run(file, makerId, onProgress, ctx) {
+    ctx = ctx || {};          // ページ→機種タイプの覚え書きを入れる場所
     var maker = null;
     MAKERS.forEach(function (mk) { if (mk.id === makerId) maker = mk; });
     if (!maker) return Promise.reject(new Error('メーカーが選ばれていません'));
@@ -2113,8 +2291,12 @@
   function looseSame(a, b) {
     if (!a || !b) return false;
     var s = function (t) {
-      return String(t).replace(/[\s　・（）()［］\[\]【】]/g, '')
-        .replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); });
+      return String(t).replace(/[\s　・（）()［］\[\]【】〈〉<>《》]/g, '')
+        .replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
+        // 「天井ビルトインカセット（Eco）」は「天井ビルトインカセット形」と同じ形。
+        // 後ろのグレード名だけを外す（形そのものは外さない。
+        // 外すと「天井埋込形」と「天井埋込ダクト形」が同じになってしまう）
+        .replace(/(Eco|Premium|沖縄専用|沖縄)$/i, '');
     };
     var x = s(a), y = s(b);
     return x.indexOf(y) >= 0 || y.indexOf(x) >= 0;
