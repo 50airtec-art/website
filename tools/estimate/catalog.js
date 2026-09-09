@@ -1438,12 +1438,12 @@
         // 三菱の別売品の品番は必ず「英字3〜4文字＋ハイフン」で始まる（25種すべてで確認）。
         // ハイフンを求めないと、室外機の品番の切れ端（KA16 など）を拾う
         var MITSU_CODE = /^[A-Z]{2,4}-[A-Z0-9]{3,}$/;
-        var label = '', code = '', price = 0;
+        var parts = [], code = '', price = 0;
         cells.forEach(function (c) {
           var s = c.s.trim();
           if (!code) {
             if (MITSU_CODE.test(s)) { code = s; return; }
-            if (isJa(s)) label += s;
+            if (isJa(s)) parts.push(s);
             return;
           }
           if (!price) {
@@ -1451,6 +1451,15 @@
             if (m) price = yen(m[1]);
           }
         });
+        /* 品名になる文字だけ残す。
+           ・1文字だけのかけら … 段の左端に縦に並んだページの見出し。
+             これを入れていたので「ワイヤードリモコン」が「ネワイヤードリモコン」になっていた
+           ・数字の入ったもの … となりの段の金額。
+             「21,000円ワイヤレスリモコン」になっていた
+           （2026-09-09、BIGBOSSが画面を見て気づかせてくれた） */
+        var label = parts.filter(function (t) {
+          return t.length >= 2 && !/[0-9０-９]/.test(t);
+        }).join('');
         label = label.replace(/[：:].*$/, '').replace(/\s/g, '');
         if (!code || !price || label.length < 2) return;
         if (/室内|室外|セット価格|合計/.test(label)) return;   // 本体は別売品ではない
@@ -1535,7 +1544,11 @@
         }
       });
       if (!code || !price) return;
-      var nm = name.join(' ')
+      /* 1文字だけのかけら（縦書きの見出しの1文字）と、
+         品名の列に入り込んだ品番は品名ではない */
+      var nm = name.filter(function (t) {
+        return t.length >= 2 && !/^[A-Z][A-Z0-9]*-[A-Z0-9\-]{2,}$/.test(t);
+      }).join(' ')
         .replace(/[①-⓿]/g, ' ')          // 丸数字（①②③…）は品名ではない
         .replace(/[※注][\d,\s]*/g, ' ')
         .replace(/\s+/g, ' ').trim();
