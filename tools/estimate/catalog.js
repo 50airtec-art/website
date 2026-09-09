@@ -144,7 +144,12 @@
   var HITACHI_TYPE = [
     ['RCIC', 'てんかせJr.'], ['RCID', 'てんかせ2方向'], ['RCIS', 'てんかせ1方向'], ['RCI', 'てんかせ4方向'],
     ['RCB', 'ビルトイン'], ['RPI', 'てんうめ'], ['RPCK', '厨房用てんつり'], ['RPC', 'てんつり'],
-    ['RPK', 'かべかけ'], ['RPFI', 'ゆかおき（埋込形）'], ['RPF', 'ゆかおき'], ['RPV', '外気処理']
+    ['RPK', 'かべかけ'], ['RPFI', 'ゆかおき（埋込形）'], ['RPF', 'ゆかおき'],
+    /* RPV は外気処理ではなく**ゆかおき（床置形）**。
+       ここを外気処理と読んでいたので、60機種が別の型として並び、
+       ゆかおきの別売品が1つも出なかった（2026-09-09、NotebookLMで紙面を確認）。
+       外気処理エアコンの室内機は RPI-GP…KAF で、セット価格の表には載っていない */
+    ['RPV', 'ゆかおき']
   ];
   var HITACHI_TP = { 1: 'シングル', 2: 'ツイン', 3: 'トリプル', 4: 'フォー' };
 
@@ -1137,7 +1142,13 @@
       var code = '', price = 0, fitTxt = '';
       r.cells.forEach(function (c) {
         var s = c.s.trim();
-        if (Math.abs(c.x - xCode) < 40 && OPT_CODE.test(s)) code = s;
+        /* 品番のマスに注記がくっついていることがある。
+           「TCB-KBCN60（オプション出力）」はマス全体では品番の形にならず、
+           落としていた（キヤリア壁掛形の4品目のうち2つ）。頭から品番だけ取る */
+        if (!code && Math.abs(c.x - xCode) < 40) {
+          var mc = s.match(/^([A-Z][A-Z0-9]*-[A-Z0-9\-]{2,})/);
+          if (mc) code = mc[1];
+        }
         if (c.x >= xFit - 25 && c.x < xCode - 15) fitTxt += s;
         if (c.x >= xPrice - 25) { var m = s.match(OPT_MONEY); if (m && !price) price = yen(m[1]); }
       });
@@ -1557,19 +1568,34 @@
     /* 室内機のタイプ。「4方向天井カセット形〈i-スクエアタイプ〉」のように
        〈〉の中がタイプ名のこともあれば、〈PL-RP・LA22〉のように品番のこともある。
        品番のほうは捨てる（機種データのタイプ名は品番を持っていない） */
-    var type = '', headY = 0;
-    rows.slice(0, 8).forEach(function (r) {
+    /* 1ページに表が2つ3つ載っていることがある。
+       142ページは「壁掛形」「床置形」「厨房用天吊形」の3つが縦に並ぶ。
+       前は最初に見つけた1つ（壁掛形）をページ全体に付けていたので、
+       床置形の14機種には別売品が1つも出なかった（2026-09-09） */
+    var heads = [];
+    rows.forEach(function (r) {
       r.cells.forEach(function (c) {
-        if (type) return;
         var t = c.s.trim();
         if (!/形[〈（(]|形$/.test(t)) return;
         if (!/カセット|天吊|壁掛|床置|ビルトイン|埋込|厨房/.test(t)) return;
         if (!/タイプ/.test(t)) t = t.replace(/[〈（(].*$/, '');
-        type = t;
-        headY = r.y;
+        heads.push({ y: r.y, type: t });
       });
     });
-    if (!type) return;
+    if (!heads.length) return;
+    heads.sort(function (a, b) { return b.y - a.y; });   // 紙面の上から順
+    var headY = heads[0].y;
+
+    /** その行がどの見出しの下にあるか（y は下から上なので、行より大きいいちばん近い見出し） */
+    function typeAt(y) {
+      var best = '', bd = 1e9;
+      heads.forEach(function (h) {
+        var d = h.y - y;
+        if (d <= 0 || d >= bd) return;
+        bd = d; best = h.type;
+      });
+      return best;
+    }
 
     // 品名はいちばん左の列。形名と価格はその右
     var nameEnd = 250;
@@ -1598,6 +1624,8 @@
         .replace(/[※注][\d,\s]*/g, ' ')
         .replace(/\s+/g, ' ').trim();
       if (nm.length < 2) return;
+      var type = typeAt(r.y);
+      if (!type) return;
       out.push({ page: page, name: nm, code: code, y: price, fits: [{ type: type }] });
     });
   }
