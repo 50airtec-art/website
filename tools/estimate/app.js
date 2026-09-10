@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609101700';
+  var APP_VERSION = '202609101900';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -5917,7 +5917,11 @@
            そのまま書き替えると、20mの配管が20倍の値段になる。
            2026-09-10、BIGBOSSの実データで15件（すべて単位が m）がこれだった。
            勝手に直さず、別に数えて見せるだけにする。 */
-        var ratio = old ? price / old : 99;
+        // 値段が空（¥0）のものは、けた違いではなく「まだ値段が入っていない」だけ。そのまま入れる。
+        // 8月にお配りしたユーシー産業のCSVは、メーカーが値段を出していなかったので全部¥0だった。
+        // これを「けた違い」で止めると、せっかくカタログに値段があっても1件も入らない
+        if (!old) { changed.push({ item: hit.item, from: 0, to: price, code: code }); return; }
+        var ratio = price / old;
         if (ratio > 3 || ratio < 1 / 3) {
           odd.push({ item: hit.item, from: old, to: price, code: code, unit: hit.item.unit || '' });
           return;
