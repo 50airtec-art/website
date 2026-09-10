@@ -28,6 +28,11 @@
   var K_AUTH  = 'airtec_sync_auth_v1';   // ログインの引換券
   var KEY_PB  = 'airtec_pricebook_v1';
   var KEY_MDL = 'airtec_models_v1';
+  /* 別売品。前は連動で運んでいなかったので、パソコンで入れてもスマホに出なかった
+     （2026-09-10、BIGBOSSの「スマホ版で別売品でない」で分かった）。
+     置き場所を増やすとクラウドの許可設定を貼り直してもらう必要があるので、
+     単価マスタ・機種データと同じ _master に同乗させる（大きさは圧縮して25KBほど）。 */
+  var KEY_OPT = 'airtec_options_v1';
   var LISTS = [
     { name: 'sites',     key: 'airtec_sites_v1',     label: '現場' },
     { name: 'estimates', key: 'airtec_estimates_v1', label: '見積' },
@@ -382,7 +387,7 @@
 
   function markChanged(key) {
     if (!S || !S.on) return;
-    if (key === KEY_PB || key === KEY_MDL) {
+    if (key === KEY_PB || key === KEY_MDL || key === KEY_OPT) {
       S.masterAt = now();
       pushMaster = true;
       saveState();
@@ -649,16 +654,25 @@
         var m2 = await unseal(mDoc.blob);       // 相手のほうが新しい → もらう
         if (m2.pricebook) lsSet(KEY_PB, m2.pricebook);
         if (m2.models) lsSet(KEY_MDL, m2.models); else localStorage.removeItem(KEY_MDL);
+        /* 別売品は「届いたときだけ」入れる。無いからといって消さない。
+           古い版の端末や、別売品を持っていない端末が送ってきた _master には入っていないので、
+           それで消すと、パソコンの別売品がスマホからの送信で消えてしまう */
+        if (m2.options) { lsSet(KEY_OPT, m2.options); S.optSent = true; }
         S.remoteMasterAt = mDoc.at;
         S.masterAt = mDoc.at;
         changed = true;
-      } else if (pushMaster || !mDoc || (opts.force && S.masterAt > mDoc.at)) {
+      } else if (pushMaster || !mDoc || (opts.force && S.masterAt > mDoc.at) ||
+                 (!S.optSent && lsGet(KEY_OPT, null))) {
+        /* 最後の条件：別売品を持っているのに、まだ一度も送っていない端末。
+           この版に上がった最初の1回だけ、変更が無くても送ってスマホに届ける */
         var at = Math.max(S.masterAt, (mDoc ? mDoc.at : 0) + 1);
-        await docPut('master', await seal({
-          v: 1, pricebook: lsGet(KEY_PB, null), models: lsGet(KEY_MDL, null)
-        }), at);
+        var master = { v: 1, pricebook: lsGet(KEY_PB, null), models: lsGet(KEY_MDL, null) };
+        var opt = lsGet(KEY_OPT, null);
+        if (opt) master.options = opt;          // 持っている端末だけが送る（上の「消さない」と対）
+        await docPut('master', await seal(master), at);
         S.masterAt = at;
         S.remoteMasterAt = at;
+        if (opt) S.optSent = true;
         pushMaster = false;
       }
 
