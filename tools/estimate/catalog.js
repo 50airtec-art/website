@@ -1673,6 +1673,289 @@
      列の容量範囲は「本体の筐体サイズ」で決まっている（NotebookLM でも確認）。
      その列の品番は、その容量範囲の機種に付く。
      -------------------------------------------------------------------- */
+  /* --------------------------------------------------------------------
+     日立の別売品の品名（2026-09-11 作り直し）
+     ----------------------------------------------------------------------
+     前は nameReader（列ごとに、上下どちらでも近いものを採ってつなぐ）で読んでいて、
+     201品目のほとんどの品名が崩れていた（「22注 NEW高湿度対応キット 分ダクトフランジ（φ ） 分ダクト 1m」）。
+     キヤリアと同じ病気。となりの行の品名、左はしの縦書きの区分（補助・ダクト）、
+     注記の番号がつながり、「φ150」の数字は値段と思って消していた。
+
+     日立の表は、左から「区分（縦書き）」→「まとめ書き」→「品名」→「補足」の入れ子のマス。
+       てんかせ4方向  F-71M-K3 ＝ ボックス方式 ＞ 抗菌加工高性能フィルター ＞ 比色法65%相当
+       ビルトイン     FD-1A1   ＝ 吹き出し ＞ フレキシブルダクト（φ200） ＞ 分ダクト 1m
+     読み方
+       ・品番の行と同じ高さにある文字を左から読む
+       ・いちばん右の文字より左で空いている欄は、そのすぐ右の欄で選んだ文字に
+         いちばん近い、その欄のまとめ書きを受け継ぐ
+       ・同じ欄で上下にくっついた2行（「ABS樹脂製」「グリル」）は1つのマス
+       ・区分は縦書き（文字数のわりに幅がとても狭い）なので、それで落とす
+     pdf.js は語を細かく割ってよこす（「ロ」「ングライ」「フ」「フ」「ィ」「ルター」）ので、
+     確かめはブラウザと同じ pdf.js の文字でやった
+     -------------------------------------------------------------------- */
+
+  function hitClean(s) {
+    return String(s || '')
+      .replace(/[\u2000-\u200b\u3000]/g, ' ')
+      .replace(/[（(]\s*注\s*[\d,\s]+[）)]/g, ' ')       // （注 12 ）
+      .replace(/注\s*\d+/g, ' ')
+      .replace(/※\s*\d*/g, ' ')
+      .replace(/[（(［\[]\s*(受注対応品?|特注対応色?)\s*[）)］\]]/g, ' ')   // （受注対応品）［受注対応］
+      .replace(/[［\[][^］\]]*寸法[^］\]]*[］\]]/g, ' ')                  // ［外形横寸法（mm）］は品名の下の注記
+      .replace(/SEK|NEW|受注対応品?|特注対応色?|[★☆■●◆]/g, ' ')
+      .replace(/[［\[]\s*[］\]]/g, ' ')
+      .replace(/（\s+/g, '（').replace(/\s+）/g, '）')
+      .replace(/［\s+/g, '［').replace(/\s+］/g, '］')
+      .replace(/[０-９]/g, function (d) { return String.fromCharCode(d.charCodeAt(0) - 0xFEE0); })
+      .replace(/[（(]\s*[）)]/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+  }
+
+  // 日立の表の左はしの区分（縦書き）
+  var CATEGORY_WORD = /^(補助|ダクト|フィルター|リモコン|グリル|その他)$/;
+  var CATEGORY_HEAD = /^(補助|ダクト|フィルター|リモコン|グリル|その他)\s+/;
+
+  function hitachiNamer(rows, nameRight, headY, endY, rowYs) {
+    /* 高さは、行にそろえる前の本当の高さで測る。行のまとめ（optRows）は3ポイントまで寄せるので、
+       88ページでは品番 678.5 の行が 681.0 になり、すぐ下の「脱臭フィルター」（674.8）が
+       その品番の品名だと気づけなかった。呼ぶ側は行の高さ（rowYs）で名前を聞くので、対応を持っておく */
+    var realOf = {};
+    rowYs.forEach(function (ry) {
+      var r = rows.filter(function (x) { return x.y === ry; })[0];
+      var ys = r ? r.cells.filter(function (c) { return OPT_CODE.test(c.s.trim()); }).map(function (c) { return c.y; }) : [];
+      realOf[ry] = ys.length ? ys.reduce(function (a, b) { return a + b; }, 0) / ys.length : ry;
+    });
+    var codeYs = rowYs.map(function (ry) { return realOf[ry]; });
+
+    // その高さに近い品番の行（品名の文字は品番より5ポイントほどずれることがある）
+    function codeYOf(y, tol) {
+      var best = null, bd = tol;
+      codeYs.forEach(function (c) { var d = Math.abs(c - y); if (d <= bd) { bd = d; best = c; } });
+      return best;
+    }
+    var isLatin = function (t) { return /^[A-Z]{2,4}$/.test(t); };   // 「ABS」樹脂製グリル
+
+    /* 注の番号「（注 11 ）」は、かたまりを作る前に抜いておく。
+       品名とのすき間が狭いと1つにつながり、注を消した後もかたまりの左はしが注の位置のまま残る
+       （60ページの「（注 11 ）ワイドパネル」が品名より左の欄になっていた）。
+       ただし、注だけの行はマスの2行目（「抗菌加工高性能フィルター」の下の「（注1）（注2）」）なので、
+       マスがどの行まで続くかを見るのに使う */
+    var NOTE = /^[（(]?\s*注\s*[\d,\s]*[）)]?$/;
+    var notes = [];
+    var rows2 = rows.map(function (r) {
+      return {
+        y: r.y,
+        cells: r.cells.filter(function (c) {
+          if (!NOTE.test(c.s.replace(/\s/g, ''))) return true;
+          if (c.x < nameRight && r.y < headY - 2 && r.y > endY) notes.push({ x: c.x, y: c.y });
+          return false;
+        })
+      };
+    });
+
+    var segs = carSegs(rows2, nameRight, headY).filter(function (g) {
+      if (g.y <= endY) return false;
+      var raw = g.s.replace(/\s/g, '');
+      /* 縦書き（区分・注記・ページのつまみ）は、文字数のわりに幅がとても狭い。
+         横書きのかな・漢字は1文字あたり5.5ほど（小さい「ッ」が入ると4くらい）。2文字の縦書き「補助」は3.4だった */
+      var ja = raw.replace(/[^ぁ-んァ-ヶー一-龥]/g, '');
+      if (ja.length >= 2 && ja.length === raw.length && (g.right - g.x) / raw.length < 3.7) return false;
+      if (raw.length >= 2 && (g.right - g.x) / raw.length < 3) return false;
+      // 表の下の注記の文章（「「ロングライフフィルター」は化粧パネルに…」）と、見出しの語
+      if (/[。「」]/.test(g.s)) return false;
+      if (/^(品名|容量・型名|容量|型名)/.test(raw)) return false;
+      g.t = hitClean(g.s);
+      // 長さは注を消した後で見る（「空気清浄ユニット…（注28）（注30）」を文章と思って消していた）
+      return g.t.length >= 2 && g.t.length <= 40 && (isJa(g.t) || isLatin(g.t));
+    });
+    segs.forEach(function (g) { g.y = g.oy; });
+
+    /* 区分の語（「補助」）は、横書きの幅で来ることもある（96ページ）。
+       品番の行に乗っている品名の、いちばん左より左にあるものは区分として落とす */
+    var nameLeft = 1e9;
+    segs.forEach(function (g) {
+      if (!isLatin(g.t) && !CATEGORY_WORD.test(g.t) && codeYOf(g.y, 4) != null) nameLeft = Math.min(nameLeft, g.x);
+    });
+    if (nameLeft < 1e9) segs = segs.filter(function (g) { return g.x >= nameLeft - 5; });
+
+    segs.forEach(function (g) {
+      g.hasRight = segs.some(function (h) { return Math.abs(h.y - g.y) <= 4 && h.x > g.x + 8; });
+    });
+
+    // 欄（x でまとめる）。注は、すでにある欄にだけ入れる
+    var cols = [];
+    segs.forEach(function (g) {
+      var c = null;
+      cols.forEach(function (k) { if (!c && Math.abs(k.x - g.x) < 8) c = k; });
+      if (!c) { c = { x: g.x, segs: [] }; cols.push(c); }
+      c.segs.push(g);
+    });
+    cols.sort(function (a, b) { return a.x - b.x; });
+    notes.forEach(function (n) {
+      if (segs.some(function (g) { return Math.abs(g.y - n.y) <= 1 && g.x < n.x && g.right >= n.x - 8; })) return;
+      var c = null;
+      cols.forEach(function (k) { if (!c && Math.abs(k.x - n.x) < 8) c = k; });
+      if (c) c.segs.push({ y: n.y, note: true });
+    });
+
+    /* 同じ欄で上下にくっついた2行は1つのマス（「化粧」「パネル用」）。
+       品番の行どうし（「比色法65%」「比色法90%」）と、同じ文字のくり返しはつながない。
+       ただし2行目がカタカナだけの切れはし（「抗菌加工高性能」＋「フィルター」）ならつなぐ。
+       注だけの行は、文字は足さずにマスの下はしだけ延ばす */
+    cols.forEach(function (c) {
+      c.segs.sort(function (a, b) { return b.y - a.y; });
+      var cells = [], cur = null;
+      c.segs.forEach(function (g) {
+        if (g.note) {
+          if (cur && cur.lo - g.y <= 11 && cur.tlo - g.y <= 22) cur.lo = Math.min(cur.lo, g.y);
+          return;
+        }
+        var cy = codeYOf(g.y, 2);
+        var head = cur && cur.n === 1 && isLatin(cur.t);
+        var frag = cur && /^[ァ-ヶー]{2,6}$/.test(g.t) && /[一-龥]$/.test(cur.t);
+        var two = cur && cur.toy - g.oy <= 9.3 && cur.lastRight && g.hasRight;
+        var nw = /^\s*NEW/.test(g.s);
+        if (nw) cur = null;
+        if (cur && !cur.nw && (cur.n < 2 || head) && cur.tlo - g.y <= 10 && (!(cur.code && cy != null) || frag || head || two) && cur.t.indexOf(g.t) < 0) {
+          cur.t += (/用$/.test(cur.t) && /用$/.test(g.t) ? '・' : '') + g.t; cur.tlo = g.y; cur.toy = g.oy; cur.lo = Math.min(cur.lo, g.y); cur.lastRight = g.hasRight;
+          cur.right = Math.max(cur.right, g.right);
+          if (!head) cur.n++;
+          if (cy != null) cur.code = true;
+        } else {
+          cur = { t: g.t, hi: g.y, tlo: g.y, toy: g.oy, lo: g.y, n: 1, code: cy != null, right: g.right, lastRight: g.hasRight, nw: nw };
+          cells.push(cur);
+        }
+      });
+      c.cells = cells.filter(function (cell) { return !isLatin(cell.t); });
+    });
+
+    /* その品番自身の品名のマス（品番の行にあって、右に何も続かない）＝「葉」。
+       品番の行とは7ポイントまでずれてよい（「側面カバー」は4.9、「交換用フィルター（ろ材）」は6.3ずれている）。
+       その品番の行のすぐそば（7以内）に、自分の文字が1つも無い品番の行があるときは、葉にしない。
+       1つのマスに品番が2段で書いてある（「BPD-7WB+BPD-4WB」と「BPD-7WB」が6.3離れている）ところで、
+       まとめ書きの「分ダクト部材」「ブラック」を、その行の品名と取り違えていた（51ページ） */
+    cols.forEach(function (c) {
+      c.cells.forEach(function (cell) {
+        var cy = codeYOf(cell.hi, 7);
+        if (cy == null) cy = codeYOf(cell.tlo, 7);
+        cell.codeY = cy;
+        cell.leaf = cy != null &&
+          !codeYs.some(function (y2) {
+            return y2 !== cy && Math.abs(y2 - cy) <= 7 && !segs.some(function (g) { return Math.abs(g.y - y2) <= 4; });
+          }) &&
+          !segs.some(function (g) {
+            return g.x > c.x + 8 && g.y <= Math.max(cy, cell.hi) + 4 && g.y >= Math.min(cy, cell.tlo) - 4;
+          });
+        cell.mid = (cell.hi + cell.lo) / 2;
+      });
+    });
+
+    function dist(cell, y) {
+      if (y <= cell.hi && y >= cell.lo) return 0;
+      return Math.min(Math.abs(y - cell.hi), Math.abs(y - cell.lo));
+    }
+
+    /* ここから、まとめ書きの割り当て（2026-09-11 作り直し）
+       ----------------------------------------------------------------------
+       前は「近いまとめ書きを受け継ぐ」だった。まとめ書きは何行ぶんものマスのまん中に
+       書いてあるので、上の品物の名前のほうが近いことがある（51ページの
+       「分ダクトフランジ」に、すぐ上の「高湿度対応キット」が付いていた）。
+       いまは欄ごとに、左の欄から順に
+         ・その行に自分の文字がある → それを採る。葉ならそこで区切り
+         ・左で採った文字が、この欄の位置まで横に伸びている → この欄は空（区切り）
+         ・その行の品名がこの欄より左で終わっている → 区切り
+         ・それ以外 → 区切りと区切りの間の行を、間にあるまとめ書きに分ける。
+           まとめ書きはマスのまん中にあるので、「分けた行のまん中」と
+           「まとめ書きの高さ」がいちばん合う分け方を選ぶ（80ページの紙面で確かめた。
+           「吹き出し」は角ダクトフランジの2行目から分ダクト 5m までのまん中にある）
+       まとめ書きが無い区切りの間は、すぐ上の葉を受け継ぐ（上寄せのマス。
+       「オイルガードフィルター」＞「交換用フィルター（ろ材）」、「ブラック」の2段目） */
+    var R = rowYs.slice().sort(function (a, b) { return realOf[b] - realOf[a]; }).map(function (key) {
+      var y = realOf[key];
+      var own = cols.map(function (c) {
+        var best = null, bd = 1e9;
+        c.cells.forEach(function (cell) {
+          var d = cell.codeY === y ? 0 : dist(cell, y);
+          if (d <= 4 && d < bd) { bd = d; best = cell; }
+        });
+        return best;
+      });
+      var last = -1;
+      own.forEach(function (o, ci) { if (o && o.leaf) last = ci; });
+      return { y: y, key: key, own: own, last: last < 0 ? cols.length : last, pick: [], right: -1e9 };
+    });
+
+    function split(run, labels) {
+      // run の行を labels（上から順）に、上から続けて分ける。空のまとめ書きは 8 の罰
+      var n = run.length, k = labels.length, INF = 1e12;
+      var f = [], from = [];
+      for (var i = 0; i <= n; i++) { f.push([]); from.push([]); for (var j = 0; j <= k; j++) { f[i].push(INF); from[i].push(-1); } }
+      f[0][0] = 0;
+      function cost(a, b, L) {           // 行 a..b-1 を L に
+        var sum = 0, bad = 0;
+        for (var t = a; t < b; t++) { sum += run[t].y; if (run[t].lab && run[t].lab !== L) bad++; }
+        return Math.abs(sum / (b - a) - L.mid) + bad * 1000;
+      }
+      for (var j2 = 1; j2 <= k; j2++) {
+        for (var i2 = 0; i2 <= n; i2++) {
+          if (f[i2][j2 - 1] + 8 < f[i2][j2]) { f[i2][j2] = f[i2][j2 - 1] + 8; from[i2][j2] = i2; }
+          for (var p = 0; p < i2; p++) {
+            if (f[p][j2 - 1] >= INF) continue;
+            var v = f[p][j2 - 1] + cost(p, i2, labels[j2 - 1]);
+            if (v < f[i2][j2]) { f[i2][j2] = v; from[i2][j2] = p; }
+          }
+        }
+      }
+      var out = [], i3 = n;
+      for (var j3 = k; j3 >= 1; j3--) {
+        var p3 = from[i3][j3];
+        for (var t = p3; t < i3; t++) out[t] = labels[j3 - 1];
+        i3 = p3;
+      }
+      return out;
+    }
+
+    cols.forEach(function (c, ci) {
+      var st = R.map(function (r) {
+        var o = r.own[ci];
+        if (o) { r.pick[ci] = o; r.right = Math.max(r.right, o.right); return o.leaf ? 'bar' : 'lab'; }
+        if (ci > r.last || r.right >= c.x - 2) return 'bar';
+        return 'free';
+      });
+      var i = 0;
+      while (i < R.length) {
+        if (st[i] === 'bar') { i++; continue; }
+        var a = i;
+        while (i < R.length && st[i] !== 'bar') i++;
+        var yA = a > 0 ? R[a - 1].y : 1e9, yB = i < R.length ? R[i].y : -1e9;
+        var run = [];
+        for (var t = a; t < i; t++) run.push({ y: R[t].y, lab: st[t] === 'lab' ? R[t].own[ci] : null, r: R[t] });
+        var labels = c.cells.filter(function (cell) { return !cell.leaf && cell.mid < yA && cell.mid > yB; })
+          .sort(function (p, q) { return q.mid - p.mid; });
+        if (labels.length) {
+          var got = split(run, labels);
+          run.forEach(function (x, t2) {
+            if (x.lab || !got[t2]) return;
+            x.r.pick[ci] = got[t2]; x.r.right = Math.max(x.r.right, got[t2].right);
+          });
+        } else if (a > 0) {
+          var up = R[a - 1].own[ci];
+          if (up && up.leaf) run.forEach(function (x) {
+            if (up.lo - x.y <= 20) { x.r.pick[ci] = up; x.r.right = Math.max(x.r.right, up.right); }
+          });
+        }
+      }
+    });
+
+    var names = {};
+    R.forEach(function (r) {
+      var parts = [];
+      r.pick.forEach(function (p) { if (p && parts.indexOf(p.t) < 0) parts.push(p.t); });
+      names[r.key] = parts.join(' ').replace(CATEGORY_HEAD, '');
+    });
+    return function (y) { return names[y] || ''; };
+  }
+
   function optPageHitachi(items, page, out) {
     var rows = optRows(items);
 
@@ -1734,7 +2017,13 @@
       .filter(function (c) { return c.cap; });
     if (!cols.length) return;
 
-    var nameAt = nameReader(rows, cols[0].x - 20, head.y);
+    // 品番のある行（品名の読み方が、行どうしの並びを見るため）
+    var codeYs = [];
+    rows.forEach(function (r) {
+      if (r.y >= head.y - 2 || r.y <= endY) return;
+      if (r.cells.some(function (c) { return OPT_CODE.test(c.s.trim()); })) codeYs.push(r.y);
+    });
+    var nameAt = hitachiNamer(rows, cols[0].x - 20, head.y, endY, codeYs);
 
     // 表ぜんぶにかかる容量（1行に品番が1つだけのときに使う）
     var wide = [1e9, 0];
