@@ -749,41 +749,286 @@
     R: 'RXシリーズ', A: 'AXシリーズ', S: 'SXシリーズ', G: 'GXシリーズ', C: 'CXシリーズ',
     D: 'DXシリーズ', H: 'HXシリーズ', K: 'KXシリーズ', E: 'Eシリーズ'
   };
-  // 能力（kW）ごとの「おもに○畳」。カタログの見出しと同じ数
+  /* ハウジングエアコンは、能力の数字のあとの記号でシリーズと形が決まる（38〜52ページの見出しで確かめた）
+       S28ZCRV   CRシリーズ   天井埋込カセット形 シングルフロー
+       S284ACDV  CDシリーズ   天井埋込カセット形 シングルフロー（スゴ暖）
+       S28ZCV    Cシリーズ    天井埋込カセット形 シングルフロー
+       S40ZGV    ダブルフロー 天井埋込カセット形 ダブルフロー
+       S285AVRV  VRシリーズ   床置形／S285AVDV VDシリーズ／S285AVV Vシリーズ
+       S28ZMV    壁埋込形
+       S283ALV   アメニティビルトイン／S286ALDV フリービルトイン */
+  var DK_ROOM_KIND = {
+    ZCR: ['CRシリーズ', '天井埋込カセット形（シングルフロー）'],
+    ACD: ['CDシリーズ', '天井埋込カセット形（シングルフロー）'],
+    ZC: ['Cシリーズ', '天井埋込カセット形（シングルフロー）'],
+    ZG: ['ダブルフロー', '天井埋込カセット形（ダブルフロー）'],
+    AVR: ['VRシリーズ', '床置形'],
+    AVD: ['VDシリーズ', '床置形'],
+    AV: ['Vシリーズ', '床置形'],
+    ZM: ['壁埋込形', '壁埋込形'],
+    AL: ['アメニティビルトイン', 'ビルトイン形'],
+    ALD: ['フリービルトイン', 'ビルトイン形']
+  };
+  // 能力（kW）ごとの「おもに○畳」。紙面の「○畳程度」が読めなかったときだけ使う
   var ROOM_TATAMI = { 22: 6, 25: 8, 28: 10, 36: 12, 40: 14, 45: 15, 50: 16, 56: 18, 63: 20, 71: 23, 80: 26, 90: 29 };
-  var DK_ROOM_CODE = /^(S(\d{2})\d(AT)([A-Z])([SPV]))(?=-|\s|$)/;
+  // S ＋ 能力2けた ＋（年式の数字）＋ 形の記号 ＋ 電源の字（S＝単相100V、P・V＝単相200V）
+  var DK_ROOM_CODE = /^(S(\d{2})\d?([A-Z]{2,3})([SPV]))(?=-|\s|$)/;
+  // 別売のパネル・グリル・据付枠の品番
+  var DK_ROOM_PARTS = /(BCF\d{3}[A-Z](?:-[A-Z])?|BC\d{2}[A-Z]*(?:-[A-Z]+)?|BG\d{2}[A-Z]*(?:-[A-Z]+)?|KDG\d{3}[A-Z]\d*|KKF\d{3}[A-Z]\d*[A-Z]?)/g;
+
+  function dkRoomKind(sym) {
+    if (/^AT/.test(sym)) return DK_ROOM_SERIES[sym.charAt(2)] ? [DK_ROOM_SERIES[sym.charAt(2)], '壁掛形'] : null;
+    return DK_ROOM_KIND[sym] || null;
+  }
 
   function dkRoomReadPage(items, page) {
     var out = [];
+    var codes = [];
     items.forEach(function (c) {
       var m = c.s.trim().match(DK_ROOM_CODE);
-      if (!m) return;
+      if (m && dkRoomKind(m[3])) codes.push({ c: c, m: m });
+    });
+    codes.forEach(function (k) {
+      var c = k.c, m = k.m, kind = dkRoomKind(m[3]);
       // その品番の列（3列並びの1列ぶん）の文字だけを見る
       var band = items.filter(function (o) { return o.x >= c.x - 6 && o.x < c.x + 150; });
-      // 品番から見て dyLo〜dyHi の高さにある文字を、上の行から順につないだもの
-      function text(dyLo, dyHi) {
+      function sel(dyLo, dyHi) {
         return band.filter(function (o) { var dy = o.y - c.y; return dy >= dyLo && dy <= dyHi; })
-          .sort(function (a, b) { return b.y - a.y || a.x - b.x; })
-          // HXシリーズのページだけ、すき間が空白ではなく制御文字（U+0007）で来る。
-          // 「（税抜き␇390,000円）」「単␇100 V」を読めず、HXが1台も入らなかった
-          .map(function (o) { return o.s.replace(/[\u0000-\u001f]/g, ' '); }).join(' ');
+          .sort(function (a, b) { return b.y - a.y || a.x - b.x; });
       }
-      var price = text(-14, 2).match(/税抜き\s*([\d,]+)\s*円/);
-      var im = text(-32, -4).match(/(F\d{3}AT[A-Z]{2})/);
+      // HXシリーズのページだけ、すき間が空白ではなく制御文字（U+0007）で来る。
+      // 「（税抜き␇390,000円）」「単␇100 V」を読めず、HXが1台も入らなかった
+      function clean(t) { return t.replace(/[\u0000-\u001f]/g, ' '); }
+      function text(dyLo, dyHi) {
+        return sel(dyLo, dyHi).map(function (o) { return clean(o.s); }).join(' ');
+      }
+      var head = text(-14, 2);
+      var price = head.match(/税抜き\s*([\d,]+)\s*円/);
+      // Eシリーズ（スタンダード）は「オープン価格」。機種は入れて、値段は0（仕入先の見積で入れる）
+      var open = !price && /オープン価格/.test(head);
+      var im = text(-32, -4).match(/(F\d{2,3}[A-Z]{2,5})(?=[-／\s(]|$)/);
       // 室外機の品番のうしろは「／質量46kg」のことも「 297,000円」のこともある（SXシリーズ）
-      var om = text(-48, -8).match(/(R\d{3}[A-Z]{2,4})(?=／|\s|$)/);
-      if (!price || !im || !om) return;
-      // SXシリーズ（risora）はパネル込みのセット価格。パネルの品番も覚えておく
-      var pm = text(-34, -20).match(/パネル\s*：?\s*(BC[A-Z0-9]+)/);
+      var om = text(-48, -8).match(/(R\d{2,3}[A-Z]{2,5})(?=[-／\s(]|$)/);
+      // カタログのはじめの一覧表は品番と値段だけで、室内機・室外機が無い。そろったものだけ採る
+      if ((!price && !open) || !im || !om) return;
       var pw = text(-36, -14).match(/単\s*(100|200)\s*V/);
-      var tat = text(4, 26).match(/おもに\s*(\d{1,2})\s*畳/);
+      var tat = text(4, 26).match(/(\d{1,2})\s*畳程度/);
+      // SXシリーズ（risora）はパネル込みのセット価格。パネルの品番も覚えておく
+      var inPanel = text(-34, -20).match(/パネル\s*：?\s*(BC[A-Z0-9]+)/);
       var cap = Number(m[2]);
-      out.push({
-        page: page, m: m[1], y: yen(price[1]), im: im[1], om: om[1], pm: pm ? pm[1] : '',
+      var base = {
+        page: page, m: m[1], y: price ? yen(price[1]) : 0, im: im[1], om: om[1],
+        pm: inPanel ? inPanel[1] : '',
         kw: cap / 10,
         tat: tat ? Number(tat[1]) : (ROOM_TATAMI[cap] || 0),
-        pw: '単相' + (pw ? pw[1] : (m[5] === 'S' ? '100' : '200')) + 'V',
-        s: DK_ROOM_SERIES[m[4]] || 'その他'
+        pw: '単相' + (pw ? pw[1] : (m[4] === 'S' ? '100' : '200')) + 'V',
+        s: kind[0], i: kind[1],
+        opt: open ? 'オープン価格（値段は仕入先の見積で）' : ''
+      };
+
+      /* 天井埋込カセット・壁埋込形は、パネルやグリルが別売。
+         セットの価格の下に「フラットパネル（別売）BC40JF-WF 価格…」「採用時 合計価格 693,000円（税抜き 630,000円）」
+         が組み合わせの数だけ並ぶ。セットだけの値段では見積にならないので、合計価格ごとに1台として出す。
+         下を見るのは、同じ列の次の品番の少し上まで */
+      var lo = -110;
+      codes.forEach(function (k2) {
+        if (k2 === k || Math.abs(k2.c.x - c.x) > 20 || k2.c.y >= c.y) return;
+        lo = Math.max(lo, k2.c.y - c.y + 25);
+      });
+      var rows = [];
+      sel(lo, -30).forEach(function (o) {
+        var r = null;
+        rows.forEach(function (x) { if (Math.abs(x.y - o.y) <= 1.5) r = x; });
+        if (!r) { r = { y: o.y, s: '' }; rows.push(r); }
+        r.s += clean(o.s) + ' ';
+      });
+      rows.sort(function (a, b) { return b.y - a.y; });
+      var parts = [], names = [], variants = [];
+      rows.forEach(function (r) {
+        var flat = r.s.replace(/\s+/g, '');
+        (r.s.match(DK_ROOM_PARTS) || []).forEach(function (x) { if (parts.indexOf(x) < 0) parts.push(x); });
+        (flat.match(/フラットパネル|標準パネル|別売パネル|和風グリル|据付枠/g) || []).forEach(function (x) {
+          if (names.indexOf(x) < 0) names.push(x);
+        });
+        var tot = /合計価格/.test(flat) && r.s.match(/税抜き\s*([\d,]+)\s*円/);
+        if (tot) {
+          variants.push({ y: yen(tot[1]), pm: parts.join('・'), label: names.join('＋') });
+          parts = []; names = [];
+        }
+      });
+      if (!variants.length) { out.push(base); return; }
+      variants.forEach(function (v) {
+        var x = {};
+        for (var key in base) x[key] = base[key];
+        x.y = v.y; x.pm = v.pm;
+        x.opt = (v.label || 'パネル') + '込み';
+        out.push(x);
+      });
+    });
+    return out.concat(dkMultiReadPage(items, page));
+  }
+
+  /* --------------------------------------------------------------------
+     ダイキン マルチエアコン（住宅設備用カタログ 53〜59ページ）
+     --------------------------------------------------------------------
+     室外機1台に室内機を何台かつなぐ形なので、セットの品番が無い（マルチパックだけはある）。
+     機器を選ぶで1台ずつ明細に足していけるように、室外機と室内機を別々の1台として入れる。
+       マルチパック   PAC-403AV  室内 C22RTV×2 ＋ 室外 MP403AV（パック価格）
+       ココタス室外機 2M30YCV・2M403ACV（品番が「2M」「30YCV」と2つに割れて来る）
+       システムマルチ室外機 2M455AV〜5M1005AV（頭の数字が何室用か）
+       室内機         C28ZCV・C285AVV-W・C223ATSVW …… パネルが別売のものは「合計価格」ごとに1台
+     室内機の一覧は、パネル違いの「合計価格」が同じ行に2つ並ぶ（フラットパネル・標準パネル）。
+     だから合計価格は、文字の x の位置ごとに見る。
+     壁埋込形の「別売前面グリル・据付枠合計価格」はグリルと据付枠だけの合計なので、本体の値段に足す
+     -------------------------------------------------------------------- */
+  var DK_MULTI_IN = {
+    ZC: '天井埋込カセット形（シングルフロー）', ZG: '天井埋込カセット形（ダブルフロー）', AV: '床置形',
+    ZM: '壁埋込形', YCC: '小空間マルチ（ココタス）', AL: 'ビルトイン形',
+    RT: '壁掛形', VTCC: '壁掛形', AT: '壁掛形', ATC: '壁掛形', ATCS: '壁掛形', ATS: '壁掛形'
+  };
+
+  function dkCapLabel(cap) {
+    var t = ROOM_TATAMI[cap];
+    return (cap / 10).toFixed(1) + 'kW' + (t ? '（おもに' + t + '畳）' : '');
+  }
+
+  function dkPanelName(code) {
+    if (/^BCF\d/.test(code)) return '別売パネル';
+    if (/^BC\d{2}JF/.test(code)) return 'フラットパネル';
+    if (/^BC\d{2}J-/.test(code)) return '標準パネル';
+    return '';
+  }
+
+  function dkMultiReadPage(items, page) {
+    function clean(t) { return t.replace(/[\u0000-\u001f]/g, ' '); }
+    var all = clean(items.map(function (o) { return o.s; }).join(' '));
+    // 別売品の一覧のページにも室内機の品番は出るが、そこは読まない。
+    // 「マルチ」の字では絞らない（59ページの室内機の一覧には「マルチ」の字が無く、丸ごと落ちていた）
+    if (/別売品の種類/.test(all)) return [];
+
+    // 「2M」「30YCV」のように割れて来る室外機の品番をつなぐ
+    var its = items.slice();
+    items.forEach(function (o) {
+      if (!/^\dM$/.test(o.s.trim())) return;
+      var nx = null;
+      items.forEach(function (q) {
+        if (q !== o && Math.abs(q.y - o.y) < 1 && q.x > o.x && q.x - o.x < 20 && (!nx || q.x < nx.x)) nx = q;
+      });
+      if (nx) its.push({ s: o.s.trim() + nx.s.trim(), x: o.x, y: o.y, w: 0 });
+    });
+
+    var codes = [];
+    its.forEach(function (o) {
+      var t = clean(o.s).trim(), m;
+      if ((m = t.match(/^PAC-(\d{3})AV$/))) {
+        codes.push({ o: o, kind: 'pack', m: 'PAC-' + m[1] + 'AV' });
+      } else if ((m = t.match(/^(\d)M(\d{2,4})([A-Z]{1,3})V$/))) {
+        var d = m[2];
+        codes.push({ o: o, kind: 'out', m: t, rooms: Number(m[1]), cap: Number(d.length >= 4 ? d.slice(0, 3) : d.slice(0, 2)), coco: /YC|AC/.test(m[3]) });
+      } else if ((m = t.match(/^C(\d{2})(\d?)([A-Z]{2,4}?)V([WK]?)(?=$|[-(（／\s])/)) && DK_MULTI_IN[m[3]]) {
+        codes.push({ o: o, kind: 'in', m: 'C' + m[1] + m[2] + m[3] + 'V' + m[4], cap: Number(m[1]), type: DK_MULTI_IN[m[3]] });
+      }
+    });
+
+    var out = [];
+    codes.forEach(function (k) {
+      var o = k.o;
+      // その品番の列：右どなりの品番（上下120ポイント以内）の手前まで
+      var bx1 = o.x + 150;
+      codes.forEach(function (k2) {
+        if (k2 !== k && k2.o.x > o.x + 20 && Math.abs(k2.o.y - o.y) < 120) bx1 = Math.min(bx1, k2.o.x - 6);
+      });
+      var band = its.filter(function (q) { return q.x >= o.x - 6 && q.x < bx1; });
+      function sel(dyLo, dyHi) {
+        return band.filter(function (q) { var dy = q.y - o.y; return dy >= dyLo && dy <= dyHi; })
+          .sort(function (a, b) { return b.y - a.y || a.x - b.x; });
+      }
+      function text(dyLo, dyHi) { return sel(dyLo, dyHi).map(function (q) { return clean(q.s); }).join(' '); }
+
+      // 値段は「税抜き」と4けた以上の数。「（税抜き 249,000」「円）」と別の行に割れることがある（58ページ C40ZGV）
+      var TAX = /税抜き\s*([\d,]{4,})/;
+      // ビルトイン形（59ページ C283ALV）は値段の行が品番の18〜25ポイント下にある。上から順に見るので、自分の値段が先に当たる
+      var price = text(-26, 2).match(TAX);
+      if (!price) return;
+      var y = yen(price[1]);
+      var pw = text(-20, 2).match(/単\s*(100|200)\s*V/);
+
+      if (k.kind === 'pack') {
+        var ins = text(-40, -8).match(/C\d{2}RTV/g) || [];
+        var om = text(-50, -10).match(/MP\d{3}AV/);
+        if (!ins.length || !om) return;
+        var caps = ins.map(function (c) { return (Number(c.slice(1, 3)) / 10).toFixed(1) + 'kW'; });
+        out.push({
+          page: page, m: k.m, y: y, om: om[0],
+          im: ins.every(function (c) { return c === ins[0]; }) ? ins[0] + '×' + ins.length : ins.join('＋'),
+          pm: '', cap: caps.join('＋') + '（' + ins.length + '室）',
+          s: 'マルチパック', i: '壁掛形（' + ins.length + '室パック）', tp: 'マルチパック（' + ins.length + '室）',
+          pw: '単相' + (pw ? pw[1] : '200') + 'V', rc: 'ワイヤレス', opt: ''
+        });
+        return;
+      }
+      if (k.kind === 'out') {
+        out.push({
+          page: page, m: k.m, y: y, om: k.m, im: '', pm: '',
+          cap: (k.cap / 10).toFixed(1) + 'kW（' + k.rooms + '室用）',
+          s: k.coco ? 'ココタス（室外機）' : 'システムマルチ（室外機）', i: 'マルチ室外機', tp: k.rooms + '室用',
+          pw: '単相' + (pw ? pw[1] : '200') + 'V', rc: '', opt: ''
+        });
+        return;
+      }
+
+      // 室内機。パネル・グリルが別売なら「合計価格」ごとに1台
+      var base = {
+        page: page, m: k.m, y: y, om: '', im: k.m, pm: '', cap: dkCapLabel(k.cap),
+        s: 'マルチ用室内機', i: k.type, tp: 'マルチ用室内機', pw: '室外機から', rc: 'ワイヤレス', opt: ''
+      };
+      var lo = -100;
+      codes.forEach(function (k2) {
+        if (k2 === k || k2.o.y >= o.y || k2.o.x < o.x - 6 || k2.o.x >= bx1) return;
+        // 色違いの兄弟（最後の W・K だけ違う）は、同じ1組なのでさえぎらない
+        if (k2.kind === 'in' && k2.m.replace(/[WK]$/, '') === k.m.replace(/[WK]$/, '') && o.y - k2.o.y < 15) return;
+        lo = Math.max(lo, k2.o.y - o.y + 12);
+      });
+      // 「別売グリル・据付枠別」とある室内機（ビルトイン形）は、グリルと据付枠が別に要る
+      if (/グリル・?据付枠別/.test(text(-12, 2).replace(/\s+/g, ''))) base.opt = '別売グリル・据付枠が別に必要';
+      var tots = sel(lo, -5).filter(function (q) { return /合計価格/.test(clean(q.s)); });
+      var used = [], prevByCol = [], variants = [];
+      tots.forEach(function (T) {
+        function near(q, dyLo, dyHi, xLo, xHi) {
+          return q.y - T.y >= dyLo && q.y - T.y <= dyHi && q.x >= T.x + xLo && q.x <= T.x + xHi;
+        }
+        var cand = band.filter(function (q) { return near(q, -3, 3, -5, 120) && TAX.test(clean(q.s)); });
+        if (!cand.length) cand = band.filter(function (q) { return near(q, -9, -3, -30, 120) && TAX.test(clean(q.s)); });
+        cand = cand.filter(function (q) { return used.indexOf(q) < 0; });
+        if (!cand.length) return;
+        cand.sort(function (a, b) { return Math.abs(a.x - T.x) - Math.abs(b.x - T.x); });
+        used.push(cand[0]);
+        var tot = yen(clean(cand[0].s).match(TAX)[1]);
+        // この合計に入る部品：同じ縦の列で、ひとつ上の合計（無ければ本体の値段の行）との間
+        var upper = o.y - 12;
+        prevByCol.forEach(function (P) { if (Math.abs(P.x - T.x) < 40 && P.y > T.y) upper = Math.min(upper, P.y); });
+        prevByCol.push(T);
+        var parts = [], names = [];
+        band.forEach(function (q) {
+          if (!(q.y > T.y && q.y < upper && Math.abs(q.x - T.x) < 60)) return;
+          (clean(q.s).match(DK_ROOM_PARTS) || []).forEach(function (x) { if (parts.indexOf(x) < 0) parts.push(x); });
+        });
+        parts.forEach(function (x) { var nm = dkPanelName(x); if (nm && names.indexOf(nm) < 0) names.push(nm); });
+        if (/グリル|据付枠/.test(clean(T.s) + text(T.y - o.y - 2, T.y - o.y + 8))) {
+          if (names.indexOf('前面グリル・据付枠') < 0) names.push('前面グリル・据付枠');
+        }
+        // 「別売前面グリル・据付枠合計価格」はグリルと据付枠だけの合計。本体の値段に足す
+        var full = /^合計価格/.test(clean(T.s).trim());
+        var onlyPanels = parts.length > 1 && parts.every(function (x) { return /^B[CG]/.test(x); });
+        variants.push({ y: full ? tot : y + tot, pm: parts.join(onlyPanels ? '／' : '・'), label: names.join('＋') });
+      });
+      if (!variants.length) { out.push(base); return; }
+      variants.forEach(function (v) {
+        var x = {};
+        for (var key in base) x[key] = base[key];
+        x.y = v.y; x.pm = v.pm;
+        x.opt = (v.label || 'パネル') + '込み';
+        out.push(x);
       });
     });
     return out;
@@ -793,14 +1038,16 @@
     var rows = [], seen = {}, pages = {};
     sets.forEach(function (x) {
       pages[x.page] = 1;
-      if (seen[x.m]) return;
-      seen[x.m] = 1;
+      // パネル違いは別の1台（同じ品番でも合計価格が違う）
+      var key = x.m + '｜' + x.pm;
+      if (seen[key]) return;
+      seen[key] = 1;
       // 「馬力」の手順には、ルームエアコンでは能力の文字を入れる（画面はそのまま出す）
-      var cap = x.kw.toFixed(1) + 'kW（おもに' + x.tat + '畳）';
+      var cap = x.cap || (x.kw.toFixed(1) + 'kW（おもに' + x.tat + '畳）');
       rows.push({
         m: x.m, hp: cap, y: x.y, u: String(x.page),
-        s: x.s, i: '壁掛形', ab: cap, pw: x.pw,
-        rc: 'ワイヤレス', tp: 'シングル', opt: '',
+        s: x.s, i: x.i, ab: cap, pw: x.pw,
+        rc: x.rc != null ? x.rc : 'ワイヤレス', tp: x.tp || 'シングル', opt: x.opt,
         om: x.om, im: x.im, pm: x.pm, rm: ''
       });
     });
@@ -811,9 +1058,12 @@
         maker: 'ダイキン',
         brand: 'ルームエアコン（住宅設備用）',
         source: '住宅設備用カタログ（公開デジタルカタログ）',
-        note: '希望小売価格・税抜。配管/据付工事費は含まず。社内利用限定（第三者提供不可）。',
-        seriesOrder: ['RXシリーズ', 'AXシリーズ', 'SXシリーズ', 'GXシリーズ', 'CXシリーズ', 'DXシリーズ', 'HXシリーズ', 'KXシリーズ', 'Eシリーズ'],
-        typeOrder: ['シングル'],
+        note: '希望小売価格・税抜。配管/据付工事費は含まず。Eシリーズはオープン価格（値段0）。社内利用限定（第三者提供不可）。',
+        seriesOrder: ['RXシリーズ', 'AXシリーズ', 'SXシリーズ', 'GXシリーズ', 'CXシリーズ', 'DXシリーズ', 'HXシリーズ', 'KXシリーズ', 'Eシリーズ',
+                      'CRシリーズ', 'CDシリーズ', 'Cシリーズ', 'ダブルフロー', 'VRシリーズ', 'VDシリーズ', 'Vシリーズ',
+                      '壁埋込形', 'アメニティビルトイン', 'フリービルトイン',
+                      'マルチパック', 'システムマルチ（室外機）', 'ココタス（室外機）', 'マルチ用室内機'],
+        typeOrder: ['シングル', 'マルチパック（2室）', '2室用', '3室用', '4室用', '5室用', 'マルチ用室内機'],
         urlBase: 'https://ec.daikinaircon.com/ecatalog/DKCA001/index.html#'
       }
     };
@@ -3183,7 +3433,7 @@
     {
       id: 'daikin-room',
       name: 'ダイキン（ルームエアコン）',
-      catalog: '住宅設備用カタログ（壁掛形のルームエアコン）',
+      catalog: '住宅設備用カタログ（ルームエアコン・ハウジングエアコン）',
       size: '100ページ・96MBほど。読み取りに2分ほどかかります。',
       howto: [
         '下のリンクを押すと「全ページのPDF」を作る画面が出る',
@@ -3191,7 +3441,7 @@
         '保存したPDFを「カタログのファイルを選ぶ」で選ぶ'
       ],
       url: 'https://ec.daikinaircon.com/cgi-bin/ecatalog/bindPDF.cgi?C=CR25227BXX&S=0&E=99&CT=1&CV=1',
-      urlNote: 'いまは壁掛形だけを読みます。Eシリーズはオープン価格なので入りません。天井埋込などのハウジングエアコンはこれから。',
+      urlNote: '壁掛形・天井埋込カセット・床置形・壁埋込形・ビルトイン形・マルチエアコン（マルチパック・ココタス・システムマルチの室外機と室内機）を読みます。パネル別売の形は「パネル込みの合計価格」で入ります。Eシリーズはオープン価格なので値段0で入ります。',
       min: 60,
       layout: true,
       readPage: dkRoomReadPage,

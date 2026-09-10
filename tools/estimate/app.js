@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609110800';
+  var APP_VERSION = '202609110900';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -5007,7 +5007,8 @@
       // 全メーカーぶんを1本の配列にまとめる。どのメーカーの機種かは mk に持たせる
       var items = [], so = [], to = [];
       packs.forEach(function (p) {
-        p.items.forEach(function (x) { x.mk = p.maker; items.push(x); });
+        // br（ブランド）は、別売品を業務用とルームエアコンで分けるのに使う
+        p.items.forEach(function (x) { x.mk = p.maker; x.br = p.brand; items.push(x); });
         p.seriesOrder.forEach(function (v) { if (so.indexOf(v) < 0) so.push(v); });
         p.typeOrder.forEach(function (v) { if (to.indexOf(v) < 0) to.push(v); });
       });
@@ -5182,7 +5183,11 @@
       top.appendChild(el('span', 'model-price', yen(x.y)));
       b.appendChild(top);
       if (x.opt) b.appendChild(el('em', null, x.opt));
-      b.appendChild(el('small', null, '室外機 ' + x.om + '／室内機 ' + x.im + (x.pm ? '／パネル ' + x.pm : '') + (x.rm ? '／リモコン ' + x.rm : '')));
+      // マルチエアコンは室外機だけ・室内機だけの1台があるので、空の欄は出さない
+      b.appendChild(el('small', null, [
+        x.om ? '室外機 ' + x.om : '', x.im ? '室内機 ' + x.im : '',
+        x.pm ? 'パネル ' + x.pm : '', x.rm ? 'リモコン ' + x.rm : ''
+      ].filter(Boolean).join('／')));
       b.addEventListener('click', function () {
         var line = {
           name: (x.mk || '') + ' ' + x.s + ' ' + x.i,
@@ -5376,9 +5381,13 @@
       if (!a || !b) return false;
       return String(a).indexOf(String(b)) >= 0 || String(b).indexOf(String(a)) >= 0;
     };
+    /* 同じダイキンでも、業務用（スカイエア）とルームエアコンの別売品は別もの。
+       業務用の「どの機種にも付く」吹出口やチャンバが、ルームエアコンを選んだときに出てはいけない */
+    var room = function (t) { return /ルームエアコン/.test(t || ''); };
     var list = [];
     optStores.forEach(function (s) {
       if (x.mk && s.maker && !same(x.mk, s.maker)) return;
+      if (room(x.br) !== room(s.brand)) return;
       KUCHOO_CATALOG.optionsFor(s, x).forEach(function (o) {
         /* 「どの機種にも付く」ものと、この機種のために選ばれたものを分ける。
            ダイキンは吹出口やチャンバなど353品目が「どの機種にも」に入るので、
@@ -5858,10 +5867,14 @@
     return list.filter(function (s) { return s && s.maker && (s.items || []).length; });
   }
 
-  /** 1社ぶんを入れる（同じメーカーがあれば入れ替え）。保存はまとめて1回 */
+  /* 別売品の束を見分ける鍵。メーカー名だけで見ると、ダイキンのルームエアコンの別売品を入れたとたんに
+     業務用（スカイエア）の別売品が消える。機種データと同じく「メーカー｜ブランド」で見る */
+  function optKey(s) { return (s && s.maker || '') + '｜' + (s && s.brand || ''); }
+
+  /** 1社ぶんを入れる（同じメーカー・同じブランドがあれば入れ替え）。保存はまとめて1回 */
   function putOptStore(store) {
     var stores = optStores.slice(), at = -1;
-    stores.forEach(function (s, i) { if (s.maker === store.maker) at = i; });
+    stores.forEach(function (s, i) { if (optKey(s) === optKey(store)) at = i; });
     if (at >= 0) stores[at] = store; else stores.push(store);
     save(KEY_OPT, { v: 1, stores: stores });
     optStores = stores;
@@ -5870,7 +5883,7 @@
   function adoptOptions(store, extra) {
     var stores = optStores.slice();
     var at = -1;
-    stores.forEach(function (s, i) { if (s.maker === store.maker) at = i; });
+    stores.forEach(function (s, i) { if (optKey(s) === optKey(store)) at = i; });
     if (at >= 0) stores[at] = store; else stores.push(store);
 
     if (save(KEY_OPT, { v: 1, stores: stores }) === false) {
