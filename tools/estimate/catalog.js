@@ -725,6 +725,101 @@
   }
 
   /* --------------------------------------------------------------------
+     ダイキン ルームエアコン（住宅設備用カタログ）……まずは壁掛形
+     --------------------------------------------------------------------
+     家電の店に並ぶモデルはオープン価格だが、工事店向けの住宅設備用カタログには、
+     スタンダード（Eシリーズ）以外に希望小売価格が載っている
+     （2026-09-11、BIGBOSSの「オープンなのはスタンダードモデルだけ」で調べ直した。
+       私は確かめずに「ルームエアコンはオープン価格が多い」と言っていた）。
+
+     1台ぶんは、3列に並んだ小さな表
+       S286ATRS-W(-C)
+       価格 605,000円（税抜き 550,000円）          ← 品番と同じ行か、すぐ下の行
+       室内 F286ATRS-W(-C)／質量16kg   室内電源 単 100 V 20A
+       室外 R286ARS／質量46kg
+       （品番の上に「おもに 10 畳程度」）
+     品番の形：S ＋ 能力の数字3けた（28＝2.8kW）＋ AT（壁掛形）＋ シリーズの字 ＋ 電源の字
+       電源の字は S＝単相100V、P・V＝単相200V（Vは室外から電源をとる形）
+
+     ・カタログのはじめの一覧表にも品番と値段が並ぶが、室内機・室外機の品番が無い。
+       品番と値段だけ拾うと別の列の値段を掴むので、室内機と室外機がそろったものだけ採る
+     ・天井埋込などのハウジングエアコンは、パネル別売の「合計価格」があって形が違うので、まだ読まない
+     -------------------------------------------------------------------- */
+  var DK_ROOM_SERIES = {
+    R: 'RXシリーズ', A: 'AXシリーズ', S: 'SXシリーズ', G: 'GXシリーズ', C: 'CXシリーズ',
+    D: 'DXシリーズ', H: 'HXシリーズ', K: 'KXシリーズ', E: 'Eシリーズ'
+  };
+  // 能力（kW）ごとの「おもに○畳」。カタログの見出しと同じ数
+  var ROOM_TATAMI = { 22: 6, 25: 8, 28: 10, 36: 12, 40: 14, 45: 15, 50: 16, 56: 18, 63: 20, 71: 23, 80: 26, 90: 29 };
+  var DK_ROOM_CODE = /^(S(\d{2})\d(AT)([A-Z])([SPV]))(?=-|\s|$)/;
+
+  function dkRoomReadPage(items, page) {
+    var out = [];
+    items.forEach(function (c) {
+      var m = c.s.trim().match(DK_ROOM_CODE);
+      if (!m) return;
+      // その品番の列（3列並びの1列ぶん）の文字だけを見る
+      var band = items.filter(function (o) { return o.x >= c.x - 6 && o.x < c.x + 150; });
+      // 品番から見て dyLo〜dyHi の高さにある文字を、上の行から順につないだもの
+      function text(dyLo, dyHi) {
+        return band.filter(function (o) { var dy = o.y - c.y; return dy >= dyLo && dy <= dyHi; })
+          .sort(function (a, b) { return b.y - a.y || a.x - b.x; })
+          // HXシリーズのページだけ、すき間が空白ではなく制御文字（U+0007）で来る。
+          // 「（税抜き␇390,000円）」「単␇100 V」を読めず、HXが1台も入らなかった
+          .map(function (o) { return o.s.replace(/[\u0000-\u001f]/g, ' '); }).join(' ');
+      }
+      var price = text(-14, 2).match(/税抜き\s*([\d,]+)\s*円/);
+      var im = text(-32, -4).match(/(F\d{3}AT[A-Z]{2})/);
+      // 室外機の品番のうしろは「／質量46kg」のことも「 297,000円」のこともある（SXシリーズ）
+      var om = text(-48, -8).match(/(R\d{3}[A-Z]{2,4})(?=／|\s|$)/);
+      if (!price || !im || !om) return;
+      // SXシリーズ（risora）はパネル込みのセット価格。パネルの品番も覚えておく
+      var pm = text(-34, -20).match(/パネル\s*：?\s*(BC[A-Z0-9]+)/);
+      var pw = text(-36, -14).match(/単\s*(100|200)\s*V/);
+      var tat = text(4, 26).match(/おもに\s*(\d{1,2})\s*畳/);
+      var cap = Number(m[2]);
+      out.push({
+        page: page, m: m[1], y: yen(price[1]), im: im[1], om: om[1], pm: pm ? pm[1] : '',
+        kw: cap / 10,
+        tat: tat ? Number(tat[1]) : (ROOM_TATAMI[cap] || 0),
+        pw: '単相' + (pw ? pw[1] : (m[5] === 'S' ? '100' : '200')) + 'V',
+        s: DK_ROOM_SERIES[m[4]] || 'その他'
+      });
+    });
+    return out;
+  }
+
+  function dkRoomFinish(sets) {
+    var rows = [], seen = {}, pages = {};
+    sets.forEach(function (x) {
+      pages[x.page] = 1;
+      if (seen[x.m]) return;
+      seen[x.m] = 1;
+      // 「馬力」の手順には、ルームエアコンでは能力の文字を入れる（画面はそのまま出す）
+      var cap = x.kw.toFixed(1) + 'kW（おもに' + x.tat + '畳）';
+      rows.push({
+        m: x.m, hp: cap, y: x.y, u: String(x.page),
+        s: x.s, i: '壁掛形', ab: cap, pw: x.pw,
+        rc: 'ワイヤレス', tp: 'シングル', opt: '',
+        om: x.om, im: x.im, pm: x.pm, rm: ''
+      });
+    });
+    return {
+      rows: rows,
+      pricePages: Object.keys(pages).length,
+      head: {
+        maker: 'ダイキン',
+        brand: 'ルームエアコン（住宅設備用）',
+        source: '住宅設備用カタログ（公開デジタルカタログ）',
+        note: '希望小売価格・税抜。配管/据付工事費は含まず。社内利用限定（第三者提供不可）。',
+        seriesOrder: ['RXシリーズ', 'AXシリーズ', 'SXシリーズ', 'GXシリーズ', 'CXシリーズ', 'DXシリーズ', 'HXシリーズ', 'KXシリーズ', 'Eシリーズ'],
+        typeOrder: ['シングル'],
+        urlBase: 'https://ec.daikinaircon.com/ecatalog/DKCA001/index.html#'
+      }
+    };
+  }
+
+  /* --------------------------------------------------------------------
      三菱電機
      Mr.SLIM（店舗・事務所用パッケージエアコン）
 
@@ -3084,6 +3179,23 @@
       layout: true,            // 4段組。しかも行の文字をつなげてはいけない
       readPage: daikinReadPage,
       finish: daikinFinish
+    },
+    {
+      id: 'daikin-room',
+      name: 'ダイキン（ルームエアコン）',
+      catalog: '住宅設備用カタログ（壁掛形のルームエアコン）',
+      size: '100ページ・96MBほど。読み取りに2分ほどかかります。',
+      howto: [
+        '下のリンクを押すと「全ページのPDF」を作る画面が出る',
+        'その画面の［ダウンロード開始］でPDFを保存する',
+        '保存したPDFを「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://ec.daikinaircon.com/cgi-bin/ecatalog/bindPDF.cgi?C=CR25227BXX&S=0&E=99&CT=1&CV=1',
+      urlNote: 'いまは壁掛形だけを読みます。Eシリーズはオープン価格なので入りません。天井埋込などのハウジングエアコンはこれから。',
+      min: 60,
+      layout: true,
+      readPage: dkRoomReadPage,
+      finish: dkRoomFinish
     },
     {
       id: 'mitsubishi',

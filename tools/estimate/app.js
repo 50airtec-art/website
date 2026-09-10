@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609110700';
+  var APP_VERSION = '202609110800';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -5054,14 +5054,19 @@
     toast(p.maker + ' の機種データを削除しました');
   }
 
+  /** 電源の見せ方。業務用は「単相」「三相」だけで持っている（どちらも200V）。
+      ルームエアコンは100Vもあるので「単相100V」のように、そのまま見せる文字で持っている */
+  function pwLabel(v) { return v === '三相' ? '三相200V' : (v === '単相' || !v ? '単相200V' : v); }
+
   /* 絞り込みの順番。ここの並びがそのまま画面の手順になる */
   var STEPS = [
     { k: 'mk', label: 'メーカー' },
     { k: 's',  label: 'シリーズ' },
     { k: 'i',  label: '室内機タイプ' },
-    { k: 'hp', label: '馬力', fmt: function (v) { return v + '馬力'; } },
+    // 業務用は馬力の数（3 → 3馬力）。ルームエアコンは能力の文字（2.8kW（おもに10畳））をそのまま出す
+    { k: 'hp', label: '馬力・能力', fmt: function (v) { return typeof v === 'string' && /kW/.test(v) ? v : v + '馬力'; } },
     { k: 'tp', label: '台数' },
-    { k: 'pw', label: '電源', fmt: function (v) { return v === '三相' ? '三相200V' : '単相200V'; } },
+    { k: 'pw', label: '電源', fmt: pwLabel },
     { k: 'rc', label: 'リモコン' }
   ];
   var chooserSel = {};
@@ -5086,7 +5091,8 @@
 
   /** 選択肢を、その並び順の指定があればそれに従って並べる */
   function sortOptions(k, vals) {
-    if (k === 'hp') return vals.slice().sort(function (a, b) { return a - b; });
+    // ルームエアコンは「2.8kW（おもに10畳）」の文字で持っているので、頭の数字で並べる
+    if (k === 'hp') return vals.slice().sort(function (a, b) { return parseFloat(a) - parseFloat(b); });
     var order = k === 's' ? models.seriesOrder : (k === 'tp' ? models.typeOrder : null);
     if (order && order.length) {
       return vals.slice().sort(function (a, b) {
@@ -5180,7 +5186,7 @@
       b.addEventListener('click', function () {
         var line = {
           name: (x.mk || '') + ' ' + x.s + ' ' + x.i,
-          spec: [x.m, x.ab, x.tp, x.pw === '三相' ? '三相200V' : '単相200V', x.rc, x.opt].filter(Boolean).join('　'),
+          spec: [x.m, x.ab, x.tp, pwLabel(x.pw), x.rc, x.opt].filter(Boolean).join('　'),
           // 定価は仕様の文字に焼き付けず、行の持ち物として覚えておく。
           // 売値は掛率でいつでも動くので、見せる文字は印刷のたびに作り直す。
           listPrice: x.y,
