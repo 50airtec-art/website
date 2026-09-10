@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609101900';
+  var APP_VERSION = '202609102000';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -2360,7 +2360,11 @@
      -------------------------------------------------------------------- */
   var newVersion = '';
 
-  if (location.protocol !== 'file:') {
+  var lastVerCheck = 0;
+  function checkNewVersion() {
+    if (location.protocol === 'file:') return;
+    if (Date.now() - lastVerCheck < 60000) return;      // 1分に1回まで
+    lastVerCheck = Date.now();
     fetch('version.txt?t=' + Date.now(), { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.text() : ''; })
       .then(function (t) {
@@ -2371,6 +2375,15 @@
       })
       .catch(function () { /* 圏外などで取れなくても、いまの画面はそのまま使える */ });
   }
+  checkNewVersion();
+  /* ホーム画面のアプリは、閉じたつもりでも裏で眠っているだけのことが多い。
+     もう一度開いても読み込み直さないので、起動したときの1回だけでは新しい版に気づかない。
+     2026-09-10、BIGBOSSの「スマホ版があたらしくならない」で分かった。
+     画面に戻ってきたときにも見に行く。 */
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') checkNewVersion();
+  });
+  window.addEventListener('pageshow', function (e) { if (e.persisted) checkNewVersion(); });
 
   $('#btn-new-reload').addEventListener('click', function () {
     location.replace(location.pathname + '?v=' + encodeURIComponent(newVersion || Date.now()));
