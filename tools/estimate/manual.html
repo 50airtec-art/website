@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>空調王 使い方</title>
+<link rel="icon" href="icon-192.png">
+<style>
+/* 空調王の画面（style.css）と同じ色と字にそろえる。印刷してもそのまま読めるようにする */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --text: #1a1d21;
+  --text-sub: #5a6068;
+  --border: #e2e5e9;
+  --dark: #1a1d21;
+  --accent: #0b6bcb;
+  --accent-soft: #e8f1fb;
+  --warn: #9a5b00;
+  --warn-soft: #fff6e5;
+  --danger: #c0392b;
+  --radius: 10px;
+  --font: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", "Meiryo", sans-serif;
+}
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body { font-family: var(--font); font-size: 15.5px; line-height: 1.85; color: var(--text); background: var(--bg); }
+
+.topbar { position: sticky; top: 0; z-index: 10; background: var(--dark); color: #fff; }
+.topbar-inner { max-width: 880px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.mark { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; background: #fff; color: var(--dark); font-weight: 800; font-size: 15px; }
+.topbar strong { font-size: 15px; display: block; line-height: 1.3; }
+.topbar small { font-size: 11px; color: #a8adb4; display: block; line-height: 1.3; }
+.top-actions { margin-left: auto; display: flex; gap: 6px; }
+.top-actions a, .top-actions button {
+  font: inherit; font-size: 13px; color: var(--dark); background: #fff; border: 0; border-radius: 7px;
+  padding: 6px 12px; cursor: pointer; text-decoration: none; white-space: nowrap;
+}
+.top-actions .ghost { background: transparent; color: #c3c8ce; border: 1px solid #3a3f45; }
+
+main { max-width: 880px; margin: 0 auto; padding: 20px 16px 80px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 22px 18px; margin-bottom: 16px; }
+h1 { font-size: 24px; line-height: 1.4; margin-bottom: 6px; }
+h2 { font-size: 20px; line-height: 1.4; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+h2 .no { display: inline-grid; place-items: center; min-width: 30px; height: 30px; border-radius: 8px; background: var(--dark); color: #fff; font-size: 15px; }
+h3 { font-size: 16.5px; margin: 20px 0 6px; padding-left: 10px; border-left: 4px solid var(--accent); line-height: 1.5; }
+p { margin: 6px 0; }
+ul, ol { margin: 6px 0 6px 1.4em; }
+li { margin: 3px 0; }
+.lead { color: var(--text-sub); }
+small, .sub { color: var(--text-sub); font-size: 13px; }
+
+/* 画面のボタン・タブ・欄の名前 */
+.b { display: inline-block; border: 1px solid #c9cfd6; border-bottom-width: 2px; border-radius: 6px; background: #fff;
+     padding: 0 7px; line-height: 1.6; font-size: .92em; white-space: nowrap; font-weight: 600; }
+.tab { display: inline-block; background: var(--dark); color: #fff; border-radius: 6px; padding: 0 8px; font-size: .9em; white-space: nowrap; font-weight: 600; }
+.f { display: inline-block; background: var(--accent-soft); color: #0a4f96; border-radius: 4px; padding: 0 5px; font-size: .92em; white-space: nowrap; }
+
+.tip, .warn { border-radius: 8px; padding: 10px 14px; margin: 10px 0; font-size: 14.5px; }
+.tip { background: var(--accent-soft); border: 1px solid #c9ddf3; }
+.warn { background: var(--warn-soft); border: 1px solid #f1d7a8; }
+.tip b:first-child, .warn b:first-child { margin-right: 4px; }
+.warn b:first-child { color: var(--warn); }
+
+.steps { counter-reset: s; list-style: none; margin-left: 0; }
+.steps > li { counter-increment: s; position: relative; padding-left: 38px; margin: 10px 0; }
+.steps > li::before { content: counter(s); position: absolute; left: 0; top: 2px; width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; display: grid; place-items: center; line-height: 1; }
+
+.tbl-wrap { overflow-x: auto; margin: 8px 0; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { border: 1px solid var(--border); padding: 6px 9px; text-align: left; vertical-align: top; }
+th { background: #f0f2f5; white-space: nowrap; }
+
+.toc { columns: 2; column-gap: 24px; margin: 8px 0 0 0; list-style: none; }
+.toc li { break-inside: avoid; margin: 2px 0; }
+.toc a { color: var(--accent); text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+
+.tabs-demo { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 4px; }
+.tabs-demo div { flex: 1 1 180px; background: #f7f8fa; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+.tabs-demo .tab { margin-bottom: 4px; }
+
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 8px 0; }
+.flow span { background: #f0f2f5; border: 1px solid var(--border); border-radius: 6px; padding: 1px 8px; font-size: 14px; white-space: nowrap; }
+.flow i { font-style: normal; color: var(--text-sub); }
+
+.qa dt { font-weight: 700; margin-top: 14px; }
+.qa dt::before { content: "Q. "; color: var(--accent); }
+.qa dd { margin: 2px 0 0 0; padding-left: 1.6em; }
+.qa dd::before { content: "A. "; margin-left: -1.6em; color: var(--text-sub); font-weight: 700; }
+
+.foot { text-align: center; color: var(--text-sub); font-size: 13px; margin-top: 24px; }
+
+@media (max-width: 600px) {
+  body { font-size: 15px; }
+  .card { padding: 16px 14px 12px; }
+  .toc { columns: 1; }
+  h1 { font-size: 21px; }
+  h2 { font-size: 18px; }
+}
+
+/* 印刷：A4。上の帯は出さない。項目の途中で紙が切れないようにする */
+@page { size: A4; margin: 14mm 13mm; }
+@media print {
+  body { background: #fff; font-size: 11pt; line-height: 1.7; }
+  .topbar { display: none; }
+  main { max-width: none; padding: 0; }
+  .card { border: 0; padding: 0 0 6mm; margin: 0; }
+  section.card { break-before: page; }
+  section.card.first { break-before: auto; }
+  h2, h3 { break-after: avoid; }
+  .tip, .warn, table, .steps > li, .qa dt, .qa dd { break-inside: avoid; }
+  .toc a { color: var(--text); }
+  a { color: var(--text); text-decoration: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="mark">空調</span>
+    <div>
+      <strong>空調王 使い方</strong>
+      <small>2026年9月の版に合わせています</small>
+    </div>
+    <div class="top-actions">
+      <button type="button" onclick="window.print()">印刷する</button>
+      <a class="ghost" href="./">空調王を開く</a>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<!-- ================= はじめに ================= -->
+<div class="card">
+  <h1>空調王の使い方</h1>
+  <p class="lead">業務用エアコンの見積書・請求書を、スマホとパソコンで作る道具です。
+    メーカーのカタログを読ませておけば、<b>機種を選ぶだけで定価が明細に入ります。</b></p>
+
+  <div class="tabs-demo">
+    <div><span class="tab">見積作成</span><br>見積書を作る。明細・金額・印刷</div>
+    <div><span class="tab">現場</span><br>現場ごとに、見積・請求書・現調シート・写真をまとめる</div>
+    <div><span class="tab">単価マスタ</span><br>工事や部材の単価、メーカーのカタログを入れる</div>
+    <div><span class="tab">自社情報</span><br>会社名・ロゴ・社判、掛率、連動、バックアップ</div>
+  </div>
+  <p class="sub">画面のいちばん上にある4つのタブで切り替えます。この説明書では、画面のボタンを <span class="b">このように</span>、
+    入れる欄を <span class="f">このように</span> 書いています。</p>
+
+  <h3>もくじ</h3>
+  <ol class="toc">
+    <li><a href="#start">1. はじめに（最初の10分）</a></li>
+    <li><a href="#company">2. 自社情報</a></li>
+    <li><a href="#master">3. 単価マスタ</a></li>
+    <li><a href="#catalog">4. メーカーのカタログを読ませる</a></li>
+    <li><a href="#estimate">5. 見積を作る</a></li>
+    <li><a href="#price">6. 金額の決まり方</a></li>
+    <li><a href="#print">7. 保存・印刷・PDF</a></li>
+    <li><a href="#site">8. 現場（請求書・現調シート・写真）</a></li>
+    <li><a href="#sync">9. スマホとパソコンの連動</a></li>
+    <li><a href="#safe">10. 入れた内容を失わないために</a></li>
+    <li><a href="#faq">11. 困ったとき</a></li>
+    <li><a href="#terms">12. ご利用にあたって</a></li>
+  </ol>
+</div>
+
+<!-- ================= 1 ================= -->
+<section class="card first" id="start">
+  <h2><span class="no">1</span>はじめに（最初の10分）</h2>
+  <p>最初に次の4つをやっておくと、あとが楽です。</p>
+  <ol class="steps">
+    <li><b>会社の情報を入れる。</b><br>
+      <span class="tab">自社情報</span> で会社名・住所・電話・登録番号（インボイス）・振込先を入れて <span class="b">保存</span>。
+      見積書の右上に印刷されます。ロゴや社判も入れられます（<a href="#company">2. 自社情報</a>）。</li>
+    <li><b>iPhoneの人は、ホーム画面に追加する。</b><br>
+      iPhoneのSafariは、<b>7日間開かないと入れた内容を消してしまいます</b>（Appleの決まり）。ホーム画面に追加すると消えません。
+      <ol>
+        <li>Safariの下（または上）にある「共有」ボタンを押す（□ に ↑ の矢印が刺さった絵）</li>
+        <li>出てきた一覧を下にたどって「ホーム画面に追加」を押す</li>
+        <li>右上の「追加」を押す</li>
+      </ol>
+      次からは、ホーム画面の空調王のアイコンから開いてください。</li>
+    <li><b>連動を始める（スマホとパソコンの両方で使うなら）。</b><br>
+      <span class="tab">自社情報</span> の「スマホとパソコンの連動」で <span class="b">この端末で連動を始める</span>。
+      出てきた<b>あいことばを紙に控えて</b>、もう一方の端末で <span class="b">あいことばを入れる</span>（<a href="#sync">9. 連動</a>）。
+      1台だけで使うなら、代わりにバックアップを取ってください（<a href="#safe">10.</a>）。</li>
+    <li><b>メーカーのカタログを読ませる（パソコンで）。</b><br>
+      <span class="tab">単価マスタ</span> の「カタログPDFから機種データを作る」で、使うメーカーを選んでカタログを入れます。
+      これで <span class="tab">見積作成</span> の「機器を選ぶ」が使えるようになります（<a href="#catalog">4.</a>）。</li>
+  </ol>
+  <div class="tip"><b>ポイント</b>空調王は、入れた内容を<b>お使いの端末の中</b>に保存します。
+    同じ住所を別の会社の人が開いても、それぞれ自分の会社の内容が入るので、お互いの中身は見えません。</div>
+</section>
+
+<!-- ================= 2 ================= -->
+<section class="card" id="company">
+  <h2><span class="no">2</span>自社情報</h2>
+  <p>見積書・請求書に印刷される会社の情報と、社内だけで使う設定です。入れたら <span class="b">保存</span> を押します。</p>
+
+  <h3>見積書に印刷されるもの</h3>
+  <p><span class="f">会社名</span> <span class="f">代表者・担当者</span> <span class="f">郵便番号</span> <span class="f">住所</span>
+    <span class="f">電話番号</span> <span class="f">メール</span> <span class="f">ウェブサイト</span>
+    <span class="f">登録番号（インボイス）</span> <span class="f">振込先</span> <span class="f">見積書の下部に入れる注意書き</span></p>
+
+  <h3>社内だけで使うもの（印刷されません）</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>欄</th><th>使いみち</th></tr>
+    <tr><td>1人工の金額</td><td>新しい見積を作ったときの「1人工の金額」の初めの値</td></tr>
+    <tr><td>原価の1人工</td><td>粗利を出すときの、工事1人工あたりの原価</td></tr>
+    <tr><td>材料の仕入掛率</td><td>下の表に当たらない材料の原価を「定価の何%」で見積もる</td></tr>
+    <tr><td>メーカー・シリーズごとの仕入掛率</td><td>「日立は23%」「三菱ズバ暖は33%」のように、メーカーやシリーズごとに原価の掛率を決める。シリーズを空にすると、そのメーカー全部に当たります</td></tr>
+    <tr><td>機種に乗せる利益</td><td>機器の見積金額を <b>原価 ÷ この数</b> で出します。0.65 なら、原価10万円の機器が約15.4万円になります（<a href="#price">6.</a>）</td></tr>
+    <tr><td>単価の端数</td><td>新しい見積の初めの値（そのまま／10円未満繰り上げ／100円未満繰り上げ）</td></tr>
+  </table></div>
+
+  <h3>ロゴと社判</h3>
+  <ul>
+    <li><b>ロゴ</b>……見積書の会社名の上に入ります。PNG・JPEG・SVG などが使えます。背景が透明なものがきれいです。高さは10〜16mmくらいがなじみます。入れなくても大丈夫です。</li>
+    <li><b>社判（角印）</b>……電子印鑑のデータでも、紙に押して撮った写真でも使えます。
+      写真のときは「白い背景を透明にする」に印を入れたまま選ぶと、紙の白が消えて印影だけ残ります。<b>真上から・明るいところで</b>撮ってください。大きさは角印なら18〜24mmくらいが実物大です。</li>
+  </ul>
+  <p class="sub">いま使っている空調王の<b>版番号</b>は、この画面の <span class="b">保存</span> の横に出ています。困ったときに聞かれたら、この数字を伝えてください。</p>
+</section>
+
+<!-- ================= 3 ================= -->
+<section class="card" id="master">
+  <h2><span class="no">3</span>単価マスタ</h2>
+  <p>見積の明細に入れる「品物と単価の一覧」です。カテゴリ（工事・配管材・電材…）ごとに、品名・規格・単位・定価・原価が並んでいます。
+    ここで直した金額は、この端末に保存されます（連動を入れていれば、もう一方の端末にも届きます）。</p>
+
+  <h3>1つずつ直す</h3>
+  <p>一覧の中の数字や品名をそのまま書き換えます。<span class="b">＋ カテゴリを追加</span> で分類を増やせます。
+    <span class="b">原価を見る</span> に印を入れると原価の列が出ます。
+    <span class="b">色がついていない項目に色をつける</span> を押すと、品名から見分けやすい色を付けます。</p>
+
+  <h3>CSVでまとめて取り込む</h3>
+  <p>メーカーの価格表をExcelで開き、CSV形式で保存して <span class="b">CSVを選ぶ</span>。</p>
+  <ul>
+    <li>見出しの行は <code>カテゴリ / 品番 / 品名 / 規格 / 単位 / 定価</code>。並び順は自由で、無い列はとばせます。「型番」「希望小売価格」のような別の言い方でも分かります。</li>
+    <li>カテゴリの列が無いときは、<span class="f">カテゴリ列が無いときの入れ先</span> で選んだところに入ります。</li>
+    <li>入れ直したいときは「取り込む前に、そのカテゴリの中身をいったん空にする」に印を入れます。</li>
+    <li>形が分からないときは <span class="b">テンプレートCSVを取得</span> で見本を出せます。</li>
+  </ul>
+
+  <h3>Excelから貼り付ける（ファイルにしなくてよい）</h3>
+  <p>Excelで範囲を選んでコピーし、「そのまま貼り付ける」の欄に貼って <span class="b">貼り付けた内容を取り込む</span>。</p>
+
+  <h3>仕入先の見積を読ませる（原価だけ入れる）</h3>
+  <p>「仕入先の見積を読ませる」に印を入れてからCSVを選ぶ（または貼り付ける）と、<b>行は増やさずに</b>、品番で今の項目を探して原価だけを書き込みます。
+    定価も入っていれば掛率を計算して、<span class="tab">自社情報</span> の仕入掛率に入れるかどうかを聞いてきます。</p>
+
+  <div class="warn"><b>注意</b><span class="b">初期値に戻す</span> を押すと、単価マスタが最初の状態に戻ります。直した単価は消えます。先に <span class="b">バックアップを書き出す</span> をしておいてください。</div>
+</section>
+
+<!-- ================= 4 ================= -->
+<section class="card" id="catalog">
+  <h2><span class="no">4</span>メーカーのカタログを読ませる</h2>
+  <p>メーカーのカタログPDFを入れると、空調王が<b>この端末の中だけで</b>読み取って、機種・別売品・部材の一覧を作ります。
+    PDFも読み取った中身も、どこにも送りません。</p>
+
+  <ol class="steps">
+    <li><span class="tab">単価マスタ</span> の「カタログPDFから機種データを作る」で、メーカーを選ぶ。<br>
+      <small>選ぶと、そのカタログをどこから取ればよいかが下に出ます。</small></li>
+    <li><span class="b">カタログのファイルを選ぶ</span> で、落としておいたPDFを選ぶ。</li>
+    <li>読み終わると、何件読めたかが出ます。そのまま入ります。</li>
+  </ol>
+
+  <div class="tbl-wrap"><table>
+    <tr><th>メーカー選びの名前</th><th>入るもの</th><th>入る先</th></tr>
+    <tr><td>日本キヤリア（旧東芝）／日立／パナソニック／ダイキン／三菱電機</td><td>機種と本体の定価（セット価格）</td><td>見積作成の「機器を選ぶ」</td></tr>
+    <tr><td>○○（別売品）……5社</td><td>パネル・リモコン・フィルターなどの別売品</td><td>機種を選んだとき、その下に出る</td></tr>
+    <tr><td>因幡電工（部材）／ユーシー産業（部材）／オーケー器材（部材）</td><td>配管部材などの定価</td><td>単価マスタ（値段の更新）</td></tr>
+  </table></div>
+
+  <ul>
+    <li><b>パソコンでやってください。</b>カタログは大きいので、スマホでは重すぎます。オーケー器材は読み終わるまで5〜8分ほどかかります。</li>
+    <li><b>三菱電機はPDFではなく、データのファイル（.json）を読みます。</b>メーカーを選ぶと取り方が出ます。</li>
+    <li><b>機種データと別売品は別々です。</b>機種データを読んでも別売品は入りません。「（別売品）」と付いたほうも読ませてください。</li>
+    <li><b>部材は「値段の更新」です。</b>同じ品番は値段を書き替え、無い品番は足し、同じ値段のものはさわりません。
+      <b>けたが違うもの（3倍以上・3分の1以下）はさわらずに別に見せます。</b>ペアコイルのように、カタログは1巻の値段、単価マスタは1mの値段、ということがあるためです。</li>
+  </ul>
+
+  <h3>2台目からは「選ぶだけ」</h3>
+  <p>カタログの読み取りには時間がかかります。1度読んだら、<span class="b">別売品データを書き出す</span> などでファイルにしておくと、
+    別の端末では <span class="b">機種データを選ぶ</span>・<span class="b">別売品データを選ぶ</span> で入れるだけで済みます。
+    連動を入れていれば、片方で入れればもう片方にも届きます。</p>
+  <div class="tip"><b>ボタンを間違えたとき</b>機種データを別売品のボタンに入れた、のようなときは、
+    「これは○○です。□□から入れてください」と赤い字で教えてくれます。書いてあるボタンから入れ直してください。</div>
+  <p class="sub">メーカーの機種データは、お使いになる方ご自身が取得したものです。各メーカーの利用条件に従ってお使いください。</p>
+</section>
+
+<!-- ================= 5 ================= -->
+<section class="card" id="estimate">
+  <h2><span class="no">5</span>見積を作る</h2>
+  <p><span class="tab">見積作成</span> の画面で、上から順に埋めていきます。</p>
+
+  <h3>基本情報</h3>
+  <p><span class="f">見積番号</span> は日付と通し番号で自動で入ります（例：20260911-1）。書き換えてもかまいません。
+    <span class="f">宛名</span> の右で「御中／様／（なし）」を選べます。<span class="f">件名</span> <span class="f">工事場所</span> なども見積書に印刷されます。</p>
+
+  <h3>明細の作り方は3つ</h3>
+  <p><b>① 単価表から追加</b>……カテゴリを押すか、検索の欄に「配管」「天カセ」「取外し」などと入れて、出てきた項目を押すと明細に入ります。</p>
+  <p><b>② 機器を選ぶ</b>……読ませたカタログの機種から、順に絞り込みます。</p>
+  <div class="flow"><span>メーカー</span><i>→</i><span>シリーズ</span><i>→</i><span>室内機タイプ</span><i>→</i><span>馬力</span><i>→</i><span>台数</span><i>→</i><span>電源</span><i>→</i><span>リモコン</span></div>
+  <p>最後に機種を押すと明細に入ります。やり直すときは <span class="b">最初から</span>。
+    機種を選ぶと、その下に<b>付けられる別売品</b>（パネル・リモコンなど）が出て、押すと明細に入ります。</p>
+  <div class="tip"><b>二重取りを防ぎます</b>その機種に最初から付いてくるリモコンやパネルを押すと、警告が出ます。
+    別のリモコンに<b>入れ替える</b>ときは、付いてくるぶんをマイナスの明細で自動で差し引きます。</div>
+  <p><b>③ ＋ 空の行</b>……何もない行を足して、自分で書きます。</p>
+
+  <h3>明細の列</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>列</th><th>意味</th></tr>
+    <tr><td>数量・単位</td><td>いくつ、何で数えるか（台・m・式…）</td></tr>
+    <tr><td>掛率</td><td>定価の何%で出すか。<b>単価 ＝ 定価 × 掛率 ÷ 100</b>（端数の設定があればそこで繰り上げ）</td></tr>
+    <tr><td>単価・金額</td><td>1つあたりの値段と、数量を掛けた金額</td></tr>
+    <tr><td>原価・粗利率</td><td><span class="b">原価・粗利を見る</span> に印を入れると出ます。<b>原価はその行ぶん（数量を掛けた額）</b>を入れます。印刷はされません</td></tr>
+  </table></div>
+
+  <h3>行の右はしの小さいボタン</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>ボタン</th><th>働き</th></tr>
+    <tr><td><span class="b">🔍</span></td><td>その品物のメーカーの製品ページを開く（分かっているものだけ出ます）</td></tr>
+    <tr><td><span class="b">工</span></td><td>この行を「作業費」に数えるかどうか。色が付いているときは数えています</td></tr>
+    <tr><td><span class="b">＋表</span></td><td>この行を単価マスタに登録して、次から「単価表から追加」で選べるようにする</td></tr>
+    <tr><td><span class="b">✕</span></td><td>この行を消す</td></tr>
+  </table></div>
+
+  <h3>明細の上のボタン</h3>
+  <ul>
+    <li><span class="b">仕様を品番だけに</span>……長い仕様の説明を品番だけにして、見積書をすっきりさせる</li>
+    <li><span class="b">明細をクリア</span>……明細を全部消す</li>
+  </ul>
+
+  <h3>金額の調整</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>欄</th><th>意味</th></tr>
+    <tr><td>諸経費（小計の%）</td><td>小計に対して何%を諸経費にするか</td></tr>
+    <tr><td>値引き</td><td>引く金額を<b>プラスの数</b>で入れる（例：5000）</td></tr>
+    <tr><td>消費税率</td><td>ふつうは10</td></tr>
+    <tr><td>1人工の金額</td><td>この見積での1人工の値段</td></tr>
+    <tr><td>単価の端数（行ごと）</td><td>計算した単価を、そのまま／10円未満繰り上げ／100円未満繰り上げ</td></tr>
+    <tr><td>端数処理（諸経費・消費税）</td><td>切り捨て／四捨五入／切り上げ</td></tr>
+  </table></div>
+  <p><span class="f">備考</span> は見積書の下に印刷されます。</p>
+</section>
+
+<!-- ================= 6 ================= -->
+<section class="card" id="price">
+  <h2><span class="no">6</span>機器の金額の決まり方</h2>
+  <p>機種を選んで明細に入れると、<span class="tab">自社情報</span> の設定から、見積に出す金額を自動で決めます。</p>
+  <div class="flow"><span>定価</span><i>×</i><span>仕入掛率</span><i>＝</i><span>原価</span><i>→</i><span>原価</span><i>÷</i><span>機種に乗せる利益</span><i>＝</i><span>見積の金額</span></div>
+  <p>例：定価100万円・仕入掛率23%・乗せる利益0.65 → 原価23万円 → 見積の金額 約35.4万円（掛率 約35.4%）</p>
+  <ul>
+    <li><b>仕入掛率を入れていないメーカーの機種は、定価のまま出ます。</b>勝手に安くはしません。</li>
+    <li>掛率や単価を<b>手で書き換えた行は、自動で動かしません。</b></li>
+    <li>原価と粗利は <span class="b">原価・粗利を見る</span> で確かめられます。見積書には印刷されません。</li>
+  </ul>
+</section>
+
+<!-- ================= 7 ================= -->
+<section class="card" id="print">
+  <h2><span class="no">7</span>保存・印刷・PDF</h2>
+  <p>画面のいちばん下のボタンです。</p>
+  <div class="tbl-wrap"><table>
+    <tr><th>ボタン</th><th>働き</th></tr>
+    <tr><td><span class="b">新規作成</span></td><td>新しい見積を始める</td></tr>
+    <tr><td><span class="b">保存</span></td><td>見積を <span class="tab">現場</span> に保存する。どの現場か決まっていなければ、件名（またはお客様名）で現場を作ります</td></tr>
+    <tr><td><span class="b">プレビュー</span></td><td>紙に出したときの見た目を、1枚ずつ見る</td></tr>
+    <tr><td><span class="b">PDFにする</span></td><td>画面の紙をそのままA4のPDFにする。<b>iPhoneではこちらを使ってください</b></td></tr>
+    <tr><td><span class="b">印刷 / PDF</span></td><td>ブラウザの印刷を使う。パソコン向け</td></tr>
+  </table></div>
+  <div class="warn"><b>iPhoneの印刷について</b>iPhoneの印刷は画面の幅で組み立ててから紙に合わせるので、品名と仕様が別の紙に離れることがあります。
+    <span class="b">PDFにする</span> はそれが起きないように、空調王の側でPDFを作ります。</div>
+</section>
+
+<!-- ================= 8 ================= -->
+<section class="card" id="site">
+  <h2><span class="no">8</span>現場（請求書・現調シート・写真）</h2>
+  <p><span class="tab">現場</span> には、<b>1つの現場に、見積・請求書・現調シート・写真がまとまって</b>入っています。</p>
+
+  <h3>現場の一覧</h3>
+  <ul>
+    <li><span class="b">＋ 現場を追加</span>……現場を先に作る（現調に行く前など）</li>
+    <li>検索の欄……現場名・お客様名で探す</li>
+    <li><span class="b">現調シートを貼り付け</span>……スマホから送られてきた現調シートの文字を貼って、現場ごと作る</li>
+    <li><span class="b">バックアップを書き出す</span>・<span class="b">読み込む</span>……見積と現場をファイルにする</li>
+  </ul>
+
+  <h3>現場の中</h3>
+  <p><span class="b">＋ この現場で見積を作る</span> で、宛名や住所が入った状態で見積が始まります。見積の一覧の各行には次のボタンがあります。</p>
+  <ul>
+    <li><span class="b">開く</span>……見積作成の画面で開いて直す</li>
+    <li><span class="b">複製</span>……写しを作る（番号と日付は新しくなります）。「A案・B案」を作るときに便利です</li>
+    <li><span class="b">請求書</span>……この見積の金額で請求書を作る</li>
+    <li><span class="b">削除</span>……この見積を消す</li>
+  </ul>
+
+  <h3>請求書</h3>
+  <p>見積の <span class="b">請求書</span> から作ります。<b>あとから見積を直しても、出した請求書はそのまま残ります。</b>
+    日付は <span class="b">日付を直す</span> で変えられます。見積の但し書き（「※本見積は…」）は請求書には引き継ぎません。</p>
+
+  <h3>現地調査チェックシート（現調シート）</h3>
+  <p>紙の「空調設備現場調査確認表」をそのまま画面にしたものです。6つの章があります。</p>
+  <ol>
+    <li>建物・使用条件（用途・面積・構造・人数・発熱負荷・西日など）</li>
+    <li>既存設備（室内機・室外機・冷媒・製造年・状態・更新方針）</li>
+    <li>室内機・天井内条件（形式・天井・点検口・ドレン・リモコン）</li>
+    <li>配管・室外機・搬入（配管長・経路・設置場所・搬入・雪や風の対策）</li>
+    <li>電源・付帯工事・安全（電源・電線・足場・石綿調査・作業制限）</li>
+    <li>提案・見積条件（提案内容・予算・支払条件・補助金・未確認事項）</li>
+  </ol>
+  <ul>
+    <li><span class="b">コピー</span>……入れた内容を文字にします。LINEやメールで事務所へ送れます</li>
+    <li><span class="b">貼り付け</span>……送られてきた文字を貼って、このシートに取り込みます</li>
+    <li><span class="b">印刷 / PDF</span>……記入したシートを印刷。写真があれば、うしろに写真のページが付きます</li>
+    <li><span class="b">白紙で印刷</span>……現場に持っていく用の、何も書いていないシート</li>
+  </ul>
+
+  <h3>必要な能力を出す（機種選定の目安）</h3>
+  <p>現調シートの中の「必要な能力を出す（機種選定）」を開くと、<b>用途と広さから馬力の目安</b>を出します。</p>
+  <ul>
+    <li>用途（一般事務所・一般商店・喫茶店や理美容室・レストランや飲食店）と面積から、カタログの基準で計算します</li>
+    <li>断熱（断熱材なし／あり／高断熱）、天井の高さ、西日・ガラス面・厨房・人の多さ・外気の多さで上乗せします</li>
+    <li>出た馬力のまま <span class="b">この馬力で見積を作る</span> を押すと、その馬力で機器を選べる状態で見積が始まります</li>
+  </ul>
+  <div class="warn"><b>目安です</b>天井の高さや西日などの上乗せはカタログに数字が無く、設計の考え方から置いた目安です。<b>最後は必ずご自身で判断してください。</b></div>
+
+  <h3>現場写真</h3>
+  <p><span class="b">＋ 全景</span> <span class="b">＋ 銘板</span> <span class="b">＋ 配管</span> <span class="b">＋ 電源</span> <span class="b">＋ 搬入経路</span> <span class="b">＋ その他</span>
+    から、撮るか写真を選んで入れます。撮った種類は、現調シートの［写真］の欄に印として付きます。</p>
+  <div class="warn"><b>iPhoneで撮るとき</b>空調王の中で［写真を撮る］を選んで撮ると、その写真は<b>iPhoneの写真アプリには残りません</b>（空調王の中だけになります）。
+    あとで見返したい写真は、先にいつものカメラで撮ってから［フォトライブラリ］で選んでください。</div>
+  <p class="sub">写真は1枚が大きいので、全部まとめたバックアップには入りません。端末を替えるときは <span class="tab">自社情報</span> の <span class="b">写真を書き出す</span> で持ち出してください。</p>
+</section>
+
+<!-- ================= 9 ================= -->
+<section class="card" id="sync">
+  <h2><span class="no">9</span>スマホとパソコンの連動</h2>
+  <p>現場のスマホで入れた内容が、事務所のパソコンにも自動で入ります（その逆も）。
+    単価マスタ・機種データ・別売品・現場・見積・請求書が行き来します。</p>
+  <ol class="steps">
+    <li>1台目で <span class="tab">自社情報</span> →「スマホとパソコンの連動」→ <span class="b">この端末で連動を始める</span>。</li>
+    <li><b>あいことば</b>が出ます。<b>紙に控えてください。</b></li>
+    <li>2台目で同じ場所の <span class="b">あいことばを入れる</span> に、控えたあいことばを入れる。</li>
+  </ol>
+  <ul>
+    <li>ふだんは自動で行き来します。すぐに送りたいときは <span class="b">いま同期する</span>。</li>
+    <li>もう一方の端末の変更を受け取ると、画面の上に <span class="b">画面を新しくする</span> が出ます。押すと反映されます。</li>
+    <li>データは<b>端末の中で暗号にしてから</b>預けます。中身を開けるのは、あいことばを入れた端末だけです。</li>
+  </ul>
+  <div class="warn"><b>あいことばは人に教えないでください。</b>あいことばを入れた端末は、中身をすべて開けます。
+    また、<b>あいことばを無くして全部の端末が使えなくなると、預けた分は誰にも開けません。</b>バックアップも続けてください。</div>
+</section>
+
+<!-- ================= 10 ================= -->
+<section class="card" id="safe">
+  <h2><span class="no">10</span>入れた内容を失わないために</h2>
+  <p>空調王は内容を<b>お使いの端末の中</b>に保存します。速くて電波が無くても動く代わりに、端末の都合で消えることがあります。消える道は3つです。</p>
+  <div class="tbl-wrap"><table>
+    <tr><th>消える道</th><th>塞ぎ方</th></tr>
+    <tr><td>1. ブラウザの「履歴とWebサイトデータを消去」を押した</td><td>連動を入れる／バックアップを取る</td></tr>
+    <tr><td>2. iPhoneで7日間開かなかった</td><td><b>ホーム画面に追加する</b>（<a href="#start">1.</a> の手順）</td></tr>
+    <tr><td>3. 端末が壊れた・失くした・買い替えた</td><td>連動を入れる（もう一方の端末とクラウドに残る）</td></tr>
+  </table></div>
+  <p><b>いちばん確実なのは、連動を入れて、ホーム画面に追加することです。</b>この2つで3つの道がすべて塞がります。</p>
+
+  <h3>バックアップ（ファイルに書き出す）</h3>
+  <ul>
+    <li><span class="tab">自社情報</span> の <span class="b">全部まとめて書き出す</span>……自社情報・ロゴ・社判・単価マスタ・機種データ・現場・現調シート・見積・請求書を1つのファイルにします。</li>
+    <li><span class="b">まとめて読み込む</span>……そのファイルから戻します。<b>いまの内容はすべて置き換わります。</b></li>
+    <li><span class="b">写真を書き出す</span>・<span class="b">写真を読み込む</span>……写真は別のファイルです。戻すときは、先に「まとめて読み込む」で現場を入れてから写真を入れます。</li>
+    <li><b>かんたんバックアップ</b>……<span class="b">保存先を決める</span> を1回やっておけば、次から <span class="b">いますぐ保存</span> の1回で上書きできます。OneDriveの中に置くと、そのままクラウドにも残ります。</li>
+  </ul>
+</section>
+
+<!-- ================= 11 ================= -->
+<section class="card" id="faq">
+  <h2><span class="no">11</span>困ったとき</h2>
+  <dl class="qa">
+    <dt>画面の上に「新しい版が出ています」と出た</dt>
+    <dd><span class="b">新しくする</span> を押してください。入力した内容は消えません。</dd>
+
+    <dt>新しい版になっているか確かめたい</dt>
+    <dd><span class="tab">自社情報</span> の <span class="b">保存</span> の横に版番号が出ています。</dd>
+
+    <dt>パソコンで、古い画面のまま変わらない</dt>
+    <dd>キーボードの <span class="b">Ctrl</span> ＋ <span class="b">Shift</span> ＋ <span class="b">R</span> を同時に押すと、読み込み直します（Macは <span class="b">⌘</span> ＋ <span class="b">Shift</span> ＋ <span class="b">R</span>）。</dd>
+
+    <dt>iPhoneのホーム画面の空調王が、新しくならない</dt>
+    <dd>ほかのアプリに切り替えてから、空調王に戻ってください。戻ったときに新しい版を確かめます。
+      それでも出ないときは、空調王をいったん閉じて（画面の下から上へなぞって、空調王を上へはじく）、開き直してください。</dd>
+
+    <dt>「機器を選ぶ」に何も出ない</dt>
+    <dd>機種データがまだ入っていません。<a href="#catalog">4.</a> の手順でカタログを読ませるか、<span class="b">機種データを選ぶ</span> でファイルを入れてください。</dd>
+
+    <dt>機種を選んでも別売品が出ない</dt>
+    <dd>別売品は機種データとは別です。メーカー選びで「（別売品）」と付いたほうのカタログを読ませるか、<span class="b">別売品データを選ぶ</span> でファイルを入れてください。
+      選んだ機種のメーカーの別売品だけが出ます。</dd>
+
+    <dt>ファイルを入れたら赤い字が出た</dt>
+    <dd>入れるボタンが違います。赤い字に書いてあるボタンから入れ直してください。</dd>
+
+    <dt>iPhoneで印刷すると、紙の切れ目がおかしい</dt>
+    <dd><span class="b">PDFにする</span> を使ってください（<a href="#print">7.</a>）。</dd>
+
+    <dt>iPhoneのホーム画面から開いたら、中が空だった</dt>
+    <dd>ホーム画面のアプリは、Safariとは別の入れ物になることがあります。先にSafariのほうで連動を始め、ホーム画面のほうで同じあいことばを入れてください。中身が流れ込みます。</dd>
+
+    <dt>見積の金額が思っていたのと違う</dt>
+    <dd><span class="b">原価・粗利を見る</span> に印を入れて、行ごとの掛率・原価を確かめてください。機器は <span class="tab">自社情報</span> の仕入掛率と「機種に乗せる利益」で決まります（<a href="#price">6.</a>）。</dd>
+  </dl>
+</section>
+
+<!-- ================= 12 ================= -->
+<section class="card" id="terms">
+  <h2><span class="no">12</span>ご利用にあたって</h2>
+  <ul>
+    <li>空調王は<b>現状のまま</b>提供します。動作や計算結果について保証はいたしません。</li>
+    <li><b>見積の金額・選んだ機種・必要な能力は、必ずご自身で確かめてください。</b>この道具が出す数字は目安であり、最終の判断はお使いになる方の責任で行ってください。</li>
+    <li>端末やクラウドに保存した内容が失われた場合について、責任を負いかねます。<a href="#safe">10.</a> の手立てをとってください。</li>
+    <li><b>メーカーの機種データは、お使いになる方ご自身が取得したもの</b>です。各メーカーの利用条件に従ってお使いください。空調王はそれを配布しません。</li>
+  </ul>
+  <p class="foot">空調王 使い方　／　この説明書は 2026年9月の版に合わせています</p>
+</section>
+
+</main>
+</body>
+</html>
