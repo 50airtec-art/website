@@ -62,6 +62,11 @@
     return ((t || '').match(/セット\s*[¥￥]/g) || []).length >= 2;
   }
 
+  /** 別売品の読み取り用。「セッ ト ¥」のように割れて来てもよいように、すき間を無視して数える */
+  function carrierIsPricePageLoose(t) {
+    return ((t || '').replace(/\s+/g, '').match(/セット[¥￥]/g) || []).length >= 2;
+  }
+
   function buildCarrier(pages) {
     var nums = Object.keys(pages).map(Number).sort(function (a, b) { return a - b; });
     var pricePages = nums.filter(function (n) { return carrierIsPricePage(pages[n]); });
@@ -1188,6 +1193,341 @@
      前はこの表を読んでおらず、天井カセット形4方向の240機種には
      室外機の架台しか出ていなかった（2026-09-09）。
      -------------------------------------------------------------------- */
+  /* --------------------------------------------------------------------
+     キヤリアの別売品の品名（2026-09-10 作り直し）
+     ----------------------------------------------------------------------
+     前は nameReader（上下どちらでも近いものを採る・列ごとに拾ってつなぐ）で
+     読んでいて、166品目中49件の品名が崩れていた。BIGBOSSの画面で
+     「○1○2吹出ガイド」「御 ワイヤレスリモコン受信部 ワイヤードリモコン」と出た。
+
+     紙面を見て分かったこと（57・127〜129ページ）
+       ・丸数字は「①」ではなく「○」＋数字、または「12 高さ調整」の形で来る
+       ・「受」「在」は受注生産・在庫限りのマーク。■も同じ。品名ではない
+       ・「制御」「空質関連」は1文字ずつ縦に並んだ見出し。品名ではない
+       ・■ があるだけで品名を「品名らしくない」とはねていたので、
+         自分の行の品名が消え、となりの行の品名2つがつながっていた
+         （TCB-TCU41L は「リモートセンサー」なのに「ワイヤレスリモコン受信部」になった）
+
+     表の作りが2通りある。
+       一覧の表（室内機用）……品名は品番と**同じ行**。2行にまたがるマスだけ
+                              （「プラズマ空清」「ユニット」）はつなぐ
+       室外機の表          ……品名は背の高いマスの**いちばん上**に1回だけ。
+                              その下の品番は**上の見出し**を受け継ぐ
+     -------------------------------------------------------------------- */
+
+  /** 品名の列（leftEnd より左）の文字を、行ごとに「かたまり」にする */
+  function carSegs(rows, leftEnd, headY, leftStart) {
+    var out = [];
+    var from = (leftStart == null) ? -1e9 : leftStart;
+    rows.forEach(function (r) {
+      if (r.y >= headY - 2) return;
+      var cur = null;
+      r.cells.filter(function (o) { return o.x < leftEnd && o.x >= from; })   // 表の左にある図の文字は見ない
+        .sort(function (p, q) { return p.x - q.x; })
+        .forEach(function (o) {
+          /* 1文字のかけら（縦書き見出しの「制」、マークの「在」）は、となりの品名とつながない。
+             すき間が4ポイントより狭いと、前は「制 ワイヤレスリモコン」とひとかたまりにしていた。
+             1文字どうし（1文字ずつに割れて来た語）はつなぐ */
+          var one = o.s.trim().length <= 1 && /[一-龥ぁ-んァ-ヶ]/.test(o.s);
+          /* 1文字のかな・漢字は、ふつうは切り離す（縦書き見出しの「制」、マークの「在」）。
+             ただし、前の語とのすき間がほとんど無い（1.5以内）ときは語の続き。
+             pdf.js は「防護ネットセット」を「防護ネットセッ」＋「ト」に割ってよこすので、
+             切り離すと「防護ネットセッ」になっていた（2026-09-10） */
+          var tight = cur && (o.x - cur.right) <= 1.5;
+          if (!cur || o.x > cur.right + 4 || (one !== cur.one && !tight) || Math.abs(o.y - cur.oy) > 2.5) {
+            cur = { x: o.x, y: r.y, oy: o.y, right: o.x + (o.w || 0), s: o.s, one: one };
+            out.push(cur);
+          } else {
+            cur.s += o.s;
+            cur.right = Math.max(cur.right, o.x + (o.w || 0));
+          }
+        });
+    });
+    return out;
+  }
+
+  /** 丸数字・マーク・注記番号・くっついた品番を落とす */
+  function carClean(s) {
+    return String(s || '')
+      .replace(/[\u2000-\u200b\u3000]/g, ' ')
+      .replace(/[\u0600-\u06FF]/g, '')                    // pdf.js が記号の字形をアラビア文字に読み違えたかけら
+      .replace(/[\u2460-\u24FF\u2776-\u2793\u3251-\u325F\u32B1-\u32BF]/g, ' ')
+      .replace(/○\s*\d{1,2}/g, ' ')
+      .replace(/○/g, ' ')                                  // 数字と離れて残った丸（「○壁取付架台」）
+      /* 区分の語（縦書きの見出し）。pdf.js は横書きの1語でよこし、品名の頭に付くことがある。
+         うしろにすき間か番号が続くときだけ外す（「吸込ハーフパネル」の「吸込」は品名なので外さない） */
+      .replace(/^\s*(空質関連|施工関連|フィルターほか|リモコン・グリル|据\s*付|吸\s*込|吹\s*出|制\s*御|空\s*質|その他)(?=\s|\d|[\u2460-\u24FF\u2776-\u2793])\s*/, '')
+      .replace(/^\s*\d{1,2}[a-z]?\s+(?=[^\d\s])/, '')    // 丸数字が「12 」「1a 」の形で来るとき
+      .replace(/^\s*\d{1,2}[a-z]?(?=[ぁ-んァ-ヶ一-龥（(Ａ-Ｚａ-ｚ])(?![方形個本枚台])/, '')   // 「10高湿度対応キット」「1a天井パネル」「2Ｌ字配管キット」（丸数字の下に小さい番号）。「2方向」は数なので残す
+      .replace(/^\s*[a-z](?=[ぁ-んァ-ヶ一-龥])/, '')      // 「bオートグリルパネル」
+      .replace(/^\s*[一-龥]\s+[一-龥](?=[^\s\d])/, '')   // 「据 付ドレンアップキット」「吸 込下面吸込ボックス」（区分がくっついた）
+      .replace(/※\s*\d+/g, ' ')
+      .replace(/[■□◆◇●★☆]/g, ' ')
+      .replace(/[A-Z][A-Z0-9]*-(?=[A-Z0-9\-]*\d)[A-Z0-9\-]{2,}/g, ' ')   // 品名にくっついた品番（品番には必ず数字がある。TCC-LINK は品名）
+      .replace(/\s+/g, ' ').trim()
+      .replace(/([^\s])\s*[受在]$/, '$1')                  // うしろの「受」「在」マーク
+      .trim();
+  }
+
+  function carNumbered(raw) {
+    return /^[\s\u2000-\u200b\u3000]*([\u2460-\u24FF\u2776-\u2793\u3251-\u325F\u32B1-\u32BF]|○\s*\d|\d{1,2}[\s\u2000-\u200b])/.test(raw);
+  }
+
+  /** 一覧の表：品名は品番と同じ行 */
+  function carrierPartsNamer(rows, leftEnd, headY, codeYs, tableLeft) {
+    if (!codeYs.length) return function () { return ''; };
+    var lo = Math.min.apply(null, codeYs) - 8;
+    var onCode = function (y) { return codeYs.some(function (c) { return Math.abs(c - y) <= 3.5; }); };
+    var all = carSegs(rows, leftEnd, headY, tableLeft);
+    var segs = all.filter(function (g) {
+      if (g.y < lo) return false;                  // 表の下の注記
+      if (/。/.test(g.s)) return false;
+      var t = carClean(g.s);
+      return t.length >= 2 && isJa(t);            // 縦書き見出しの1文字・「在」マークはここで落ちる
+    });
+    if (!segs.length) return function () { return ''; };
+    /* 品名の列は、品番の行にいちばん多く出てくる列。
+       その左の列は区分の見出し（「据　付」「吸込・吹出」「制御」）なので落とす（74ページ）。
+       「P40形〜P160形」「全機種」のような適用の列は数えない。ほぼ全部の行にあるので、
+       数えると品名の列より多くなってしまう（103ページ） */
+    var CAPLIKE = /P\d+形|全機種|筐体/;
+    var colsX = [];
+    segs.forEach(function (g) {
+      if (!onCode(g.y) || CAPLIKE.test(g.s)) return;
+      var c = null;
+      colsX.forEach(function (k) { if (!c && Math.abs(k.x - g.x) < 6) c = k; });
+      if (!c) { c = { x: g.x, n: 0 }; colsX.push(c); }
+      c.n++;
+    });
+    if (!colsX.length) return function () { return ''; };
+    var mainX = colsX.reduce(function (a, b) { return b.n > a.n ? b : a; }).x;
+    var subX0 = mainX + 35;
+    var hasName = function (y) {
+      return segs.some(function (h) { return Math.abs(h.y - y) <= 1 && h.x >= mainX - 6 && h.x < subX0; });
+    };
+    segs = segs.filter(function (g) {
+      if (g.x >= mainX - 6) return true;
+      return g.right > mainX + 4 && !hasName(g.y);
+    });
+    var subX = mainX + 35;                         // 右の列は「ハイタイプ」「P40形〜P71形」などの補足
+
+    /* 1つの品名のマスに品番が何行もあり、2行目から下に注意書きが並ぶ表がある（67ページ）
+         「交換の目安 2,500時間」「ご使用の際には必須です。」「オプションフィルター③〜⑤を」
+       これは品名ではない。上の品名を受け継ぐ */
+    var NOTE = /目安|必須|ご使用|使用時|突出|ご確|認ください|能力|条件|参照|します|です|加湿量|マンセル|\d\s*[〜～]\s*\d/;
+    var ys = codeYs.slice().sort(function (a, b) { return b - a; });   // 上の行から
+    var info = ys.map(function (y) {
+      var own = segs.filter(function (g) { return Math.abs(g.y - y) <= 3.5; });
+      var raw = own.filter(function (g) { return g.x < subX; }).map(function (g) { return g.s; }).join(' ');
+      var marks = all.filter(function (g) {
+        return Math.abs(g.y - y) <= 3.5 && g.x >= mainX - 12 && g.x < subX;
+      });
+      return {
+        y: y,
+        main: carClean(raw),
+        numbered: carNumbered(raw) || marks.some(function (g) { return carNumbered(g.s) || /^[\u2460-\u24FF\u2776-\u2793\u3251-\u325F\u32B1-\u32BF★]$/.test(g.s.trim()); }),
+        sub: carClean(own.filter(function (g) { return g.x >= subX; }).map(function (g) { return g.s; }).join(' '))
+               .replace(/^全機種$/, '')
+      };
+    });
+
+    info.forEach(function (it) {
+      if (it.main && NOTE.test(it.main)) { it.main = ''; it.note = true; }
+      else if (it.main && /^[（(]/.test(it.main)) { it.paren = it.main; it.main = ''; }
+    });
+    /* 自分の行に品名が無い＝品名が品番の行から少しずれて書いてある。
+         2行で1つの品番の行を上下からはさむ（「オートグリル操作専用」「ワイヤレスリモコン」）
+         2行ぶんのマスのまん中に1行（「高性能フィルター」）
+       はさんでいる行を上からつないで、その行の品名にする。
+       **つなぎ判定より先にやる。**57ページの「12 高さ調整」は品番の行から3.8ずれていて、
+       後回しにすると、つなぐかどうか決める時点で品名が空のままになり、
+       下の行の「スペーサー」とつながらなかった（「高さ調整」「スペーサー」に割れた）。
+       ほかの品番の行に「ほぼ乗っている」（2以内）ものは、その品番の品名なので採らない。
+       3.5 にすると、まん中より少し下にある品名を下の品番に取られていた（57ページ UFM1604UA） */
+    info.forEach(function (it) {
+      if (it.main || it.note || it.paren) return;
+      var near = segs.filter(function (g) {
+        if (g.x >= subX || Math.abs(g.y - it.y) > 7) return false;
+        if (NOTE.test(g.s)) return false;
+        return !codeYs.some(function (c) { return c !== it.y && Math.abs(c - g.y) <= 2; });
+      }).sort(function (a, b) { return b.y - a.y; });
+      if (!near.length) return;
+      it.main = carClean(near.map(function (g) { return g.s; }).join(''));
+      it.numbered = carNumbered(near[0].s);
+    });
+
+    // 2行にまたがるマス。補足のある行が続き、下の行の品名に番号が無ければ続き
+    info.forEach(function (it, i) {
+      var prev = info[i - 1];
+      if (prev && prev.group && prev.sub && it.sub && it.main && !it.numbered &&
+          /^[ァ-ヶー]{2,6}$/.test(it.main) && prev.main && prev.main.length <= 8) {
+        it.group = prev.group;
+        it.group.text += it.main;
+      } else if (it.main) {
+        it.group = { text: it.main };
+      }
+    });
+    // 自分の行に品名が無い＝2行ぶんのマスのまん中に1行で書いてある（「高性能フィルター」）
+    info.forEach(function (it, i) {
+      if (it.group) return;
+      /* 受け継ぐ先は、すぐ上にある品名らしい行。品番の無い行に書いた見出しもふくめる。
+         83ページの「⑩気化式加湿器」は品番の無い行にあり、その下の3行（品名の欄は
+         「加湿量（kg/h）…」という注記）が、品番のある行しか見ていなかったせいで
+         さらに上の「⑨丸ダクト用フランジ」を受け継いでいた（2026-09-10） */
+      var up = null;
+      segs.forEach(function (g) {
+        if (g.x >= subX || g.y <= it.y || g.y - it.y > 30) return;
+        if (NOTE.test(g.s) || /^[（(]/.test(g.s.trim()) || carClean(g.s).length < 2) return;
+        if (!up || g.y < up.y) up = g;
+      });
+      if (up) {
+        // その行が品番のある行なら、その行の品名（つないだ・かっこを足した形）をそのまま使う
+        var owner = null;
+        info.forEach(function (o) { if (o.group && Math.abs(o.y - up.y) <= 2) owner = o; });
+        var base = owner ? owner.group.text : carClean(up.s);
+        it.group = it.paren ? { text: base + it.paren } : (owner ? owner.group : { text: base });
+        return;
+      }
+      // マスの上端に品名を書く表では、すぐ上の行の品名を受け継ぐ。
+      // かっこ書き（「（ロングライフフィルター付）」）は、その品名の続きとして付ける
+      for (var k = i - 1; k >= 0; k--) {
+        if (info[k].group && info[k].y - it.y < 45) {
+          it.group = it.paren ? { text: info[k].group.text + it.paren } : info[k].group;
+          break;
+        }
+      }
+      if (!it.group && it.paren) it.group = { text: it.paren };
+    });
+
+    var by = {};
+    info.forEach(function (it) {
+      var name = it.group ? it.group.text : '';
+      if (it.sub) name = name ? name + ' ' + it.sub : it.sub;
+      by[it.y] = name;
+    });
+    return function (y) { return by[y] || ''; };
+  }
+
+  /** 「TCB-G50 ○」「TCB-G50 ①」のように、品番のうしろに丸数字が付いて来ても頭の品番を取る。
+      pdf.js はこの形でよこす（PyMuPDF は分けてよこしていたので、前は気づかなかった）。
+      「TCB-G802×2」（2台ぶんのセット）は本物の TCB-G802 とぶつかるので、品番とみなさない */
+  function carCodeHead(s) {
+    var m = String(s || '').trim().match(/^([A-Z][A-Z0-9]*-[A-Z0-9\-]{2,})(.*)$/);
+    if (!m || /[×xX]\s*\d/.test(m[2])) return '';
+    return OPT_CODE.test(m[1]) ? m[1] : '';
+  }
+
+  /** 室外機の表：品名はマスのいちばん上。下の品番は上の見出しを受け継ぐ */
+  function carrierOutdoorNamer(rows, leftEnd, headY, codeYs) {
+    var segs = carSegs(rows, leftEnd, headY);
+    /* 見出しは列の左はしに立つ。絵の説明（「吸込フード（側面）」「①支柱」）は内側に寄っている。
+       その左はしは、**丸数字つきの見出し（「①② 吹出ガイド」）の x** で決める。
+       ページの端のつまみ（「室外」「別売部品」）は pdf.js では横書きの1語で来るので、
+       名前らしい文字のいちばん左で決めると、つまみを左はしと取り違え、
+       本物の見出しを内側の説明文として捨てていた（2026-09-10、128ページ。品名が全部空になった） */
+    var edge = 1e9, edgeAny = 1e9;
+    segs.forEach(function (g) {
+      var t = carClean(g.s);
+      if (t.length < 2 || !isJa(t)) return;
+      edgeAny = Math.min(edgeAny, g.x);
+      if (carNumbered(g.s)) edge = Math.min(edge, g.x);
+    });
+    if (edge === 1e9) edge = edgeAny;
+    var heads = [];
+    segs.forEach(function (g) {
+      if (g.x > edge + 8 || g.x < edge - 8) return;      // つまみ（左はしより外）も見出しにしない
+      var raw = g.s.replace(/[\u2000-\u200b\u3000]/g, ' ').trim();
+      if (/^[（(〈<]|^[a-z]\s|、|。/.test(raw)) return;   // 「（深形）」「a 防雪フード」「上・下吹き、…」
+      var t = carClean(raw);
+      if (t.length < 2 || !isJa(t)) return;
+      var onRow = codeYs.some(function (y) { return Math.abs(y - g.y) <= 3.5; });
+      if (!carNumbered(raw) && !onRow) return;
+      // すぐ下の「（深形）」「(ドレンパン付)」は品名の続き
+      segs.forEach(function (h) {
+        if (h.y < g.y - 14 || h.y > g.y - 4 || Math.abs(h.x - g.x) > 15) return;
+        var hs = h.s.replace(/[\u2000-\u200b\u3000]/g, ' ').trim();
+        if (/^[（(]/.test(hs) && hs.length <= 16) t += carClean(hs);
+      });
+      heads.push({ y: g.y, s: t });
+    });
+    return function (y) {
+      var best = null;
+      heads.forEach(function (h) {
+        if (h.y >= y - 3.5 && (!best || h.y < best.y)) best = h;   // 上にあるもので、いちばん近いもの
+      });
+      return best ? best.s : '';
+    };
+  }
+
+  /** その行の品番。品番の列にあるもの、または品名のうしろにくっついて来たもの */
+  function carRowCode(r, xCode) {
+    var code = '';
+    r.cells.forEach(function (c) {
+      var t = c.s.trim();
+      if (!code && Math.abs(c.x - xCode) < 30) {
+        var m = t.match(/^([A-Z][A-Z0-9]*-[A-Z0-9\-]{2,})/);
+        if (m) code = m[1];
+      }
+    });
+    // 「丸ダクト用フランジ（吹出し分ダクト用）TCB-FF151US」と品名にくっついて来る行がある
+    if (!code) r.cells.forEach(function (c) {
+      if (code || c.x >= xCode - 15) return;
+      var m = c.s.trim().match(/([A-Z][A-Z0-9]*-(?=[A-Z0-9\-]*\d)[A-Z0-9\-]{2,})$/);
+      if (m && isJa(c.s)) code = m[1];
+    });
+    return code;
+  }
+
+  /** ページから「品番 → 品名」を引く（一覧の表の読み方で）。
+      103〜123ページの表は optPagePana（パナソニックと共用）が読むが、その品名は
+      となりの行の品名や縦書きの区分をつないでいた（「制 御 アダプター™受」）。
+      パナソニックには手を入れず、キヤリアだけ後から品名を付け直すのに使う */
+  function carrierPageNames(items) {
+    var rows = optRows(items);
+    var head = null;
+    rows.forEach(function (r) {
+      if (head) return;
+      var t = r.cells.map(function (o) { return o.s; }).join('');
+      if (/部品形名/.test(t) && /価格/.test(t)) head = r;
+    });
+    if (!head) return null;
+    /* 品番の列は、見出しの下で「品番の形をした文字」がいちばん多く並ぶ x。
+       見出しの「部品形名」はマスのまん中寄せなので、列の幅が広い表では左寄せの品番から
+       30以上離れ、品番が1つも見つからずに、品名を付け直さないままになっていた（83ページほか） */
+    var xs = {};
+    rows.forEach(function (r) {
+      if (r.y >= head.y - 2) return;
+      r.cells.forEach(function (c) {
+        if (!carCodeHead(c.s)) return;
+        var k = Math.round(c.x / 4) * 4;
+        xs[k] = (xs[k] || 0) + 1;
+      });
+    });
+    var xCode = null;
+    Object.keys(xs).forEach(function (k) { if (xCode === null || xs[k] > xs[xCode]) xCode = k; });
+    xCode = (xCode === null) ? null : Number(xCode);
+    if (xCode === null) head.cells.forEach(function (c) { if (xCode === null && c.s.indexOf('部品形名') >= 0) xCode = c.x; });
+    if (xCode === null) return null;
+    var yOf = {}, codeYs = [];
+    rows.forEach(function (r) {
+      if (r.y >= head.y - 2) return;
+      var code = carRowCode(r, xCode);
+      if (!code) return;
+      codeYs.push(r.y);
+      if (!(code in yOf)) yOf[code] = r.y;
+    });
+    if (!codeYs.length) return null;
+    var nameAt = carrierPartsNamer(rows, xCode - 15, head.y, codeYs);
+    return function (code) {
+      var y = yOf[code];
+      if (y == null) {
+        // 「RBC-US21PG（W）-1」のように後ろに付いた形でも引けるように
+        Object.keys(yOf).forEach(function (k) { if (y == null && String(code).indexOf(k) === 0) y = yOf[k]; });
+      }
+      return y == null ? '' : nameAt(y);
+    };
+  }
+
   function optPageCarrierParts(items, page, out, ctx) {
     var rows = optRows(items);
     var head = null;
@@ -1209,16 +1549,16 @@
     if (xCode === null) return;
     if (xPrice === null) xPrice = xCode + 45;
 
-    var nameAt = nameReader(rows, xCode - 15, head.y);
+    // 品番のある行を先に集める（品名の読み方が、行どうしの並びを見るため）
+    function partsCode(r) { return carRowCode(r, xCode); }
+    var codeYs = [];
+    rows.forEach(function (r) { if (r.y < head.y - 2 && partsCode(r)) codeYs.push(r.y); });
+    var nameAt = carrierPartsNamer(rows, xCode - 15, head.y, codeYs);
     rows.forEach(function (r) {
       if (r.y >= head.y - 2) return;
-      var code = '', price = 0;
+      var code = partsCode(r), price = 0;
       r.cells.forEach(function (c) {
         var t = c.s.trim();
-        if (!code && Math.abs(c.x - xCode) < 30) {
-          var m = t.match(/^([A-Z][A-Z0-9]*-[A-Z0-9\-]{2,})/);
-          if (m) code = m[1];
-        }
         if (!price && c.x >= xPrice - 20 && c.x < xPrice + 60) {
           var mm = t.match(/^[¥￥]?\s*([\d,]{4,})/);
           if (mm) price = yen(mm[1]);
@@ -1282,7 +1622,14 @@
     if (!cols.length) return;
 
     var leftEnd = cols[0].x - 20;
-    var nameAt = nameReader(rows, leftEnd, head.y);
+    var codeYs = [];
+    rows.forEach(function (r) {
+      if (r.y >= head.y - 20) return;
+      if (r.cells.some(function (c) {
+        return c.x >= xCode - 25 && c.x < xPrice - 20 && carCodeHead(c.s);
+      })) codeYs.push(r.y);
+    });
+    var nameAt = carrierOutdoorNamer(rows, leftEnd, head.y, codeYs);
 
     rows.forEach(function (r) {
       if (r.y >= head.y - 20) return;
@@ -1290,7 +1637,7 @@
       var code = '', price = 0;
       r.cells.forEach(function (c) {
         var s = c.s.trim();
-        if (c.x >= xCode - 25 && c.x < xPrice - 20 && OPT_CODE.test(s) && !code) code = s;
+        if (c.x >= xCode - 25 && c.x < xPrice - 20 && !code && carCodeHead(s)) code = carCodeHead(s);
         if (c.x >= xPrice - 30) { var m = s.match(OPT_MONEY); if (m && !price) price = yen(m[1]); }
       });
       if (!code || !price) return;
@@ -2537,7 +2884,7 @@
            入れるほうを作っていなかった。そのため化粧パネルもリモコンも
            どの機種にも当たらず、室外機の架台しか出ていなかった（2026-09-09） */
         var flat = items.map(function (i) { return i.s; }).join(' ');
-        if (ctx && carrierIsPricePage(flat)) {
+        if (ctx && carrierIsPricePageLoose(flat)) {
           var cnt = {}, re = /\b([A-Z]{4}\d{5}[A-Z0-9]*)\b/g, m;
           while ((m = re.exec(flat)) !== null) {
             var t = CARRIER_TYPE[m[1].charAt(1)];
@@ -2553,6 +2900,11 @@
           types: ['天井カセット形4方向', '天井カセット形2方向', '天井カセット形1方向',
                   '天井吊形', '壁掛形', 'ビルトイン', 'ダクト', '床置形', '厨房用天井吊形']
         }, ctx);
+        // 品名は一覧の表の読み方で付け直す（上の carrierPageNames の説明）
+        if (out.length) {
+          var carName = carrierPageNames(items);
+          if (carName) out.forEach(function (o) { var nm = carName(o.code); if (nm && nm.length >= 2) o.name = nm; });
+        }
         // 室内機用の表が無いページは、室外機用（列＝シリーズ）として読み直す
         if (!out.length) optPageCarrier(items, page, out);
         // 「別売部品一覧」の表（室内機に付くパネル・フィルターはここにしか無い）
