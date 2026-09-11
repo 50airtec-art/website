@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609111000';
+  var APP_VERSION = '202609111100';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -5094,7 +5094,18 @@
   function sortOptions(k, vals) {
     // ルームエアコンは「2.8kW（おもに10畳）」の文字で持っているので、頭の数字で並べる
     if (k === 'hp') return vals.slice().sort(function (a, b) { return parseFloat(a) - parseFloat(b); });
-    var order = k === 's' ? models.seriesOrder : (k === 'tp' ? models.typeOrder : null);
+    /* シリーズ・台数の並びは、選んだメーカーの並びで決める。全メーカーの並びを1本にすると、
+       先に入れたメーカー（ダイキンのルームエアコン）の「RXシリーズ」「壁埋込形」などが前に来て、
+       三菱の壁掛形（FZ・Z…）が後ろに回っていた */
+    var order = null;
+    if (k === 's' || k === 'tp') {
+      var key = k === 's' ? 'seriesOrder' : 'typeOrder';
+      var mine = chooserSel.mk != null ? models.packs.filter(function (p) { return p.maker === chooserSel.mk; }) : [];
+      if (mine.length) {
+        order = [];
+        mine.forEach(function (p) { (p[key] || []).forEach(function (v) { if (order.indexOf(v) < 0) order.push(v); }); });
+      } else order = models[key];
+    }
     if (order && order.length) {
       return vals.slice().sort(function (a, b) {
         var ia = order.indexOf(a), ib = order.indexOf(b);

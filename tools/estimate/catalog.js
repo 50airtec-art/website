@@ -1701,6 +1701,202 @@
   }
 
   /* --------------------------------------------------------------------
+     三菱電機 ルームエアコン（住宅設備用総合カタログ 2026-06・100ページ）
+
+     1台ぶんは列のかたまり（1ページに3列×2段）：
+       形名「MSZ-FZV4026S（W）」／畳数「とも主に 14 畳」／電源「単相 200V」
+       室内「:MSZ-FZV4026S-W-IN 232,000円（税別）」／室外「:MUZ-FZV4026S 348,000円（税別）」
+       本体価格「580,000 円（税別）」
+       天井カセット形は「化粧パネル（別売）43,200円」、壁埋込形は「前面グリル（別売）」「据付枠（別売）」と「合計価格」
+     GVシリーズは値段のかわりに「オープン価格」。値段は紙面が税別なので、そのまま入れる。
+     システムマルチは、室外機（63ページ「MXZ-4626AS」の下に「本体価格 412,000 円」）と、
+     室内機の一覧（64・65ページ「MSZ-2226ZXAS-W-IN 本体価格 247,000円」。セットと違って頭に「:」が無い）
+     -------------------------------------------------------------------- */
+  var ME_ROOM_WALL = { FZV: 'FZシリーズ', ZXV: 'Zシリーズ', VXV: 'VXVシリーズ', HXV: 'HXVシリーズ', JXV: 'JXVシリーズ',
+                       BXV: 'BXVシリーズ', AXV: 'AXVシリーズ', NXV: 'NXVシリーズ', KXV: 'KXVシリーズ', FLV: 'FLシリーズ', GV: 'GVシリーズ' };
+  var ME_ROOM_CODE = /^(MSZ|MLZ|MTZ|MBZ|MFZ)-([A-Z]*)(\d{4,5})([A-Z]*)/;
+
+  /** 形名の頭からシリーズと室内機の形を決める。ルームエアコンでなければ null */
+  function meRoomKind(pre, lead, tail) {
+    if (pre === 'MSZ') {
+      if (!lead && /^(ZXAS|BXAS|GXAS)$/.test(tail)) return { s: tail.replace(/AS$/, '') + 'シリーズ', i: '壁掛形' };
+      return ME_ROOM_WALL[lead] ? { s: ME_ROOM_WALL[lead], i: '壁掛形' } : null;
+    }
+    if (pre === 'MLZ') {
+      if (/^(RX|GX|HX)$/.test(lead)) return { s: lead + 'シリーズ', i: '天井カセット形（1方向）' };
+      if (lead === 'M') return { s: 'Mシリーズ', i: '天井カセット形（1方向・小能力）' };
+      if (/^(W|HW)$/.test(lead)) return { s: lead + 'シリーズ', i: '天井カセット形（2方向）' };
+      return null;
+    }
+    if (pre === 'MTZ') return { s: '壁埋込形', i: '壁埋込形' };
+    if (pre === 'MBZ') return { s: 'フリービルトイン', i: 'フリービルトイン形' };
+    if (pre === 'MFZ') return /^(K|HK)$/.test(lead) ? { s: lead + 'シリーズ', i: '床置形' } : null;
+    return null;
+  }
+
+  function meRoomReadPage(items, page) {
+    function clean(t) { return String(t).replace(/[\u0000-\u001f]/g, ' ').trim(); }
+    var all = items.map(function (o) { return clean(o.s); }).join(' ');
+    if (!/本体価格|オープン価格/.test(all)) return [];
+    var out = [];
+    function num(t) { var m = clean(t).match(/^([\d,]{4,})\s*円?$/); return m ? yen(m[1]) : 0; }
+    function rowAt(band, y, tol) {
+      return band.filter(function (o) { return Math.abs(o.y - y) < (tol || 2.5); }).sort(function (a, b) { return a.x - b.x; });
+    }
+    function valueRight(band, label) {
+      var v = 0;
+      rowAt(band, label.y).forEach(function (o) { if (!v && o.x > label.x) v = num(o.s); });
+      return v;
+    }
+
+    // 1) 室内機の品番。セットは頭に「:」（室内の行）、マルチ用の室内機の一覧は「:」なし
+    items.forEach(function (a) {
+      var t = clean(a.s), code = t.replace(/^:+/, '');
+      if (!/-IN$/.test(code)) return;
+      // 室内の「:」は品番の頭に付いて来ることも、すぐ左の別の文字で来ることもある（28ページ FL）
+      var colon = /^:/.test(t) || items.some(function (o) {
+        return o !== a && clean(o.s) === ':' && Math.abs(o.y - a.y) < 1 && a.x - o.x >= 0 && a.x - o.x < 4;
+      });
+      var m = code.match(ME_ROOM_CODE);
+      if (!m) return;
+      var kind = meRoomKind(m[1], m[2], m[4]);
+      if (!kind) return;
+      // 色違い「-W,-T-IN」「-W,-R,-K-IN」は1つにまとめて書く（「-W-IN」）
+      var imAll = code.replace(/(-[A-Z])(,-[A-Z])+/, '$1');
+      // その品番の列だけを見る（セットは列の幅170、マルチ用の室内機の一覧は85）
+      var band = items.filter(function (o) { return o.x >= a.x - (colon ? 30 : 8) && o.x < a.x + (colon ? 150 : 82); });
+      // 本体価格の札は、セットは品番の11左、一覧は品番と同じ x。となりの列の札を取らない
+      var tx = colon ? a.x - 11 : a.x;
+      var bodyL = band.filter(function (o) { var dy = a.y - o.y; return dy > -1 && dy <= 30 && clean(o.s) === '本体価格'; })
+        .sort(function (p, q) { return Math.abs(p.x - tx) - Math.abs(q.x - tx); })[0];
+      if (bodyL && Math.abs(bodyL.x - tx) > 25) bodyL = null;
+      var open = !bodyL && band.some(function (o) { var dy = a.y - o.y; return dy > -1 && dy <= 30 && /オープン価格/.test(clean(o.s)); });
+      var body = bodyL ? valueRight(band, bodyL) : 0;
+      if (!body && !open) return;
+      // 化粧パネル・前面グリル・据付枠（別売）と合計価格（本体価格の下32まで、本体価格の札と同じ列）
+      var extras = [], total = 0;
+      if (bodyL) {
+        band.forEach(function (o) {
+          var dy = bodyL.y - o.y, tt = clean(o.s);
+          if (dy <= 1 || dy > 32 || Math.abs(o.x - bodyL.x) > 25) return;
+          if (/^化粧パネル/.test(tt)) extras.push('化粧パネル');
+          if (/^前面グ/.test(tt)) extras.push('前面グリル');
+          if (/^据付枠/.test(tt)) extras.push('据付枠');
+          if (tt === '合計価格') total = valueRight(band, o) || total;
+        });
+      }
+      // 室外機（セットだけ。すぐ下の「:MU…」）
+      var om = '';
+      if (colon) band.forEach(function (o) {
+        var dy = a.y - o.y, tt = clean(o.s);
+        if (!om && dy > 1 && dy < 12 && /^:?MU[A-Z]*-/.test(tt)) om = tt.replace(/^:+/, '');
+      });
+      // 畳数（「とも主に」の行の数）と電源（「単相」の行の「100V」「200V」）は品番より上140まで
+      var above = band.filter(function (o) { var dy = o.y - a.y; return dy > 0 && dy < 140; });
+      var tat = 0, pw = '';
+      above.forEach(function (o) {
+        if (!/とも|も主に/.test(clean(o.s))) return;
+        rowAt(band, o.y, 3).forEach(function (q) { var v = clean(q.s); if (!tat && /^\d{1,2}$/.test(v)) tat = Number(v); });
+      });
+      above.forEach(function (o) {
+        if (clean(o.s) !== '単相') return;
+        rowAt(band, o.y).forEach(function (q) { var v = clean(q.s); if (!pw && /^(100|200)V$/.test(v)) pw = '単相' + v; });
+      });
+      var multi = !colon;
+      /* 「MSZ-JXV2826(S)」は100V（JXV2826）と200V（JXV2826S）の2機種で、値段は同じ（30ページ）。
+         紙面の電源の欄にも「JXV2826 100V」「JXV2826S 200V」と2行ある */
+      var vars = /\(S\)/.test(code) ? [{ sfx: '', pw: '単相100V' }, { sfx: 'S', pw: '単相200V' }] : [null];
+      vars.forEach(function (v) {
+        var tail = v ? v.sfx : m[4];
+        var base = m[1] + '-' + m[2] + m[3] + tail;
+        var im = v ? imAll.replace('(S)', v.sfx) : imAll;
+        var om1 = v ? om.replace('(S)', v.sfx) : om;
+        out.push({
+          page: page, m: multi ? im : base, kw: parseInt(m[3].slice(0, -2), 10) / 10, tat: tat,
+          s: multi ? 'マルチ用室内機' : kind.s, i: kind.i,
+          pw: multi ? '室外機から' : (v ? v.pw : (pw || (m[1] === 'MSZ' && !/S$/.test(m[4]) ? '単相100V' : '単相200V'))),
+          tp: multi ? 'マルチ用室内機' : 'シングル', rc: 'ワイヤレス',
+          y: open ? 0 : (total || body),
+          opt: [open ? 'オープン価格' : '', extras.length ? extras.join('・') + '込み' : ''].filter(Boolean).join('／'),
+          om: multi ? '' : om1, im: im, pm: ''
+        });
+      });
+    });
+
+    // 2) システムマルチの室外機（63ページ「MXZ-4626AS」の下に「本体価格」と値段）
+    items.forEach(function (a) {
+      var t = clean(a.s), m = t.match(/^MXZ-(\d{4,5})AS$/);
+      if (!m) return;
+      var band = items.filter(function (o) { return o.x >= a.x - 8 && o.x < a.x + 90; });
+      var bodyL = band.filter(function (o) { var dy = a.y - o.y; return dy > 1 && dy < 14 && clean(o.s) === '本体価格'; })[0];
+      var body = bodyL ? valueRight(band, bodyL) : 0;
+      if (!body) return;
+      out.push({ page: page, m: t, kw: parseInt(m[1].slice(0, -2), 10) / 10, tat: 0, s: 'システムマルチ（室外機）', i: 'マルチ室外機',
+                 pw: '単相200V', tp: 'システムマルチ', rc: '', y: body, opt: '', om: t, im: '', pm: '' });
+    });
+
+    /* 3) 耐塩害仕様・耐重塩害仕様のセット（67ページの一覧「MSZ-FZV4026SE 595,000 円」「MSZ-GV2226EE オープン価格」）。
+       中身は元のセット（MSZ-FZV4026S）と同じで、値段と室外機が違う。元のセットの能力・畳数・電源はあとで写す。
+       室外機だけの一覧（「MULZ-RX2826AS-E」）は、セットではないので入れない */
+    if (/耐塩害仕様（セット）|耐重塩害仕様（セット）/.test(all)) {
+      items.forEach(function (a) {
+        var t = clean(a.s), m = t.match(/^(MSZ-[A-Z]+\d{4}S?)(E{1,2})$/);
+        if (!m) return;
+        var pr = items.filter(function (o) {
+          var tt = clean(o.s);
+          return Math.abs(o.y - a.y) < 3 && o.x > a.x + 40 && o.x < a.x + 120 && (/^[\d,]{5,}$/.test(tt) || /オープン価格/.test(tt));
+        }).sort(function (p, q) { return Math.abs(p.y - a.y) - Math.abs(q.y - a.y) || p.x - q.x; })[0];
+        if (!pr) return;
+        var open = /オープン価格/.test(clean(pr.s));
+        out.push({ page: page, salt: m[2], m: t, base: m[1], y: open ? 0 : yen(clean(pr.s)), open: open });
+      });
+    }
+    return out;
+  }
+
+  function meRoomFinish(sets) {
+    var rows = [], seen = {}, pages = {}, baseOf = {};
+    sets.forEach(function (x) { if (!x.salt && !baseOf[x.m]) baseOf[x.m] = x; });
+    sets.forEach(function (x) {
+      pages[x.page] = 1;
+      // 耐塩害仕様のセットは、元のセットの中身を写す（元が読めなかったものは入れない）
+      if (x.salt) {
+        var b = baseOf[x.base];
+        if (!b) return;
+        x = { page: x.page, m: x.m, kw: b.kw, tat: b.tat, s: b.s, i: b.i, pw: b.pw, tp: b.tp, rc: b.rc, y: x.y,
+              opt: [x.open ? 'オープン価格' : '', x.salt === 'EE' ? '耐重塩害仕様' : '耐塩害仕様',
+                    (b.opt || '').replace(/オープン価格／?/, '')].filter(Boolean).join('／'),
+              om: b.om ? b.om + '-' + x.salt : '', im: b.im, pm: '' };
+      }
+      if (seen[x.m]) return;
+      seen[x.m] = 1;
+      // 「馬力」の手順には、ルームエアコンでは能力の文字を入れる（画面はそのまま出す）
+      var cap = x.kw.toFixed(1) + 'kW' + (x.tat ? '（おもに' + x.tat + '畳）' : '');
+      rows.push({
+        m: x.m, hp: cap, y: x.y, u: String(x.page),
+        s: x.s, i: x.i, ab: cap, pw: x.pw,
+        rc: x.rc, tp: x.tp, opt: x.opt, om: x.om, im: x.im, pm: x.pm, rm: ''
+      });
+    });
+    return {
+      rows: rows,
+      pricePages: Object.keys(pages).length,
+      head: {
+        maker: '三菱電機',
+        brand: 'ルームエアコン（住宅設備用）',
+        source: '住宅設備用総合カタログ（公開Webカタログ）',
+        note: '希望小売価格・税抜。配管/据付工事費は含まず。GVシリーズはオープン価格（値段0）。耐塩害仕様・耐重塩害仕様のセットは形名の末尾E・EE。社内利用限定（第三者提供不可）。',
+        seriesOrder: ['FZシリーズ', 'Zシリーズ', 'VXVシリーズ', 'HXVシリーズ', 'JXVシリーズ', 'BXVシリーズ', 'AXVシリーズ',
+                      'NXVシリーズ', 'KXVシリーズ', 'FLシリーズ', 'GVシリーズ',
+                      'RXシリーズ', 'GXシリーズ', 'HXシリーズ', 'Mシリーズ', 'Wシリーズ', 'HWシリーズ',
+                      '壁埋込形', 'フリービルトイン', 'Kシリーズ', 'HKシリーズ',
+                      'システムマルチ（室外機）', 'マルチ用室内機'],
+        typeOrder: ['シングル', 'システムマルチ', 'マルチ用室内機']
+      }
+    };
+  }
+
+  /* --------------------------------------------------------------------
      三菱電機
      Mr.SLIM（店舗・事務所用パッケージエアコン）
 
@@ -4095,6 +4291,23 @@
       min: 150,
       readPage: dkRoomOptReadPage,
       finish: dkRoomOptFinish
+    },
+    {
+      id: 'mitsubishi-room',
+      name: '三菱電機（ルームエアコン）',
+      catalog: '住宅設備用総合カタログ（ルームエアコン・ハウジングエアコン）',
+      size: '100ページ・79MBほど。読み取りに2分ほどかかります。',
+      howto: [
+        '下のリンクを押すとカタログのPDFが開く（大きいので開くまで少しかかります）',
+        '開いたPDFを保存する（右上の保存ボタン、または右クリック →「名前を付けて保存」）',
+        '保存したPDFを「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://dl.mitsubishielectric.co.jp/dl/ldg/wink/wink_doc/contents/doc/WEB_CATA/S1795CB073D/data/target.pdf',
+      urlNote: '壁掛形（FZ・Z・VXV・HXV・JXV・BXV・AXV・NXV・KXV・FL・GV）・天井カセット形・壁埋込形・フリービルトイン形・床置形・システムマルチ（室外機と室内機）を読みます。パネルやグリルが別売の形は「合計価格」で入ります。GVシリーズはオープン価格なので値段0で入ります。',
+      min: 60,
+      layout: true,
+      readPage: meRoomReadPage,
+      finish: meRoomFinish
     },
     {
       id: 'mitsubishi',
