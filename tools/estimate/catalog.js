@@ -1701,6 +1701,196 @@
   }
 
   /* --------------------------------------------------------------------
+     日立 ルームエアコン（住宅設備用エアコン 2026-3・88ページ）
+
+     1台ぶんは列のかたまり（1ページに3列）：
+       室内機の形名（＝セットの形名）「RAS-XJ2226S（W）」／「室外機 RAC-XJ2226S」／「6 畳程度」／「室内 単相100V15A」
+       その左下にセットの値段「430,000 円（税別）」。オープン価格の機種（AJ・XK・RK・FD）は「オープン価格」
+     天井カセット（RAP-K28SD）・壁埋込（RAJ-A25SD）は「本体」「別売化粧パネル」（「別売前面グリル」「別売据付木枠」）と「合計」。
+     マルチ：室内機（RAM-SE22S・RAM-PS25S・RAM-JA25S…）と室外機（RAC-45M2SD：M2＝2部屋用）。
+     耐塩害仕様（末尾E）・耐重塩害仕様（末尾J）は70・71ページの一覧（中身は元のセットと同じで、値段と室外機が違う）。
+     値段は紙面が税別なので、そのまま入れる
+     -------------------------------------------------------------------- */
+  function hiKind(code) {
+    var m;
+    if ((m = code.match(/^RAS-([A-Z]{2})(\d{2})\d{2}[SD]$/))) return { s: m[1] + 'シリーズ', i: '壁掛形', kw: Number(m[2]) / 10 };
+    if ((m = code.match(/^RAF-D(\d{2})F\d?$/))) return { s: 'FDシリーズ', i: '床置形', kw: Number(m[1]) / 10 };
+    if ((m = code.match(/^RAP-([KSA])(\d{2})SD$/))) return { s: 'P' + m[1] + 'シリーズ', i: '天井カセット形（1方向）', kw: Number(m[2]) / 10 };
+    if ((m = code.match(/^RAJ-A(\d{2})SD$/))) return { s: 'JAシリーズ', i: '壁埋込形', kw: Number(m[1]) / 10 };
+    if ((m = code.match(/^RAM-(SE|SA|PS|PA|JA)(\d{2})S$/))) {
+      return { s: 'マルチ用室内機', multi: true, kw: Number(m[2]) / 10,
+               i: { SE: '壁掛形', SA: '壁掛形', PS: '天井カセット形（1方向）', PA: '天井カセット形（1方向）', JA: '壁埋込形' }[m[1]] };
+    }
+    return null;
+  }
+
+  function hiRoomReadPage(items, page) {
+    function clean(t) { return String(t).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim(); }
+    var its = items.map(function (o) { return { s: clean(o.s), x: o.x, y: o.y, w: o.w || 0 }; }).filter(function (o) { return o.s; });
+    // 割れた形名をつなぐ（71ページ「RAS-AJ71」「26DE」、33ページ「RAS-BJ71」「26」「D」）。すき間なく右に続く字だけ
+    its.forEach(function (o) {
+      if (!o.s || !/^（?(RAS|RAC)-[A-Z]{2}\d{2}$/.test(o.s)) return;
+      var px = o.x, pw = o.w;
+      its.filter(function (q) { return q !== o && q.s && Math.abs(q.y - o.y) < 1.5 && q.x > o.x && q.x - o.x < 70 && /^[\dA-Z]{1,4}）?$/.test(q.s); })
+        .sort(function (p, q) { return p.x - q.x; })
+        .forEach(function (q) {
+          if (/\d{4}[SD][EJ]?）?$/.test(o.s)) return;
+          var gap = pw ? q.x - (px + pw) : q.x - px - 30;
+          if (gap < -4 || gap > 8) return;
+          o.s += q.s; q.s = ''; px = q.x; pw = q.w;
+        });
+    });
+    its = its.filter(function (o) { return o.s; });
+    var all = its.map(function (o) { return o.s; }).join(' ');
+    if (!/円|オープン価格/.test(all)) return [];
+    function money(o) {
+      var m = o.s.match(/^([\d,]{4,})\s*円/);
+      if (m) return yen(m[1]);
+      if (/^[\d,]{4,}$/.test(o.s) && its.some(function (q) { return /^円/.test(q.s) && Math.abs(q.y - o.y) < 2 && q.x > o.x && q.x - o.x < 60; })) return yen(o.s);
+      return 0;
+    }
+    function isCode(o) { return !!hiKind(o.s); }
+    var out = [];
+    // 耐塩害の一覧表（70・71ページ）は下でまとめて読む。ここの形名はセットとして読まない
+    var saltPage = /製品年度/.test(all) && /耐塩害/.test(all);
+
+    its.forEach(function (a) {
+      var kind = hiKind(a.s);
+      if (!kind || saltPage) return;
+      // 同じ列の、下の段の形名（そこより下はよその機種）
+      var nextY = its.filter(function (o) { return o !== a && Math.abs(o.x - a.x) < 20 && o.y < a.y - 20 && isCode(o); })
+        .map(function (o) { return o.y; }).sort(function (p, q) { return q - p; })[0];
+      function above(o) { return nextY == null || o.y > nextY + 2; }
+      var body = 0, total = 0, open = false, extras = [];
+
+      if (kind.multi) {
+        // マルチ用の室内機：形名の下60までに「203,000 円」、別売化粧パネル、合計
+        var mb = its.filter(function (o) { return o.x >= a.x - 45 && o.x <= a.x + 60 && a.y - o.y > 0 && a.y - o.y <= 60 && above(o); });
+        var mn = mb.filter(function (o) { return money(o) > 0 && o.x >= a.x - 5; }).sort(function (p, q) { return q.y - p.y; });
+        if (!mn.length) return;
+        body = money(mn[0]);
+        var g0 = mb.filter(function (o) { return /^合/.test(o.s); })[0];
+        if (g0) { var t0 = mn.filter(function (o) { return Math.abs(o.y - g0.y) < 3; })[0]; if (t0) total = money(t0); }
+        if (mb.some(function (o) { return /KPS$|別売化粧/.test(o.s); })) extras.push('化粧パネル');
+        if (mb.some(function (o) { return /RAJ-FGF|前面/.test(o.s); })) extras.push('前面グリル');
+        if (mb.some(function (o) { return /RAJ-WFF|木枠/.test(o.s); })) extras.push('据付木枠');
+        out.push({ page: page, m: a.s, kw: kind.kw, tat: 0, s: kind.s, i: kind.i, pw: '室外機から', tp: 'マルチ用室内機', rc: 'ワイヤレス',
+                   y: total || body, opt: extras.length ? extras.join('・') + '込み' : '', om: '', im: a.s, pm: '' });
+        return;
+      }
+
+      // セット：左下（形名の50〜150下、左78〜5）にセットの値段か「オープン価格」
+      var band = its.filter(function (o) { return o.x >= a.x - 78 && o.x <= a.x - 5 && a.y - o.y >= 50 && a.y - o.y <= 150 && above(o); });
+      open = band.some(function (o) { return /^オープン価格/.test(o.s); });
+      var nums = band.filter(function (o) { return money(o) > 0; }).sort(function (p, q) { return q.y - p.y; });
+      if (nums.length) {
+        body = money(nums[0]);
+        var gl = band.filter(function (o) { return /^合/.test(o.s); })[0];
+        if (gl) { var tn = nums.filter(function (o) { return Math.abs(o.y - gl.y) < 3; })[0]; if (tn) total = money(tn); }
+      } else if (!open) {
+        // セットの値段の字が無いときは、室内と室外の値段を足す（23ページ RAS-XJ9026D は 324,000＋486,000）
+        var io2 = its.filter(function (o) { return o.x >= a.x - 5 && o.x <= a.x + 40 && a.y - o.y >= 50 && a.y - o.y <= 150 && above(o) && money(o) > 0; })
+          .sort(function (p, q) { return q.y - p.y; });
+        if (io2.length < 2) return;
+        body = money(io2[0]) + money(io2[1]);
+      }
+      if (!body && !open) return;
+      band.forEach(function (o) {
+        if (/^別売化粧パネル/.test(o.s)) extras.push('化粧パネル');
+        if (/^別売前面グリル/.test(o.s)) extras.push('前面グリル');
+        if (/^別売据付木枠/.test(o.s)) extras.push('据付木枠');
+      });
+      // 室外機・畳数・電源は形名のすぐ下
+      var near = its.filter(function (o) { return o.x >= a.x - 60 && o.x <= a.x + 120 && a.y - o.y > 2 && a.y - o.y <= 25; });
+      var om = '';
+      near.forEach(function (o) { var m = o.s.match(/(RAC-[A-Z0-9]+)/); if (!om && m && o.x >= a.x - 5 && o.x <= a.x + 40) om = m[1]; });
+      // 室外機の形名が真下に無いのは、4ページのような機種のまとめ表（値段は別の機種のもの）
+      if (!om) return;
+      var pw = '';
+      near.forEach(function (o) { var m = o.s.match(/単相\s*(100|200)V/); if (!pw && m) pw = '単相' + m[1] + 'V'; });
+      var tat = 0;
+      var tj = near.filter(function (o) { return /^畳程度/.test(o.s) && o.x >= a.x - 32 && o.x <= a.x - 8; })[0];
+      if (tj) {
+        var dg = near.filter(function (o) { return Math.abs(o.y - tj.y) < 2.5 && o.x >= a.x - 58 && o.x < tj.x && /^\d{1,2}$/.test(o.s); })
+          .sort(function (p, q) { return p.x - q.x; }).map(function (o) { return o.s; }).join('');
+        if (dg) tat = Number(dg);
+      }
+      out.push({ page: page, m: a.s, kw: kind.kw, tat: tat, s: kind.s, i: kind.i, pw: pw || '単相200V', tp: 'シングル', rc: 'ワイヤレス',
+                 y: open ? 0 : (total || body),
+                 opt: [open ? 'オープン価格' : '', extras.length ? extras.join('・') + '込み' : ''].filter(Boolean).join('／'),
+                 om: om, im: a.s, pm: '' });
+    });
+
+    // マルチの室外機（50ページ「RAC-45M2SD  323,000 円」。M2＝2部屋用）
+    its.forEach(function (a) {
+      var m = a.s.match(/^RAC-(\d{2})M(\d)SD$/);
+      if (!m) return;
+      var pr = its.filter(function (o) { return Math.abs(o.y - a.y) < 3 && o.x > a.x && o.x - a.x < 230 && money(o) > 0; })
+        .sort(function (p, q) { return p.x - q.x; })[0];
+      if (!pr) return;
+      out.push({ page: page, m: a.s, kw: Number(m[1]) / 10, tat: 0, s: 'システムマルチ（室外機）', i: 'マルチ室外機', pw: '単相200V',
+                 tp: m[2] + '室用', rc: '', y: money(pr), opt: '', om: a.s, im: '', pm: '' });
+    });
+
+    // 耐塩害仕様（末尾E）・耐重塩害仕様（末尾J）の一覧（70・71ページ）。値段は形名の右、次の形名の手前の、すぐ下の行
+    if (/耐塩害仕様/.test(all)) {
+      var sc = its.filter(function (o) { return /^RAS-[A-Z]{2}\d{4}[SD][EJ]$/.test(o.s); });
+      sc.forEach(function (a) {
+        var nx = 1e9;
+        its.forEach(function (o) { if (o !== a && Math.abs(o.y - a.y) < 1.5 && o.x > a.x && /^RAS-/.test(o.s) && o.x < nx) nx = o.x; });
+        var win = its.filter(function (o) { return o.x > a.x && o.x < nx && a.y - o.y >= 0 && a.y - o.y < 7; });
+        var pr = win.filter(function (o) { return money(o) > 0; }).sort(function (p, q) { return p.x - q.x; })[0];
+        var op = !pr && win.some(function (o) { return /^オープン価格/.test(o.s); });
+        if (!pr && !op) return;
+        var oc = its.filter(function (o) { return Math.abs(o.x - (a.x - 3)) < 8 && a.y - o.y > 2 && a.y - o.y < 10 && /RAC-/.test(o.s); })[0];
+        out.push({ page: page, salt: a.s.slice(-1), m: a.s, base: a.s.slice(0, -1), y: pr ? money(pr) : 0, open: !pr,
+                   om: oc ? oc.s.replace(/[（）()]/g, '') : '' });
+      });
+    }
+    return out;
+  }
+
+  function hiRoomFinish(sets) {
+    var rows = [], seen = {}, pages = {}, baseOf = {};
+    sets.forEach(function (x) { if (!x.salt && !baseOf[x.m]) baseOf[x.m] = x; });
+    sets.forEach(function (x) {
+      pages[x.page] = 1;
+      if (x.salt) {
+        // 元のセットの中身（能力・畳数・電源）を写す。元が紙面に無いとき（XJの2025年度）は、同じ能力の別年度から
+        var b = baseOf[x.base] || baseOf[x.base.replace(/(\d{2})(2[56])([SD])$/, function (_, c, yr, t) { return c + (yr === '25' ? '26' : '25') + t; })];
+        if (!b) return;
+        x = { page: x.page, m: x.m, kw: b.kw, tat: b.tat, s: b.s, i: b.i, pw: b.pw, tp: b.tp, rc: b.rc, y: x.y,
+              opt: [x.salt === 'J' ? '耐重塩害仕様' : '耐塩害仕様', x.open ? 'オープン価格' : '',
+                    (b.opt || '').replace(/オープン価格／?/, '').replace(/／?2025年度モデル/, '')].filter(Boolean).join('／'),
+              om: x.om || (b.om ? b.om + x.salt : ''), im: x.m, pm: '' };
+      }
+      if (seen[x.m]) return;
+      seen[x.m] = 1;
+      // 前の年度の機種（形名の年が25）は見分けがつくように書いておく
+      if (/^RAS-[A-Z]{2}\d{2}25[SD]/.test(x.m)) x.opt = [x.opt, '2025年度モデル'].filter(Boolean).join('／');
+      var cap = x.kw.toFixed(1) + 'kW' + (x.tat ? '（おもに' + x.tat + '畳）' : '');
+      rows.push({
+        m: x.m, hp: cap, y: x.y, u: String(x.page),
+        s: x.s, i: x.i, ab: cap, pw: x.pw,
+        rc: x.rc, tp: x.tp, opt: x.opt, om: x.om, im: x.im, pm: x.pm, rm: ''
+      });
+    });
+    return {
+      rows: rows,
+      pricePages: Object.keys(pages).length,
+      head: {
+        maker: '日立',
+        brand: 'ルームエアコン（住宅設備用）',
+        source: '住宅設備用エアコン 2026-3（公開Webカタログ）',
+        note: '希望小売価格・税抜。配管/据付工事費は含まず。AJ・XK・RK・FDシリーズはオープン価格（値段0）。耐塩害仕様は形名の末尾E、耐重塩害仕様はJ。社内利用限定（第三者提供不可）。',
+        seriesOrder: ['XJシリーズ', 'ZJシリーズ', 'VJシリーズ', 'VLシリーズ', 'MJシリーズ', 'AJシリーズ', 'BJシリーズ', 'XKシリーズ', 'RKシリーズ',
+                      'FDシリーズ', 'PKシリーズ', 'PSシリーズ', 'PAシリーズ', 'JAシリーズ', 'システムマルチ（室外機）', 'マルチ用室内機'],
+        typeOrder: ['シングル', '2室用', '3室用', '4室用', 'マルチ用室内機']
+      }
+    };
+  }
+
+  /* --------------------------------------------------------------------
      三菱電機 ルームエアコン（住宅設備用総合カタログ 2026-06・100ページ）
 
      1台ぶんは列のかたまり（1ページに3列×2段）：
@@ -4580,6 +4770,23 @@
       layout: true,
       readPage: meRoomReadPage,
       finish: meRoomFinish
+    },
+    {
+      id: 'hitachi-room',
+      name: '日立（ルームエアコン）',
+      catalog: '住宅設備用エアコン（白くまくん・ハウジングエアコン）',
+      size: '88ページ・175MBほど。大きいので読み取りに3〜5分かかります。',
+      howto: [
+        '下のリンクを押すとカタログのPDFが開く（とても大きいので開くまで時間がかかります）',
+        '開いたPDFを保存する（右上の保存ボタン、または右クリック →「名前を付けて保存」）',
+        '保存したPDFを「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://kadenfan.hitachi.co.jp/catalog/raj/book/data/Target.pdf',
+      urlNote: '壁掛形（XJ・ZJ・VJ・VL・MJ・AJ・BJ・XK・RK）・床置形（FD）・天井カセット形（PK・PS・PA）・壁埋込形（JA）・システムマルチ（室外機と室内機）・耐塩害仕様を読みます。天井カセット・壁埋込は「合計」（化粧パネル・前面グリル込み）で入ります。AJ・XK・RK・FDはオープン価格なので値段0で入ります。',
+      min: 60,
+      layout: true,
+      readPage: hiRoomReadPage,
+      finish: hiRoomFinish
     },
     {
       id: 'mitsubishi-room-opt',
