@@ -2718,6 +2718,211 @@
   }
 
   /* --------------------------------------------------------------------
+     ゼネラル ルームエアコン（住宅設備用カタログ 2026・No.A674A・20ページ。1ページが見開き2面）
+
+     1台ぶんは列のかたまり（1面に3列×2〜3段）：
+       「冷暖房時おもに」「14」「畳用」／「AS-X406T2」「(W)」「単相200V」／「AO-X406T2」（室外機）／
+       「希望小売価格(税別)」「330,000円」または「オープン価格※」
+     値段は税別なので、そのまま入れる。X・Z・W・L・ZN・DN はオープン価格（値段0）。
+     ZN・DN は寒冷地仕様（暖房強化型）で2025年モデル（形名の3けため 5）。
+     多くの字は化けて読めないが、形名・値段・「単相200V」「畳用」は pdf.js で読める（2026-09-12）。
+     3ページの一覧表・仕様表・注の中の形名は、室外機の形名と値段（オープン価格）がそばに無いので読まない
+     -------------------------------------------------------------------- */
+  var GEN_AS = /^AS-([A-Z]{1,2})(\d{2})(\d)([A-Z])(\d?)$/;
+
+  function genRoomReadPage(items, page) {
+    // 見えない字（制御文字）はすき間にしてから詰める
+    function tidy(t) {
+      return String(t).split('').map(function (ch) { return ch.charCodeAt(0) < 32 ? ' ' : ch; }).join('').replace(/\s+/g, '');
+    }
+    var its = [];
+    items.forEach(function (o) {
+      var t = tidy(o.s);
+      if (t) its.push({ t: t, x: o.x, y: o.y, w: o.w || 0 });
+    });
+    var out = [];
+    its.forEach(function (c) {
+      var k = c.t.match(GEN_AS);
+      if (!k) return;
+      /** 形名 c のまわりで、re に合う字。dy は上から下に正（形名より下が＋） */
+      function near(re, dyMin, dyMax, dxMin, dxMax) {
+        return its.filter(function (o) {
+          var dy = c.y - o.y, dx = o.x - c.x;
+          return o !== c && re.test(o.t) && dy >= dyMin && dy <= dyMax && dx >= dxMin && dx <= dxMax;
+        }).sort(function (a, b) {
+          return (Math.abs(c.y - a.y) + 0.3 * Math.abs(a.x - c.x)) - (Math.abs(c.y - b.y) + 0.3 * Math.abs(b.x - c.x));
+        })[0];
+      }
+      var om = near(/AO-[A-Z0-9]+/, 2, 14, -5, 45);
+      var pw = near(/^単相(100|200)V/, -6, 4, 30, 110);
+      var pr = near(/^[\d,]+円$/, 6, 24, 40, 140);
+      var op = near(/オープン価格/, 2, 24, 20, 150);
+      if (!om || !(pr || op)) return;                // 一覧表・仕様表・注の中の形名
+      var tat = 0, h = near(/^畳用$/, -24, -6, 10, 100);
+      if (h) {
+        var dg = its.filter(function (q) { return /^\d{1,2}$/.test(q.t) && Math.abs(q.y - h.y) <= 4 && q.x < h.x && h.x - q.x < 35; })
+          .sort(function (a, b) { return a.x - b.x; }).map(function (q) { return q.t; }).join('');
+        tat = Number(dg) || 0;
+      }
+      out.push({ page: page, m: c.t, om: om.t.match(/AO-[A-Z0-9]+/)[0], kw: Number(k[2]) / 10, s: k[1] + 'シリーズ',
+                 pw: pw ? pw.t.match(/^単相(100|200)V/)[0] : (k[5] === '2' ? '単相200V' : '単相100V'),
+                 tat: tat, y: pr ? yen(pr.t) : 0, open: !pr, year: k[3] });
+    });
+    return out;
+  }
+
+  function genRoomFinish(list) {
+    // 同じ形名が何か所にもあるときは、畳数の読めたもの → 値段のあるもの の順に採る
+    var by = {}, order = [];
+    list.forEach(function (x) {
+      var v = by[x.m];
+      if (!v) { by[x.m] = x; order.push(x.m); return; }
+      var score = function (e) { return (e.tat ? 2 : 0) + (e.y ? 1 : 0); };
+      if (score(x) > score(v)) by[x.m] = x;
+    });
+    var rows = [], pages = {};
+    order.forEach(function (m) {
+      var x = by[m];
+      pages[x.page] = 1;
+      var cold = x.s === 'ZNシリーズ' || x.s === 'DNシリーズ';
+      var cap = x.kw.toFixed(1) + 'kW' + (x.tat ? '（おもに' + x.tat + '畳）' : '');
+      var opt = [x.open ? 'オープン価格' : '', cold ? '寒冷地仕様（暖房強化型）' : '', x.year === '5' ? '2025年モデル' : ''].filter(Boolean).join('／');
+      rows.push({ m: m, hp: cap, y: x.y, u: String(x.page), s: x.s, i: '壁掛形', ab: cap, pw: x.pw, rc: 'ワイヤレス', tp: 'シングル',
+                  opt: opt, om: x.om, im: m, pm: '', rm: '' });
+    });
+    return {
+      rows: rows,
+      pricePages: Object.keys(pages).length,
+      head: {
+        maker: 'ゼネラル',
+        brand: 'ルームエアコン（住宅設備用）',
+        source: '住宅設備用カタログ 2026（No.A674A・公開PDF）',
+        note: '希望小売価格（税別。事業者向けの積算見積価格）。配管/据付工事費は含まず。オープン価格の機種は値段0。ZN・DNは寒冷地仕様（暖房強化型）の2025年モデル。社内利用限定（第三者提供不可）。',
+        seriesOrder: ['Xシリーズ', 'Zシリーズ', 'NHシリーズ', 'Wシリーズ', 'Lシリーズ', 'VHシリーズ', 'RHシリーズ', 'CHシリーズ', 'ZNシリーズ', 'DNシリーズ'],
+        typeOrder: ['シングル']
+      }
+    };
+  }
+
+  /* --------------------------------------------------------------------
+     ゼネラル ルームエアコンの別売品（住宅設備用カタログ 2026・紙面37ページ＝PDFの20ページ ほか）
+
+     ①「別売品について」の表：列＝品番（［OP-J02A］…）、上に品名、下に「希望小売価格（税込）」の値段、
+       行＝シリーズ、マス＝「●」「ー」「2.2・2.5kWクラス」「2.8～9.0kWクラス」
+     ②寒冷地仕様（暖房強化型）の防雪フード：前面・側面・背面の3列。品番の横か下に「（ZNシリーズ2.8～7.1kWクラス）」
+     ③日晴金属の架台・金具（2段架台・平地架台・防雪屋根・壁面用金具・壁面用防雪屋根）
+     ④シリーズのページの「別売品」の欄の抗菌空清フィルター（APS-…）。この欄は字が化けて品名が読めないので、
+       紙面の絵で確かめた品名「抗菌空清フィルター」を APS- の品番に付ける。付くのはそのページの機種のシリーズ（2026-09-12）
+     値段は税込だけ → 1.1で割る
+     -------------------------------------------------------------------- */
+  function genRoomOptReadPage(items, page) {
+    // 見えない字はすき間に、全角の数字は半角に（「ZNシリーズ２.８～7.1kWクラス」）
+    function tidy(t) {
+      return String(t).split('').map(function (ch) {
+        var n = ch.charCodeAt(0);
+        return n < 32 ? ' ' : (n >= 0xFF10 && n <= 0xFF19) ? String.fromCharCode(n - 0xFEE0) : ch;
+      }).join('').replace(/\s+/g, '');
+    }
+    var its = [];
+    items.forEach(function (o) { var t = tidy(o.s); if (t) its.push({ t: t, x: o.x, y: o.y, w: o.w || 0 }); });
+    var out = [];
+    function taxIn(t) { var m = String(t).match(/([\d,]+)円/); return m ? Math.round(yen(m[1]) / 1.1) : 0; }
+
+    /* ① 別売品の表 */
+    var heads = its.filter(function (o) { return /^［OP-[A-Z0-9]+］$/.test(o.t); }).sort(function (a, b) { return a.x - b.x; });
+    if (heads.length >= 3) {
+      var colX = heads.map(function (h) { return h.x; });
+      var colOf = function (x) {
+        var ci = -1, bd = 46;
+        colX.forEach(function (cx, i) { var d = Math.abs(x - cx); if (d < bd) { bd = d; ci = i; } });
+        return ci;
+      };
+      var hy = Math.min.apply(null, heads.map(function (h) { return h.y; }));
+      // 品名は品番のすぐ上（「風向ガイド」「（室外機用）」、「リモコンホルダー」「（部品扱い）」）。注の印（※・☆）は除く
+      var names = heads.map(function (h) {
+        return its.filter(function (q) { var dy = q.y - h.y; return dy > 1 && dy <= 20 && q.x >= h.x - 12 && q.x < h.x + 70 && !/^[※☆＊]/.test(q.t); })
+          .sort(function (a, b) { return b.y - a.y || a.x - b.x; }).map(function (q) { return q.t; }).join('');
+      });
+      // 値段の行（「希望小売価格」「（税込）」「17,600円」…「オープン価格」）
+      // リモコンホルダーの品番だけ9下にあるので、いちばん下の品番から80下まで探す（値段の行はそこから50下）
+      var pl = its.filter(function (o) { return /（税込）/.test(o.t) && o.y < hy && hy - o.y < 80; })[0];
+      var vals = heads.map(function () { return ''; });
+      if (pl) {
+        its.forEach(function (o) {
+          if (Math.abs(o.y - pl.y) > 2 || !(/円$/.test(o.t) || /オープン価格/.test(o.t))) return;
+          var ci = colOf(o.x);
+          if (ci >= 0 && !vals[ci]) vals[ci] = o.t;
+        });
+        its.forEach(function (r) {
+          if (!/^[A-Z]{1,2}シリーズ$/.test(r.t) || r.x > colX[0] - 20 || r.y >= pl.y || pl.y - r.y > 120) return;
+          var cells = colX.map(function () { return ''; });
+          its.forEach(function (q) {
+            if (Math.abs(q.y - r.y) > 2 || q.x <= r.x + 20) return;
+            var ci = colOf(q.x);
+            if (ci >= 0) cells[ci] += q.t;
+          });
+          cells.forEach(function (t, ci) {
+            if (!t || /^[ー―－-]+$/.test(t)) return;
+            var fits = /●/.test(t) ? [{ rs: { s: r.t } }] : panaKwFits([r.t], t.replace(/クラス/g, ''));
+            if (!fits.length) return;
+            var open = /オープン/.test(vals[ci]);
+            out.push({ page: page, code: heads[ci].t.replace(/[［］]/g, ''), y: open ? 0 : taxIn(vals[ci]), fits: fits,
+                       name: names[ci] + (open ? '（オープン価格）' : '') });
+          });
+        });
+      }
+    }
+
+    /* ② 寒冷地仕様の防雪フード */
+    its.forEach(function (c) {
+      if (!/^OP-J07[A-Z]{2}$/.test(c.t)) return;
+      var pr = its.filter(function (q) { var dy = c.y - q.y; return /（税込）[\d,]+円/.test(q.t) && dy > 0 && dy <= 32 && q.x >= c.x && q.x - c.x < 60; })
+        .sort(function (a, b) { return (c.y - a.y) - (c.y - b.y); })[0];
+      if (!pr) return;
+      var txt = its.filter(function (q) { return q.y <= c.y + 2 && q.y > pr.y + 1 && q.x > c.x + 10 && q.x < c.x + 128; })
+        .sort(function (a, b) { return b.y - a.y || a.x - b.x; }).map(function (q) { return q.t; }).join('');
+      var fits = [], re = /(ZN|DN)シリーズ([\d.・～〜]+)kWクラス/g, m;
+      while ((m = re.exec(txt))) fits = fits.concat(panaKwFits([m[1] + 'シリーズ'], m[2] + 'kW'));
+      if (!fits.length) return;
+      var lab = its.filter(function (q) { return /防雪フード$/.test(q.t) && q.y > c.y && q.y - c.y < 100 && Math.abs(q.x - c.x - 40) < 40; })
+        .sort(function (a, b) { return a.y - b.y; })[0];
+      out.push({ page: page, code: c.t, y: taxIn(pr.t), fits: fits, name: '室外機用 防雪部材 ' + (lab ? lab.t : '防雪フード') + '（寒冷地仕様用）' });
+    });
+
+    /* ③ 日晴金属の架台・金具（どの機種にも） */
+    its.forEach(function (c) {
+      if (!/^C-[A-Z0-9]+(-[A-Z0-9]+)?$/.test(c.t)) return;
+      var pr = its.filter(function (q) { var dy = c.y - q.y; return /（税込）[\d,]+円/.test(q.t) && dy > 0 && dy <= 14 && q.x >= c.x && q.x - c.x < 60; })[0];
+      if (!pr) return;
+      var lab = its.filter(function (q) { var dy = q.y - c.y; return dy > 30 && dy < 80 && Math.abs(q.x - c.x) <= 10 && /[ぁ-んァ-ヶ一-龥]/.test(q.t) && !/荷重/.test(q.t); })
+        .sort(function (a, b) { return b.y - a.y; }).map(function (q) { return q.t; }).join('');
+      var tail = its.filter(function (q) { return Math.abs(q.y - c.y) <= 2 && q.x > c.x && q.x - c.x < 60 && /^（/.test(q.t); }).map(function (q) { return q.t; }).join('');
+      out.push({ page: page, code: c.t, y: taxIn(pr.t), fits: [{ all: true }], name: '室外機用 日晴金属製 ' + (lab || '架台') + tail });
+    });
+
+    /* ④ シリーズのページの抗菌空清フィルター（品名の字が化けている） */
+    var pageSeries = null;
+    its.forEach(function (c) {
+      if (!/^APS-[A-Z0-9]+$/.test(c.t)) return;
+      var pr = its.filter(function (q) { var dy = c.y - q.y; return /^\d{1,3},\d{3}$/.test(q.t) && dy > 3 && dy <= 12 && q.x - c.x > 20 && q.x - c.x < 60; })[0];
+      if (!pr) return;
+      if (!pageSeries) {
+        var seen = {};
+        pageSeries = genRoomReadPage(items, page).map(function (r) { return r.s; }).filter(function (s) { if (seen[s]) return false; seen[s] = 1; return true; });
+      }
+      if (!pageSeries.length) return;
+      var pc = its.filter(function (q) { return /^\d{10}$/.test(q.t) && Math.abs(q.y - c.y) <= 2 && q.x > c.x; }).map(function (q) { return q.t; })[0];
+      out.push({ page: page, code: c.t, y: Math.round(yen(pr.t) / 1.1), fits: pageSeries.map(function (s) { return { rs: { s: s } }; }),
+                 name: '抗菌空清フィルター' + (pc ? '（部品コード ' + pc + '）' : '') });
+    });
+    return out;
+  }
+
+  function genRoomOptFinish(list) {
+    return optResult(list.filter(function (o) { return o.code; }), 'ゼネラル', 'ルームエアコン（住宅設備用） 別売品');
+  }
+
+  /* --------------------------------------------------------------------
      日立 ルームエアコン（住宅設備用エアコン 2026-3・88ページ）
 
      1台ぶんは列のかたまり（1ページに3列）：
@@ -6345,6 +6550,41 @@
       min: 80,
       readPage: panaRoomOptReadPage,
       finish: panaRoomOptFinish
+    },
+    {
+      id: 'general-room',
+      name: 'ゼネラル（ルームエアコン）',
+      catalog: '住宅設備用カタログ 2026（ノクリア）',
+      size: '20ページ・13MBほど。読み取りは1分かかりません。',
+      howto: [
+        '下のリンクを押すとカタログのPDFが開く',
+        '開いたPDFを保存する（右上の保存ボタン、または右クリック →「名前を付けて保存」）',
+        '保存したPDFを「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://www.generalww.com/jp/resources/pdf/support/downloads/aircon/catalog/2026/ctlg-a674-all-01.pdf',
+      urlNote: '壁掛形（X・Z・NH・W・L・VH・RH・CH と、寒冷地仕様の ZN・DN）を読みます。値段は紙面の税別のまま入ります。オープン価格の機種（X・Z・W・L・ZN・DN）は値段0で入ります。',
+      min: 50,
+      layout: true,
+      readPage: genRoomReadPage,
+      finish: genRoomFinish
+    },
+    {
+      id: 'general-room-opt',
+      name: 'ゼネラル（ルームエアコン別売品）',
+      catalog: '住宅設備用カタログ 2026 の別売品（37ページ）とシリーズのページの別売品',
+      size: '機種と同じPDFでかまいません。20ページ・13MBほど。読み取りは1分かかりません。',
+      kind: 'options',
+      layout: true,
+      howto: [
+        '機種と同じPDFでかまいません',
+        '下のリンクを押すとカタログのPDFが開く。保存する',
+        '保存したPDFを「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://www.generalww.com/jp/resources/pdf/support/downloads/aircon/catalog/2026/ctlg-a674-all-01.pdf',
+      urlNote: '値段は紙面の税込を1.1で割った税抜きで入ります。風向ガイド・無線LANアダプター・かんたんリモコン・リモコンホルダー（付く機種は別売品の表）、寒冷地仕様の防雪フード、日晴金属の架台・金具、抗菌空清フィルターを読みます。',
+      min: 15,
+      readPage: genRoomOptReadPage,
+      finish: genRoomOptFinish
     },
     {
       id: 'mitsubishi',
