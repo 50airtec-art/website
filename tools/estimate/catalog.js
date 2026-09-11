@@ -2873,7 +2873,22 @@
       }
     }
 
-    /* ② 寒冷地仕様の防雪フード */
+    /* ② 寒冷地仕様の防雪フード
+       前面・側面・背面の3列。列の見出し（「前面防雪フード」）は3つが同じ高さに並ぶ。
+       注記（「＊室外機直付け。前面・背面防雪フード」）も「防雪フード」で終わるので、
+       いちばん近いものを取ると側面の列が「背面」になってしまう（2026-09-12に判明）。
+       だから「前面・側面・背面が1つずつ同じ高さに並ぶ行」＝見出しの行だけを見出しとして使う。 */
+    var hoodHeads = (function () {
+      var cand = its.filter(function (q) { return /^(前面|側面|背面)防雪フード$/.test(q.t); });
+      var best = [];
+      cand.forEach(function (q) {
+        var row = cand.filter(function (r) { return Math.abs(r.y - q.y) <= 2; });
+        var kinds = {};
+        row.forEach(function (r) { kinds[r.t.slice(0, 2)] = (kinds[r.t.slice(0, 2)] || 0) + 1; });
+        if (kinds['前面'] === 1 && kinds['側面'] === 1 && kinds['背面'] === 1 && row.length > best.length) best = row;
+      });
+      return best;
+    })();
     its.forEach(function (c) {
       if (!/^OP-J07[A-Z]{2}$/.test(c.t)) return;
       var pr = its.filter(function (q) { var dy = c.y - q.y; return /（税込）[\d,]+円/.test(q.t) && dy > 0 && dy <= 32 && q.x >= c.x && q.x - c.x < 60; })
@@ -2884,7 +2899,10 @@
       var fits = [], re = /(ZN|DN)シリーズ([\d.・～〜]+)kWクラス/g, m;
       while ((m = re.exec(txt))) fits = fits.concat(panaKwFits([m[1] + 'シリーズ'], m[2] + 'kW'));
       if (!fits.length) return;
-      var lab = its.filter(function (q) { return /防雪フード$/.test(q.t) && q.y > c.y && q.y - c.y < 100 && Math.abs(q.x - c.x - 40) < 40; })
+      var lab = hoodHeads.filter(function (q) { return q.y > c.y && Math.abs(q.x - c.x - 40) < 60; })
+        .sort(function (a, b) { return Math.abs(a.x - c.x - 40) - Math.abs(b.x - c.x - 40); })[0];
+      // 見出しの行が見つからないとき（紙面の作りが変わった）だけ、いちばん近いものを使う
+      if (!lab) lab = its.filter(function (q) { return /防雪フード$/.test(q.t) && q.y > c.y && q.y - c.y < 100 && Math.abs(q.x - c.x - 40) < 40; })
         .sort(function (a, b) { return a.y - b.y; })[0];
       out.push({ page: page, code: c.t, y: taxIn(pr.t), fits: fits, name: '室外機用 防雪部材 ' + (lab ? lab.t : '防雪フード') + '（寒冷地仕様用）' });
     });
