@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609111500';
+  var APP_VERSION = '202609121300';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -5442,7 +5442,9 @@
        （2026-09-09、BIGBOSSの指摘） */
     var INCLUDED = [
       { has: x.rm, word: /リモコン/, skip: /ケース|ケーブル|カバー|受光部|ホルダ|架台/, nm: 'リモコン' },
-      { has: x.pm, word: /パネル/,   skip: /フィルタ|スペーサ|カバー|ろ材/,           nm: '化粧パネル' }
+      // ビルトインの化粧グリル・壁埋込の前面グリルも、パネルと同じく「付いてくるもの」
+      // （パナソニックのルームエアコンの合計は CZ-BT10-W 込み。2026-09-12）
+      { has: x.pm, word: /パネル|化粧グリル|前面グリル/, skip: /フィルタ|スペーサ|カバー|ろ材/, nm: '化粧パネル・グリル' }
     ];
     /** 品番から、読み込んである別売品を探す（付いてくるものの定価を知るため） */
     function optByCode(code) {
@@ -5459,9 +5461,12 @@
       var onm = o.name || '';
       INCLUDED.forEach(function (k) {
         if (o.dup || !k.has) return;
-        if (String(o.code) === String(k.has)) {
+        // 付いてくるものが2つのときは「・」でつないである（前面グリルと据付枠「KDG413C10・KKF411B10B」「CZ-BKG22A・CZ-BKF2」）。
+        // 入れ替えの相手は1つ目（グリル）
+        var hasList = String(k.has).split('・');
+        if (hasList.indexOf(String(o.code)) >= 0) {
           o.dup = 'この機種に付いてくるもの';
-          o.dupMsg = 'この機種の値段には、この' + k.nm + '（' + k.has + '）がもう入っています。\n' +
+          o.dupMsg = 'この機種の値段には、この' + k.nm + '（' + o.code + '）がもう入っています。\n' +
                      'そのまま足すと二重取りになります。\n\n' +
                      'それでも明細に入れますか？';
           return;
@@ -5469,9 +5474,9 @@
         if (k.word.test(onm) && !k.skip.test(onm)) {
           o.dup = '入れ替え';
           o.swapKind = k.nm;
-          var inc = optByCode(k.has);
-          o.swapCode = k.has;
-          o.swapName = (inc && inc.name) || k.has;
+          var inc = optByCode(hasList[0]);
+          o.swapCode = hasList[0];
+          o.swapName = (inc && inc.name) || hasList[0];
           o.swapY = inc ? num(inc.y) : 0;
           if (o.swapY > 0) {
             /* 付いてくるものの定価が分かるので、差し引く明細も一緒に入れられる。
@@ -5484,9 +5489,9 @@
                        '　差引　' + (o.y - o.swapY < 0 ? '−' + yen(o.swapY - o.y) : '＋' + yen(o.y - o.swapY)) + '\n\n' +
                        'よろしいですか？';
           } else {
-            o.dupMsg = 'この機種には ' + k.has + ' が付いています。\n' +
+            o.dupMsg = 'この機種には ' + hasList[0] + ' が付いています。\n' +
                        'これに取り替えるなら、差額だけを入れてください。\n' +
-                       '（' + k.has + ' の定価が別売品データに無いので、差し引きは自動でできません）\n\n' +
+                       '（' + hasList[0] + ' の定価が別売品データに無いので、差し引きは自動でできません）\n\n' +
                        'それでも定価 ' + yen(o.y) + ' で入れますか？';
           }
         }
