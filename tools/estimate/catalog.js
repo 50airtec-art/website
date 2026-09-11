@@ -1897,6 +1897,278 @@
   }
 
   /* --------------------------------------------------------------------
+     三菱電機 ルームエアコンの別売部品（住宅設備用総合カタログ 2026-06）
+     44ページ（防雪架台・防雪フード）・55〜57ページ（フリービルトイン形の必要部品）・68〜71ページ（別売部品）。
+     ダイキンのような●の表ではなく、1品ずつ「形名・価格・適用機種」が並び、適用機種は文で書いてある：
+       「本カタログ掲載の全機種」「壁掛形全機種」「FZ・Z・JXV…シリーズ」「MSZ- ZXV2226～ZXV2826」「室外機の高さ550mmの機種」
+     シリーズは形名の頭で見分ける（{cc:'MSZ-FZV'}。マルチ用の室内機「MSZ-2226ZXAS-W-IN」も「ZXAS」で当たる）。
+     室外機の高さや配管の太さのように、機種データに無いことで決まるものは、どの機種にも出して、品名にその条件を書く。
+     値段は税別のまま
+     -------------------------------------------------------------------- */
+  var ME_OPT_CODE = /^(MAC-[A-Z0-9]{3,}|PAC-[A-Z0-9]{3,}|MOKD[A-Z]*-[A-Z0-9-]+|MOPAC-[A-Z0-9-]+|C-[A-Z]{1,4}\d?(?:-L)?)$/;
+  var ME_OPT_SERIES = {
+    FZ: 'MSZ-FZV', Z: 'MSZ-ZXV', FL: 'MSZ-FLV', JXV: 'MSZ-JXV', BXV: 'MSZ-BXV', AXV: 'MSZ-AXV', GV: 'MSZ-GV',
+    VXV: 'MSZ-VXV', HXV: 'MSZ-HXV', NXV: 'MSZ-NXV', KXV: 'MSZ-KXV', ZXAS: 'ZXAS', BXAS: 'BXAS', GXAS: 'GXAS',
+    RX: 'MLZ-RX', GX: 'MLZ-GX', HX: 'MLZ-HX', M: 'MLZ-M', W: 'MLZ-W', HW: 'MLZ-HW', K: 'MFZ-K', HK: 'MFZ-HK'
+  };
+
+  /** 適用機種の文から「付く機種」を作る。作れなかったら fits は空 */
+  function meOptFits(text) {
+    var t = text.replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); })
+      .replace(/([ぁ-んァ-ヶー一-龥])\s+(?=[ぁ-んァ-ヶー一-龥])/g, '$1')
+      .replace(/シ\s*リ\s*ー\s*ズ/g, 'シリーズ').replace(/\s*・\s*/g, '・').replace(/([A-Z])\s+シリーズ/g, '$1シリーズ')
+      // 「ズバ暖シリーズ・MXZ-6026AS~10226ASを除く全機種」：除く部分は消して読む（残るのは「全機種」）
+      .replace(/[^、（(]*を除く/g, ' ');
+    var fits = [];
+    function add(f) { var k = JSON.stringify(f); if (!fits.some(function (g) { return JSON.stringify(g) === k; })) fits.push(f); }
+    if (/掲載の全機種|すべての室外機|(^|[^形\s])\s*全機種/.test(t)) add({ all: true });
+    if (/壁掛形(・床置形)?全機種/.test(t)) add({ type: '壁掛形' });
+    if (/床置形全機種/.test(t)) add({ type: '床置形' });
+    var m, re = /((?:[A-Z]+・)*[A-Z]+)シリーズ/g;
+    while ((m = re.exec(t))) m[1].split('・').forEach(function (k) { if (ME_OPT_SERIES[k]) add({ cc: ME_OPT_SERIES[k] }); });
+    if (/壁埋込形/.test(t)) add({ cc: 'MTZ-' });
+    if (/フリービルトイン形/.test(t)) add({ cc: 'MBZ-' });
+    // 形名の範囲（「MSZ- ZXV2226～ZXV2826」「MXZ -6826AS～10226AS」）と形名そのもの（「FLV2821」）
+    var pre = '', r2 = /(MSZ|MLZ|MFZ|MTZ|MBZ|MXZ|MUZ|MUFZ|MULZ|MUTZ)\s*-\s*|([A-Z]{0,3})(\d{4,5})(S|AS)?(?:\s*[～~〜]\s*([A-Z]{0,3})(\d{4,5})(S|AS)?)?/g;
+    while ((m = r2.exec(t))) {
+      if (m[1]) { pre = m[1] + '-'; continue; }
+      if (!pre || !m[3]) continue;
+      var lead = m[2], d1 = m[3], t1 = m[4] || '';
+      if (m[6]) {
+        var d2 = m[6], t2 = m[7] || '';
+        [t1, t2].filter(function (v, i, a) { return a.indexOf(v) === i; }).forEach(function (tail) {
+          add({ rm: { p: pre + lead, t: d1.slice(-2) + tail, r: true, c: [Number(d1.slice(0, -2)), Number(d2.slice(0, -2))] } });
+        });
+      } else {
+        add({ mc: pre + lead + d1 + t1 });
+      }
+    }
+    return fits;
+  }
+
+  function meRoomOptReadPage(items, page) {
+    // 取り消し線のような字（U+0336）がくっついて来る文字がある（68ページ「MAC-398KT̶」「円̶」）。消して読む
+    function clean(t) { return String(t).replace(/[\u0000-\u001f\u0336]/g, ' ').replace(/\s+/g, ' ').trim(); }
+    var its = items.map(function (o) { return { s: clean(o.s), x: o.x, y: o.y, w: o.w || 0 }; }).filter(function (o) { return o.s; });
+    // 2行に割れた形名（44ページ「MOKDNA-」「R01-G-K-02」）をつなぐ
+    its.forEach(function (o) {
+      if (!/^[A-Z]{3,}-$/.test(o.s)) return;
+      var nx = its.filter(function (q) { return q !== o && Math.abs(q.x - o.x) <= 4 && o.y - q.y > 2 && o.y - q.y < 8 && /^[A-Z0-9][A-Z0-9-]+$/.test(q.s); })[0];
+      if (nx) { o.s = o.s + nx.s; nx.s = ''; }
+    });
+    its = its.filter(function (o) { return o.s; });
+    var codes = its.filter(function (o) { return ME_OPT_CODE.test(o.s); });
+    if (!codes.length) return [];
+    var all = its.map(function (o) { return o.s; }).join(' ');
+    if (!/価格/.test(all)) return [];
+    /* 読むのは別売部品のページだけ。53ページ（壁埋込形の前面グリルの写真の説明）・66ページ（旧製品からのグリル対応表）・
+       73ページ（システムコントロールの一覧。PAR-48MA などの行の値段を MAC-333IF に付けた）は読まない */
+    if (!/防雪フード|防雪架台|必要部品価格|本カタログ掲載機種用|室内機用部品|床置形用部品|スライド金具|シリーズ共通|■Mシリーズ/.test(all)) return [];
+
+    function money(o) {
+      var m = o.s.match(/^([\d,]{3,})\s*円/);
+      if (m) return yen(m[1]);
+      if (/^[\d,]{3,}$/.test(o.s) && its.some(function (q) { return /^円/.test(q.s) && Math.abs(q.y - o.y) < 2 && q.x > o.x && q.x - o.x < 45; })) return yen(o.s);
+      return 0;
+    }
+    function isOpen(o) { return /^オープン価格/.test(o.s); }
+    var prices = its.filter(function (o) { return money(o) > 0 || isOpen(o); });
+    var kaku = prices.filter(function (p) {
+      return its.some(function (q) { return q.s === '各' && Math.abs(q.y - p.y) < 2 && p.x > q.x && p.x - q.x < 20; });
+    });
+    // その値段の持ち主＝値段より左の品番のうち、いちばん近い行の、いちばん右のもの
+    function owner(p) {
+      var best = null, bd = 1e9, bx = 1e9;
+      codes.forEach(function (d) {
+        if (d.x >= p.x || p.x - d.x > 480) return;
+        var dd = Math.abs(d.y - p.y), dx = p.x - d.x;
+        if (dd < bd - 0.5 || (Math.abs(dd - bd) <= 0.5 && dx < bx)) { bd = dd; bx = dx; best = d; }
+      });
+      return best;
+    }
+    // 注記の行（左に「＊」「※」で始まる字がある行）の字
+    var noteHeads = its.filter(function (o) { return /^[＊●]|^※[^\d]/.test(o.s); });
+    function onNoteLine(o) { return noteHeads.some(function (n) { return Math.abs(n.y - o.y) < 1.8 && n.x <= o.x; }); }
+    // 形名の頭だけの字（「MSZ-」「MLZ-」）。次の行の範囲に真上から付く
+    var pres = its.filter(function (o) { return /^(MSZ|MLZ|MFZ|MTZ|MBZ|MXZ|MUZ|MUFZ|MULZ|MUTZ)\s*-$/.test(o.s); });
+    // 行ごとにそろえて、左から並べる（字の高さが少しずつ違うと「ーズ リ FLシ」の順になった）
+    function inLines(arr) {
+      var srt = arr.slice().sort(function (a, b) { return b.y - a.y; }), ls = [], cur = null;
+      srt.forEach(function (o) { if (!cur || Math.abs(cur.y - o.y) > 1.8) { cur = { y: o.y, it: [] }; ls.push(cur); } cur.it.push(o); });
+      return ls.map(function (L) { return L.it.sort(function (a, b) { return a.x - b.x; }).map(function (o) { return o.s; }).join(' '); }).join(' ');
+    }
+    function tidy(t) {
+      return t.replace(/※\d*|注\s*[\d,]*/g, ' ').replace(/([ぁ-んァ-ヶー一-龥（）])\s+(?=[ぁ-んァ-ヶー一-龥（）])/g, '$1')
+        .replace(/\s+/g, ' ').trim();
+    }
+    // 44ページの防雪架台・防雪フードは、適用機種が右の欄にまとめて書いてある（①〜④の組）。ページの中の形名の範囲を全部まとめて使う
+    var snowFits = null;
+    if (/防雪フード|防雪架台/.test(all)) {
+      snowFits = meOptFits(its.filter(function (o) { return o.x >= 470; }).sort(function (a, b) { return b.y - a.y || a.x - b.x; })
+        .map(function (o) { return o.s; }).join(' ')).filter(function (f) { return f.rm || f.mc; });
+    }
+
+    var out = [];
+    codes.forEach(function (c) {
+      // 同じ行の、次の品番の手前まで
+      var nextX = 1e9, prevX = -1e9;
+      codes.forEach(function (d) {
+        if (d === c || Math.abs(d.y - c.y) >= 3) return;
+        if (d.x > c.x && d.x < nextX) nextX = d.x;
+        if (d.x < c.x && d.x > prevX) prevX = d.x;
+      });
+      // 右どなりの表の品番の列（上下30の中）。そこより右は、よその表
+      var rightX = 1e9;
+      codes.forEach(function (d) { if (d.x > c.x + 20 && Math.abs(d.y - c.y) < 30 && d.x < rightX) rightX = d.x; });
+      var edge = Math.min(nextX, rightX);
+      // 1) 同じ行の値段（その値段にいちばん近い品番が c のときだけ）
+      var pr = prices.filter(function (p) {
+        return p.x > c.x && p.x < edge && p.x - c.x < 480 && Math.abs(p.y - c.y) <= 5 && kaku.indexOf(p) < 0 && owner(p) === c;
+      }).sort(function (a, b) { return Math.abs(a.y - c.y) - Math.abs(b.y - c.y) || a.x - b.x; })[0];
+      // 2) 「各 15,000 円」：2行ぶんのまん中に1つ（69ページ 吹出ガイド）
+      if (!pr) pr = kaku.filter(function (p) { return p.x > c.x && p.x < edge && Math.abs(p.y - c.y) <= 14; })
+        .sort(function (a, b) { return Math.abs(a.y - c.y) - Math.abs(b.y - c.y); })[0];
+      // 3) 背の高いマス：品番の下、同じ列の次の品番の上にある値段（71ページ MAC-A20JP、68ページ MAC-645BH）
+      if (!pr) {
+        var below = codes.filter(function (d) { return d !== c && Math.abs(d.x - c.x) < 30 && d.y < c.y; }).sort(function (a, b) { return b.y - a.y; })[0];
+        var lo = below ? below.y + 2 : c.y - 60;
+        pr = prices.filter(function (p) {
+          return p.x > c.x + 100 && p.x < edge && p.y < c.y && p.y > lo && !codes.some(function (d) { return Math.abs(d.y - p.y) < 3.5; });
+        }).sort(function (a, b) { return b.y - a.y; })[0];
+      }
+      // 4) まとめて1つの「各」やオープン価格（68ページ 200V機種用、ヤモリガード、69ページ 無線LANアダプター）
+      if (!pr) pr = prices.filter(function (p) { return p.x > c.x && p.x < edge && Math.abs(p.y - c.y) <= 45 && (kaku.indexOf(p) >= 0 || isOpen(p)); })
+        .sort(function (a, b) { return Math.abs(a.y - c.y) - Math.abs(b.y - c.y); })[0];
+      if (!pr) return;
+      var y = isOpen(pr) ? 0 : money(pr);
+
+      // 品名：上の「■見出し」＋同じ行の左の名前
+      var head = its.filter(function (o) { return /^■/.test(o.s) && o.y > c.y && o.y - c.y < 300 && o.x <= c.x + 30 && c.x - o.x < 420; })
+        .sort(function (a, b) { return (a.y - c.y + (c.x - a.x > 240 ? 150 : 0)) - (b.y - c.y + (c.x - b.x > 240 ? 150 : 0)); })[0];
+      var hname = head ? head.s.replace(/^■\s*/, '').replace(/（[^）]*ページ[^）]*）/, '').trim() : '';
+      /* 左の名前は、左どなりの表の品番（上下30の中）より自分に近い字だけ。
+         68ページのヤモリガードの右の表（MAC-760HK）が、左の表の適用機種「高さ550・630mmの機種」を品名にしていた */
+      var leftX = c.x - 260;
+      codes.forEach(function (d) { if (d.x < c.x - 20 && Math.abs(d.y - c.y) < 30) leftX = Math.max(leftX, (d.x + c.x) / 2); });
+      var left = its.filter(function (o) {
+        return o.x < c.x - 2 && o.x > leftX && Math.abs(o.y - c.y) <= 16 && !ME_OPT_CODE.test(o.s) && !onNoteLine(o) &&
+          !/でき$|できます|可能$|ます$|まで|最大|^[仕様]$|：|、$/.test(o.s) &&
+          !/^[Ⓐ-ⓩA-Z]$|^[\d,.]+$|^各$|^NEW$|^在庫僅少$|円|税別|（MAC-|（PAC-|。|^注|^※|^＊|^■|^:|^【|シリーズ|^・$|[A-Z]シ$|^ーズ|機種|^［|φ|^[A-Z]{1,5}$|^[／/×]$/.test(o.s) &&
+          !/^(形|名|適|用|機|種|形名|品名|入り数|適用機種|価格|容量|構成部品|カラー|交換のめやす|吹出可能方向|仕様|後継形名|従来形名|耐荷重|用途|型式|品|名（枚数）)$/.test(o.s) &&
+          !(money(o) > 0);
+      });
+      var rname = '', md = 99;
+      if (left.length) {
+        md = Math.min.apply(null, left.map(function (o) { return Math.abs(o.y - c.y); }));
+        // いちばん近い字の側（上か下か）だけ
+        var near0 = left.filter(function (o) { return Math.abs(o.y - c.y) === md; })[0];
+        var side = near0.y >= c.y ? 1 : -1;
+        var line = left.filter(function (o) { return Math.abs(Math.abs(o.y - c.y) - md) <= 2.5 && (Math.abs(o.y - c.y) < 2 || (o.y >= c.y ? 1 : -1) === side); });
+        // シリーズの切れはし（「リーズ、」「リ」）は消す
+        rname = tidy(inLines(line)).replace(/シ?リーズ、?/g, '').replace(/\s*リ$/, '').trim()
+          // 閉じていないかっこ（「（スマー」）と、開いていないかっこ（「2m）」の「）」）
+          .replace(/（[^）]*$/, '').replace(/^([^（]*)）/, '$1').trim();
+      }
+      var name = tidy([hname, rname].filter(Boolean).join(' ')) || '別売部品';
+      // 55〜57ページの一覧の見出し（「別売部品一覧」「必要部品価格」）は品名にしない
+      if (/^(別売部品一覧|必要部品価格)$/.test(hname)) name = rname ? 'フリービルトイン用 ' + rname : 'フリービルトイン用 別売部品';
+      // 44ページ：防雪フードは材質、防雪架台は地域で見分ける（形名の末尾・頭で決まる）
+      if (/^MOPAC-/.test(c.s)) {
+        var mat = /-BSG-\d+$/.test(c.s) ? '鋼板製・耐重塩害仕様' : /-S-\d+$/.test(c.s) ? 'ステンレス製' : '鋼板製・標準／耐塩害仕様';
+        name = 'ズバ暖霧ヶ峰室外機専用防雪フード（' + mat + '）' + (rname ? ' ' + rname : '');
+      }
+      if (/^MOKD/.test(c.s)) {
+        var area = { NA: '降雪量の少ない地域向け', WA: '降雪量の多い地域向け', SA: '壁面設置用' }[c.s.slice(4, 6)] || '';
+        name = 'ズバ暖霧ヶ峰室外機専用防雪架台' + (area ? '（' + area + '）' : '') + ' ' + c.s.replace(/^MOKD[A-Z]+-/, '').replace(/-.*$/, '');
+      }
+
+      // 適用機種：右の、この品番がいちばん近い行（同じ列の品番どうしで比べる）
+      var mine = its.filter(function (o) {
+        if (o.x <= c.x + 25 || o.x >= Math.min(edge, c.x + 480) || o === pr) return false;
+        if (money(o) > 0 || /^各$|^円|税別|価格|^オープン価格|。|同梱|^＊|^※|^■|^【|くださ|ご使用|お使い|できま|^NEW$/.test(o.s) || ME_OPT_CODE.test(o.s)) return false;
+        if (onNoteLine(o)) return false;
+        if (/^(形|名|適|用|機|種|形名|品名|入り数|適用機種|容量|構成部品|カラー|交換のめやす|吹出可能方向|仕様|後継形名|従来形名|耐荷重)$/.test(o.s)) return false;
+        // この品番がいちばん近い（2つの品番のまん中なら両方）
+        return true;
+      });
+      /* 背の高いマス（68ページのヒーターの表）：行を8.5より広いすき間でかたまりに分け、
+         かたまりの中に同じ列の品番が1つだけなら、その品番のもの。そうでなければ、いちばん近い品番（まん中なら両方） */
+      var colCodes = codes.filter(function (d) { return Math.abs(d.x - c.x) < 30; });
+      var ysDesc = mine.map(function (o) { return o.y; }).sort(function (a, b) { return b - a; });
+      var blocks = [];
+      ysDesc.forEach(function (y) { var b = blocks[blocks.length - 1]; if (b && b.lo - y <= 8.5) b.lo = y; else blocks.push({ hi: y, lo: y }); });
+      mine = mine.filter(function (o) {
+        var b = blocks.filter(function (k) { return o.y <= k.hi && o.y >= k.lo; })[0];
+        var inB = b ? colCodes.filter(function (d) { return d.y <= b.hi + 3 && d.y >= b.lo - 3; }) : [];
+        if (inB.length === 1) return inB[0] === c;
+        var nd = 1e9, dc = 1e9;
+        colCodes.forEach(function (d) { var dd = Math.abs(d.y - o.y); if (dd < nd) nd = dd; if (d === c) dc = dd; });
+        return dc <= nd + 1.5 && dc <= 40;
+      });
+      mine = mine.map(function (o) {
+        if (!/^[A-Z]{0,3}\d{4}/.test(o.s)) return o;
+        var pf = pres.filter(function (q) { return Math.abs(q.x - o.x) <= 14 && q.y - o.y > 2 && q.y - o.y < 30; })
+          .sort(function (a, b) { return a.y - b.y; })[0];
+        return pf ? { s: pf.s.replace(/\s/g, '') + o.s, x: o.x, y: o.y, w: o.w } : o;
+      });
+      var cond = tidy(inLines(mine));
+      var fits = snowFits && /^MO/.test(c.s) ? snowFits.slice() : meOptFits(cond);
+      // 「室外機の高さ550mmの機種」「液管φ6.35、ガス管φ9.52の機種」の言い方があれば、それだけを条件にする
+      // 条件の言い方（「室外機の高さ550mmの機種」「液管φ6.35、ガス管φ9.52の機種」「W840×H802×D320（mm）を除いた室外機」）
+      var kisyu = (cond.replace(/\s+/g, '').match(/[^。：]*?(の機種|室外機(?!の))/g) || []).map(function (k) {
+        var m0 = k.match(/(室外機の高さ|下記以外の液管|液管|システムマルチ|すべて|高さ\d|幅\d|W\d).*$/);
+        return m0 ? m0[0] : '';
+      }).filter(Boolean);
+      if (!fits.length && kisyu.length) cond = kisyu.join('・');
+      /* その形の機種だけに付くページの区切り（70ページ「床置形用部品」「壁埋込形用部品」「フリービルトイン形用部品」、
+         55〜57ページのフリービルトイン形の必要部品） */
+      var sec = its.filter(function (o) { return /^(床置形|壁埋込形|フリービルトイン形)用部品$/.test(o.s) && o.y > c.y && o.x < c.x + 10; })
+        .sort(function (a, b) { return a.y - b.y; })[0];
+      var secFit = sec ? { '床置形': 'MFZ-', '壁埋込形': 'MTZ-', 'フリービルトイン形': 'MBZ-' }[sec.s.replace(/用部品$/, '')] : (/必要部品価格/.test(all) ? 'MBZ-' : '');
+      if (!fits.length && secFit) { fits = [{ cc: secFit }]; cond = ''; }
+      /* 化粧パネルの表（49〜51・60・61ページ）は見出し「RX・GX・HXシリーズ共通」「Mシリーズ」が適用機種。
+         色は形名の末尾で決まる（PW ホワイト・PB ベージュ・PM 板目・PT 柾目） */
+      var headFits = /シリーズ共通$|^[A-Z・]+シリーズ$/.test(hname) ? meOptFits(hname) : [];
+      if (headFits.length) {
+        fits = headFits;
+        var col = { PW: 'ホワイト', PB: 'ベージュ', PM: '板目', PT: '柾目' }[c.s.slice(-2)] || '';
+        name = '化粧パネル' + (col ? '（' + col + '）' : '') + '　' + hname;
+        cond = '';
+      }
+      out.push({ page: page, code: c.s, name: name, y: y, fits: fits, named: !!rname, md: rname ? md : 99,
+                 cond: fits.length ? '' : cond.slice(0, 40), mates: codes.filter(function (d) { return d !== c && Math.abs(d.y - c.y) < 3; }).map(function (d) { return d.s; }) });
+    });
+    return out;
+  }
+
+  /** 付く機種が作れなかった品は、同じ行のほかの品（色違い・材質違い）から借りる。それでも無ければ、どの機種にも出して品名に条件を書く */
+  function meRoomOptFinish(list) {
+    var byCode = {}, byName = {};
+    list.forEach(function (o) {
+      if (!o.fits.length) return;
+      byCode[o.code] = (byCode[o.code] || []).concat(o.fits);
+      var k = o.page + '｜' + o.name;
+      byName[k] = (byName[k] || []).concat(o.fits);
+    });
+    list.forEach(function (o) {
+      if (o.fits.length) return;
+      /* 自分の条件（「室外機の高さ538mmの機種」「…φ9.52の機種」）がある品は借りない。
+         69ページの吹出ガイドが、同じ品名のMXZ用の品から付く機種を借りていた */
+      if (/の機種|室外機|φ/.test(o.cond || '')) { o.fits = [{ all: true }]; o.name += '（' + o.cond + '）'; return; }
+      (o.mates || []).forEach(function (m) { (byCode[m] || []).forEach(function (f) { o.fits.push(f); }); });
+      // 同じページの同じ品名（色違い：71ページ MAC-L11WS ホワイト／L12BS ベージュ）から借りる
+      if (!o.fits.length) (byName[o.page + '｜' + o.name] || []).forEach(function (f) { o.fits.push(f); });
+      if (o.fits.length) { o.cond = ''; return; }
+      o.fits = [{ all: true }];
+      if (o.cond) o.name += '（' + o.cond + '）';
+    });
+    // 同じ形名が何か所にもあるとき（55〜57ページの必要部品の表と品名の表）は、行に名前のある方を先に
+    var ok = list.slice().sort(function (a, b) { return (b.named ? 1 : 0) - (a.named ? 1 : 0) || a.md - b.md || a.name.length - b.name.length; })
+      .map(function (o) { return { page: o.page, code: o.code, name: o.name, y: o.y, fits: o.fits }; });
+    return optResult(ok, '三菱電機', 'ルームエアコン（住宅設備用） 別売品');
+  }
+
+  /* --------------------------------------------------------------------
      三菱電機
      Mr.SLIM（店舗・事務所用パッケージエアコン）
 
@@ -4310,6 +4582,24 @@
       finish: meRoomFinish
     },
     {
+      id: 'mitsubishi-room-opt',
+      name: '三菱電機（ルームエアコン別売品）',
+      catalog: '住宅設備用総合カタログ の別売部品（44・55〜57・67〜70ページ）',
+      size: '機種と同じPDFでかまいません。100ページ・79MBほど。読み取りに2分ほどかかります。',
+      kind: 'options',
+      layout: true,
+      howto: [
+        '機種と同じPDFでかまいません',
+        '下のリンクを押すとカタログのPDFが開く。保存する',
+        '保存したPDFを「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://dl.mitsubishielectric.co.jp/dl/ldg/wink/wink_doc/contents/doc/WEB_CATA/S1795CB073D/data/target.pdf',
+      urlNote: '値段は紙面の税別のまま入ります。室外機の高さや配管の太さで決まる部品は、どの機種にも出して品名に条件を書きます。業務用（Mr.SLIM）の別売品とは別に入ります。',
+      min: 80,
+      readPage: meRoomOptReadPage,
+      finish: meRoomOptFinish
+    },
+    {
       id: 'mitsubishi',
       name: '三菱電機',
       catalog: 'Mr.SLIM の機種データ（価格つき）',
@@ -4875,6 +5165,8 @@
     if (fit.all) return true;
     if (fit.rm) return [model.m, model.om, model.im].some(function (c) { return roomCodeIn(fit.rm, c); });
     if (fit.mc) return [model.m, model.om, model.im].some(function (c) { return roomCodeIs(fit.mc, c); });
+    // 形名の頭（三菱のルームエアコン「MSZ-FZV」「MLZ-RX」、マルチ用室内機の「ZXAS」）
+    if (fit.cc) return [model.m, model.im].some(function (c) { return String(c || '').indexOf(fit.cc) >= 0; });
     if (fit.im) return imInRange(fit.im, model.im);
     if (fit.type && !looseSame(fit.type, model.i)) return false;
     if (fit.series && !looseSame(fit.series, model.s)) return false;
