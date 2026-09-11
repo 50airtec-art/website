@@ -1891,6 +1891,476 @@
   }
 
   /* --------------------------------------------------------------------
+     日立 ルームエアコンの別売品（住宅設備用エアコン 2026-3 の紙面71〜76ページ）
+
+     品物は「カード」（品名・形名・希望小売価格・税抜価格）。値段は
+       「（税抜価格2,000円）」…そのまま／「990 円（税込）」だけの品…÷1.1／「オープン価格」…0
+     付く機種の書かれ方は5つ
+       ① 71ページの「適用一覧表」……行＝シリーズ、列＝形名、●で付く
+       ② 76ページの「据付部品適用一覧表」……行＝機種の形名の並び、列＝形名（「SP-」「BT-2」と縦に割れる）
+       ③ 76ページの防雪フード……機種の並びに番号（1・2、3・4…）、フードの図にも番号。奇数＝標準、偶数＝ステンレス
+       ④ 文……「［適用機種］AJシリーズ・…」「本カタログ掲載のルームエアコンに使用できます」、表の行の左の「XJシリーズ・…」
+       ⑤ ドレンアップキットは「P.53-56のメリット一覧表で『ドレンアップキット対応』の機種」……53〜56ページの表の●
+     シリーズは形名の頭で当てる（{re}）。2025年度の機種は形名の年が25なので、「2025年度」と書いてあれば25で当てる
+     -------------------------------------------------------------------- */
+  var HI_OPT_CODE = /^((?:SP|HA|PSC)-[A-Z0-9]+(?:-[A-Z0-9]+)*|RAC-N\d{2}S\d{3})/;
+  var HI_WALL = ['XJ', 'ZJ', 'VJ', 'VL', 'MJ', 'AJ', 'BJ', 'XK', 'RK'];
+  var HI_SERIES_RE = {
+    FD: '^RAF-D', PK: '^RAP-K', PS: '^RAP-S', PA: '^RAP-A', JA: '^RAJ-A',
+    MSE: '^RAM-SE', MSA: '^RAM-SA', MPS: '^RAM-PS', MPA: '^RAM-PA', MJA: '^RAM-JA',
+    AJE: '^RAS-AJ\\d{4}[SD]E', AJJ: '^RAS-AJ\\d{4}[SD]J'
+  };
+
+  /** 「AJシリーズ・2025年度 AJシリーズ、一方向天井カセットタイプPKシリーズ…」→ [{re}]。
+      「2025年度VJ・VLシリーズ」の2025年度は次の「シリーズ」まで、「2025年度モデル：」は後ろ全部 */
+  function hiSeriesFits(text) {
+    // 形名（「（RAF-D36F」「SP-RC4用」）は先に消す。「D36FXJシリーズ」のようにくっつくと XJ が読めない
+    //（形名は「英字・数字・英字1つ・数字1つ」まで。「RAF-D36F」「XJ…」がくっついても XJ は残す）
+    var t = String(text).replace(/\s+/g, '').replace(/[A-Z]{2,4}-[A-Z]*\d+[A-Z]?\d?/g, '・'), out = [], seen = {};
+    var re = /2025年度(モデル[：:])?|([A-Z]{2,3})(?=・|シリーズ)|シリーズ/g, m, once = false, rest = false;
+    while ((m = re.exec(t))) {
+      if (m[0].indexOf('2025年度') === 0) { if (m[1]) rest = true; else once = true; continue; }
+      if (m[0] === 'シリーズ') { once = false; continue; }
+      var r = HI_WALL.indexOf(m[2]) >= 0 ? '^RAS-' + m[2] + '\\d{2}' + ((rest || once) ? '25' : '26') : HI_SERIES_RE[m[2]];
+      if (r && !seen[r]) { seen[r] = 1; out.push({ re: r }); }
+    }
+    return out;
+  }
+
+  /** 「RAS-XJ2226S・XJ2526S…」「RAF-D36F・D40F2・D50F2、」→ 形名の並び。頭（RAS-）は前のものを受け継ぐ */
+  function hiCodeList(text, prefix, st) {
+    var out = [];
+    st = st || {};
+    if (st.p) prefix = st.p;
+    String(text).replace(/\s+/g, '').replace(/[（）()、用]/g, '・').split('・').forEach(function (t) {
+      var m = t.match(/^((?:RAS|RAF|RAP|RAJ|RAM|RAC)-)?([A-Z0-9]*\d[A-Z0-9]*)$/);
+      if (!m || !/[A-Z]/.test(m[2]) || m[2].length < 4) return;
+      if (m[1]) prefix = m[1];
+      if (prefix) out.push(prefix + m[2]);
+    });
+    st.p = prefix;
+    return out;
+  }
+
+  function hiNameLike(t) {
+    t = String(t || '');
+    if (t.length < 3 || !/[ぁ-んァ-ヶ一-龥]/.test(t)) return false;
+    if (/^[※＊（(〈●◎☆★・]/.test(t)) return false;
+    if (/\d/.test(t.replace(/（[^）]*）/g, ''))) return false;
+    if (/(SP|HA|PSC|RA[A-Z])-/.test(t)) return false;
+    return !/シリーズ|据付例|寸法|希望小売価格|税抜|税込|部品番号|適用|ください|です|ます|。|、|について|価格|取扱店|イメージ|注意|付属品|用意|できます/.test(t);
+  }
+
+  function hiRoomOptReadPage(items, page) {
+    function clean(t) { return String(t).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim(); }
+    function nos(t) { return String(t).replace(/\s+/g, ''); }
+    var raw = items.map(function (o) { return { s: clean(o.s), x: o.x, y: o.y, w: o.w || 0 }; });
+    var blanks = raw.filter(function (o) { return !o.s; });     // 字の間のすき間（見えない字）
+    var its = [], seenIt = {};
+    raw.forEach(function (o) {                                   // 53〜56ページは同じ字が2回ずつ入っている
+      if (!o.s) return;
+      var key = o.s + '|' + o.x.toFixed(1) + '|' + o.y.toFixed(1);
+      if (seenIt[key]) return;
+      seenIt[key] = 1; its.push(o);
+    });
+    var all = nos(its.map(function (o) { return o.s; }).join(' '));
+    var out = [];
+    function endX(o) { return o.x + (o.w || nos(o.s).length * 7); }
+
+    // 行と、行の中ですき間なく続くかたまり（seg）。見えない字をはさんで3以上あいたら切る
+    var lines = [];
+    its.slice().sort(function (a, b) { return b.y - a.y || a.x - b.x; }).forEach(function (o) {
+      for (var i = 0; i < lines.length; i++) if (Math.abs(lines[i].y - o.y) <= 1.5) { lines[i].its.push(o); return; }
+      lines.push({ y: o.y, its: [o] });
+    });
+    var segs = [];
+    lines.forEach(function (L) {
+      L.its.sort(function (a, b) { return a.x - b.x; });
+      var cur = null;
+      L.its.forEach(function (o) {
+        var gap = cur ? o.x - cur.x2 : 99;
+        var sp = cur && gap >= 3 && blanks.some(function (b) { return Math.abs(b.y - L.y) <= 1.5 && b.x >= cur.x2 - 1 && b.x <= o.x + 1; });
+        if (cur && (gap < 3 || (gap <= 8 && !sp))) { cur.its.push(o); cur.x2 = Math.max(cur.x2, endX(o)); o.seg = cur; return; }
+        cur = { y: L.y, x: o.x, x2: endX(o), its: [o] }; o.seg = cur; segs.push(cur);
+      });
+    });
+    segs.forEach(function (g) { g.t = nos(g.its.map(function (o) { return o.s; }).join('')); });
+    function lineOf(o) { for (var i = 0; i < lines.length; i++) if (lines[i].its.indexOf(o) >= 0) return lines[i]; return { its: [o], y: o.y }; }
+
+    // 同じ x の縦のまとまり（段落）。文の段落（。・シリーズ…）の中の字は品名にしない
+    var paras = [];
+    segs.slice().sort(function (a, b) { return b.y - a.y; }).forEach(function (g) {
+      for (var i = 0; i < paras.length; i++) {
+        var P = paras[i];
+        if (Math.abs(P.x - g.x) <= 4 && P.yb - g.y > 0 && P.yb - g.y <= 10.5) { P.segs.push(g); P.yb = g.y; g.para = P; return; }
+      }
+      var NP = { x: g.x, yt: g.y, yb: g.y, segs: [g] }; g.para = NP; paras.push(NP);
+    });
+    paras.forEach(function (P) {
+      P.t = P.segs.map(function (g) { return g.t; }).join('');
+      P.stop = P.segs.some(function (g) { return /シリーズ|。|ください|です|ます|できます/.test(g.t); });
+    });
+
+    /* ---- ⑤ メリット一覧表（53〜56ページ）。「ドレン（アップキット対応）」の列の●と、行のシリーズ名 ---- */
+    if (/シリーズ名/.test(all)) {
+      var mrows = [];
+      lines.forEach(function (L) {
+        var t = nos(L.its.filter(function (o) { return o.x < 330; }).map(function (o) { return o.s; }).join(''));
+        var f = /シリーズ/.test(t) ? hiSeriesFits(t) : [];
+        if (f.length) mrows.push({ y: L.y, fits: f });
+      });
+      if (mrows.length) out.push({ page: page, meritRows: mrows });
+    }
+    its.forEach(function (h) {
+      if (!/^ドレン(アップ)?$/.test(nos(h.s)) || h.y < 600) return;
+      // 56ページは表が2つあり、見出しが下の表の上にある。同じ列の●は高さを問わず採る
+      var ys = its.filter(function (o) { return /^●/.test(o.s) && Math.abs(o.x - h.x) <= 14; }).map(function (o) { return o.y; });
+      if (ys.length >= 3) out.push({ page: page, meritMarks: ys });
+    });
+
+    /* ---- ① 適用一覧表（71ページ）：行＝シリーズ、列＝形名 ---- */
+    var tt = segs.filter(function (g) { return g.t === '適用一覧表'; })[0];
+    if (tt) {
+      var hl = lines.filter(function (L) { return L.y < tt.y && tt.y - L.y <= 20 && L.its.filter(function (o) { return /^SP-/.test(o.s); }).length >= 3; })[0];
+      if (hl) {
+        var hdr = [];
+        hl.its.forEach(function (o, i) {
+          if (!/^SP-/.test(o.s)) return;
+          var code = nos(o.s), nx = hl.its[i + 1];
+          if (nx && /^[A-Z0-9]{1,3}$/.test(nos(nx.s)) && nx.x - o.x < 30) code += nos(nx.s);   // 「SP-VCF1」「1W」
+          hdr.push({ code: code, x: o.x });
+        });
+        var minX = Math.min.apply(null, hdr.map(function (h) { return h.x; }));
+        var rows1 = [];
+        lines.forEach(function (L) {
+          if (L.y >= hl.y - 3) return;
+          var t = nos(L.its.filter(function (o) { return o.x < minX - 5; }).map(function (o) { return o.s; }).join(''));
+          var f = /シリーズ/.test(t) ? hiSeriesFits(t) : [];
+          if (f.length) rows1.push({ y: L.y, fits: f });
+        });
+        its.forEach(function (d) {
+          if (!/^●/.test(d.s) || d.y >= hl.y - 3) return;
+          var row = rows1.filter(function (r) { return Math.abs(r.y - d.y) <= 5; }).sort(function (a, b) { return Math.abs(a.y - d.y) - Math.abs(b.y - d.y); })[0];
+          var col = hdr.filter(function (h) { return h.x <= d.x + 5 && d.x - h.x <= 25; }).sort(function (a, b) { return b.x - a.x; })[0];
+          if (row && col) out.push({ page: page, code: col.code, fits: row.fits });
+        });
+      }
+    }
+
+    /* ---- ② 据付部品適用一覧表（76ページ上）と ③ 防雪フード（76ページ下） ---- */
+    var hood = its.filter(function (o) {
+      return /^■/.test(o.s) && /防雪フード/.test(nos(its.filter(function (q) { return Math.abs(q.y - o.y) <= 1.5 && q.x >= o.x && q.x - o.x < 90; }).map(function (q) { return q.s; }).join('')));
+    })[0];
+    var hoodY = hood ? hood.y : -1;
+    // 形名の並びの行（左はし x60〜75 から）。行末が「・」「、」なら次の行へつづく
+    function chains(yTop, yBot, xMax) {
+      var ls = lines.filter(function (L) { return L.y < yTop && L.y > yBot && L.its.some(function (o) { return o.x >= 60 && o.x <= 75; }); })
+        .map(function (L) {
+          var li = L.its.filter(function (o) { return o.x >= 60 && o.x < xMax && !/^●/.test(o.s); });
+          while (li.length && !/^[A-Z0-9]/.test(nos(li[0].s))) li.shift();   // 「天井カセッ」「ト」の「ト」
+          return { y: L.y, x: li.length ? li[0].x : 66, t: nos(li.map(function (o) { return o.s; }).join('')) };
+        })
+        .filter(function (l) { return l.t && hiCodeList(l.t, 'RAS-').length; });
+      var res = [], cur = null;
+      ls.forEach(function (l) {
+        if (cur && /[・、]$/.test(cur.last)) { cur.ls.push(l); cur.yb = l.y; cur.last = l.t; return; }
+        cur = { yt: l.y, yb: l.y, x: l.x, ls: [l], last: l.t }; res.push(cur);
+      });
+      res.forEach(function (c) { var st = {}; c.codes = []; c.ls.forEach(function (l) { c.codes = c.codes.concat(hiCodeList(l.t, 'RAS-', st)); }); });
+      return res.filter(function (c) { return c.codes.length; });
+    }
+    function ccFits(codes) { return codes.map(function (c) { return { cc: c }; }); }
+
+    var t2 = segs.filter(function (g) { return /据付部品適用一覧表/.test(g.t); })[0];
+    if (t2) {
+      var hdr2 = [];
+      its.forEach(function (o) {
+        if (o.y >= t2.y || t2.y - o.y > 60) return;
+        var t = nos(o.s);
+        if (/^(SP|RAC)-$/.test(t)) {
+          var code = t;
+          its.filter(function (q) { return q !== o && Math.abs(q.x - o.x) <= 4 && o.y - q.y >= 2 && o.y - q.y <= 12 && /^[A-Z0-9-]+$/.test(nos(q.s)); })
+            .sort(function (a, b) { return b.y - a.y; })
+            .forEach(function (q) {
+              code += nos(q.s);
+              its.filter(function (r) { return Math.abs(r.y - q.y) < 1.5 && r.x > q.x && r.x - q.x < 15 && /^[A-Z0-9]{1,3}$/.test(nos(r.s)); })
+                .forEach(function (r) { code += nos(r.s); });
+            });
+          if (HI_OPT_CODE.test(code)) hdr2.push({ code: code, x: o.x, y: o.y });
+        } else if ((t.match(HI_OPT_CODE) || [])[0] === t) {
+          hdr2.push({ code: t, x: o.x, y: o.y });
+        }
+      });
+      if (hdr2.length >= 3) {
+        var hy = Math.min.apply(null, hdr2.map(function (h) { return h.y; }));
+        var ch2 = chains(hy - 3, hoodY, 258);
+        its.forEach(function (d) {
+          if (!/^●/.test(d.s) || d.y >= hy - 3 || d.y <= hoodY) return;
+          var c = ch2.filter(function (k) { return d.y <= k.yt + 4 && d.y >= k.yb - 4; })
+            .sort(function (a, b) { return Math.abs((a.yt + a.yb) / 2 - d.y) - Math.abs((b.yt + b.yb) / 2 - d.y); })[0];
+          var col = hdr2.filter(function (h) { return h.x <= d.x + 5 && d.x - h.x <= 20; }).sort(function (a, b) { return b.x - a.x; })[0];
+          if (c && col) out.push({ page: page, code: col.code, fits: ccFits(c.codes) });
+        });
+      }
+    }
+
+    if (hood) {
+      // 番号（「1」「1」と割れる2けたもつなぐ）
+      var nums = [];
+      its.filter(function (o) { return /^\d$/.test(o.s) && o.y < hoodY; }).sort(function (a, b) { return b.y - a.y || a.x - b.x; }).forEach(function (o) {
+        var last = nums[nums.length - 1];
+        // 右どなり（6まで）の数字だけつなぐ。同じ高さの右の図の番号（x379）をつながないように
+        if (last && Math.abs(last.y - o.y) < 1.5 && o.x > last.lx && o.x - last.lx <= 6) { last.n = last.n * 10 + Number(o.s); last.lx = o.x; return; }
+        nums.push({ x: o.x, y: o.y, lx: o.x, n: Number(o.s) });
+      });
+      var ch3 = chains(hoodY, -1, 195);   // 右のフードの図の番号（x198〜）はまぜない
+      ch3.forEach(function (c) {
+        var ns = nums.filter(function (n) { return n.x >= c.x - 20 && n.x <= c.x - 5 && n.y >= c.yb - 5 && n.y <= c.yt + 5; }).map(function (n) { return n.n; });
+        c.fig = ns.filter(function (n) { return n % 2 === 1; }).sort(function (a, b) { return a - b; })[0] || 0;
+      });
+      its.forEach(function (o) {
+        var m = nos(o.s).match(/^SP-BF-[A-Z0-9-]+/);
+        if (!m || o.y >= hoodY) return;
+        // 図の番号はフードの組のいちばん上の2つの間。形名より上（y が大きい）のうち、いちばん近いもの
+        var lab = nums.filter(function (n) { return n.x >= o.x - 20 && n.x <= o.x - 5 && n.y >= o.y - 6; }).sort(function (a, b) { return a.y - b.y; })[0];
+        if (!lab) return;
+        var f = lab.n % 2 === 1 ? lab.n : lab.n - 1;
+        ch3.filter(function (c) { return c.fig === f; }).forEach(function (c) { out.push({ page: page, code: m[0], fits: ccFits(c.codes) }); });
+      });
+    }
+
+    /* ---- カード（形名と値段）。値段の書き方のあるページだけ ---- */
+    if (!/税抜価格|（税込）/.test(all)) return out;
+    var anchors = [];
+    segs.forEach(function (g) {
+      var pos = [], acc = '';
+      g.its.forEach(function (o) { pos.push(acc.length); acc += nos(o.s); });
+      function itemAt(k) { var j = 0; for (var i = 0; i < pos.length; i++) if (pos[i] <= k) j = i; return g.its[j]; }
+      var m, re = /税抜価格([\d,]+)円/g, got = false;
+      while ((m = re.exec(g.t))) { got = true; anchors.push({ x: itemAt(m.index).x, y: g.y, v: yen(m[1]) }); }
+      if (!got) { re = /([\d,]{3,})円（税込）/g; while ((m = re.exec(g.t))) anchors.push({ x: itemAt(m.index).x, y: g.y, v: Math.round(yen(m[1]) / 1.1) }); }
+      var k = g.t.search(/オープン価格(?!商品)/);
+      if (k >= 0) anchors.push({ x: itemAt(k).x, y: g.y, v: 0, open: true });
+    });
+    var CIRC = /^[①-⑳]/;
+    function circTitle(g) {   // 「①空気清浄フィルター」→「空気清浄フィルター」。「⑥白くまくんアプリ用」は見出しではない
+      // 字間のあいた見出し（「④ナノチタン除菌・脱臭空清フィルター」）は、かたまりに割れても行の字でつなぐ
+      var ln = lineOf(g.its[0]).its, i0 = ln.indexOf(g.its[0]), t = '', rx = null;
+      for (var i = i0; i < ln.length; i++) {
+        var q = ln[i], qt = nos(q.s);
+        if (i > i0 && (q.x - rx > 12 || CIRC.test(qt) || HI_OPT_CODE.test(qt) || /価格|円/.test(qt))) break;
+        t += qt; rx = endX(q);
+      }
+      t = t.replace(CIRC, '');
+      var k = t.search(/(SP|HA|PSC|RAC)-/);
+      if (k >= 0) t = t.slice(0, k);
+      return /[ぁ-んァ-ヶ一-龥]/.test(t) && !/用$/.test(t) ? t : '';
+    }
+    function titleText(h) {
+      var t = nos(h.s).replace(/^■/, '').replace(/^別売/, '');
+      if (!t) {
+        var nx = its.filter(function (q) { return Math.abs(q.y - h.y) < 1.5 && q.x > h.x && q.x - h.x < 60; }).sort(function (a, b) { return a.x - b.x; })[0];
+        t = nx ? nos(nx.s) : '';
+      }
+      return t.replace(/の据付(工事)?について$|について$/, '');
+    }
+    function sectionOf(x, y) {
+      var best = null;
+      its.forEach(function (o) {
+        if (!/^■/.test(o.s) || o.y <= y + 1.5 || o.x > x + 15) return;
+        if (!best || o.y < best.y || (o.y === best.y && o.x > best.x)) best = o;
+      });
+      return best;
+    }
+    // 「適用機種」の文（その■見出しの中の品物に付ける）
+    var stmts = [];
+    its.forEach(function (g) {        // 「［適用機種］」の字そのものの位置から（同じかたまりの左の「ホテル、…」はまぜない）
+      if (!/適用機種/.test(nos(g.s))) return;
+      // その行から下へ、同じ左はしで続く行（10.5まで）。行の中の字はぜんぶ（かたまりに割れていても）。右の別の表の行はとばす
+      var ls = lines.filter(function (L) { return L.y <= g.y + 1; }).sort(function (a, b) { return b.y - a.y; });
+      var t = '', py = null;
+      for (var i = 0; i < ls.length; i++) {
+        var li = ls[i].its.filter(function (q) { return q.x >= g.x - 6; });
+        if (!li.length || Math.abs(li[0].x - g.x) > 6) continue;
+        if (py !== null && (py - ls[i].y > 10.5 || /^[●※]/.test(li[0].s))) break;
+        t += nos(li.map(function (q) { return q.s; }).join(''));
+        py = ls[i].y;
+      }
+      var f = /メリット一覧表/.test(t) && /ドレンアップ/.test(t) ? [{ merit: 'drain' }] : hiSeriesFits(t);
+      if (f.length) stmts.push({ h: sectionOf(g.x, g.y), fits: f });
+    });
+    var ownPower = /本体から電源供給|別電源不要/.test(all);
+
+    its.forEach(function (o) {
+      var t = nos(o.s), m = t.match(HI_OPT_CODE);
+      if (!m) return;
+      var code = m[1];
+      if (/^(\(P\.|（P\.|用|を|は|の|など)/.test(t.slice(code.length))) return;
+      var c = { code: code, x: o.x, y: o.y };
+      // 値段：下に45まで・同じ行の右300まで。いちばん近いもの
+      var best = null;
+      anchors.forEach(function (a) {
+        var dy = c.y - a.y, dx = a.x - c.x;
+        if (dy < -6 || dy > 45 || dx < -90 || dx > 300) return;
+        var d = Math.abs(dy) + 0.3 * Math.abs(dx);
+        if (!best || d < best.d) best = { d: d, a: a };
+      });
+
+      // 同じ行の、形名のすぐ左の字（「別売延長コード（8m）」「HEMSアダプター」「⑥白くまくんアプリ用」）と右の字（「（吹出口フード）」「（W）（単相100V用）」）
+      // 同じ行の字（76ページの「SP-BF-EB」と「（背面吸込口フード）」は高さが2ずれる）
+      var ln = its.filter(function (q) { return Math.abs(q.y - o.y) <= 2.5; }).sort(function (a, b) { return a.x - b.x; }), i0 = ln.indexOf(o);
+      var left = '', lx = o.x, li = null;
+      for (var i = i0 - 1; i >= 0; i--) {
+        var q = ln[i], qt = nos(q.s);
+        if (lx - endX(q) > (left ? 12 : 30) || HI_OPT_CODE.test(qt) || /価格|円|（税/.test(qt)) break;
+        left = qt + left; lx = q.x; li = q;
+      }
+      left = left.replace(CIRC, '').replace(/^■/, '').replace(/^別売/, '');
+      if (!hiNameLike(left)) { left = ''; li = null; }
+      var rest = t.slice(code.length), rx = endX(o);
+      for (var j = i0 + 1; j < ln.length; j++) {
+        var r2 = ln[j], rt = nos(r2.s);
+        if (r2.x - rx > 12 || HI_OPT_CODE.test(rt) || /^(希望小売価格|[\d,]+|オープン|（税|円)/.test(rt)) break;
+        rest += rt; rx = endX(r2);
+      }
+      rest = rest.split(/希望小売価格|[\d,]{3,}円|オープン価格|（税/)[0].replace(/[（(]別売[)）]/, '');
+      if ((rest.match(/[（(]/g) || []).length > (rest.match(/[）)]/g) || []).length) rest += '）';
+      if (!/[ぁ-んァ-ヶ一-龥（(]/.test(rest)) rest = '';
+      if (!left) {     // 同じ行に無いときは、±7の高さの左の名前（「HA接続コード」は2つの形名のまん中の高さ）
+        var lg = segs.filter(function (g2) { return Math.abs(g2.y - c.y) <= 7 && g2.x < c.x && g2.x2 >= c.x - 40 && g2.x2 <= c.x + 3 && hiNameLike(g2.t); })
+          .sort(function (a, b) { return Math.abs(a.y - c.y) - Math.abs(b.y - c.y); })[0];
+        if (lg) { left = lg.t; li = lg.its[0]; }
+      }
+      if (left && li && !/用$/.test(left)) {
+        // 縦に割れた名前（「ドレンアップ」「キット」＝まん中ぞろえで左はしがずれる）。左はしがそろった並び（「別売延長コード」×3）はつながない
+        var colq = its.filter(function (q) {
+          var dx = Math.abs(q.x - li.x);
+          return q !== li && dx >= 3 && dx <= 15 && Math.abs(q.y - li.y) <= 12 && endX(q) <= c.x + 3 && hiNameLike(nos(q.s).replace(/^別売/, ''));
+        });
+        if (colq.length) left = colq.concat([li]).sort(function (a, b) { return b.y - a.y; }).map(function (q) { return nos(q.s); }).join('').replace(/^別売/, '');
+      }
+      var qual = [];
+      if (/用$/.test(left)) { qual.push('（' + left + '）'); left = ''; }
+
+      // 上の見出し（①… ■…）と、見出しの下の名前らしい字
+      var H = null, PL = null;
+      segs.forEach(function (g2) {
+        var dy = g2.y - c.y;
+        if (dy <= 1.5 || dy > 130 || g2.x > c.x + 15) return;
+        var ht = CIRC.test(g2.t) ? (dy >= 8 ? circTitle(g2) : '') : (/^■/.test(g2.t) ? titleText(g2.its[0]) : '');
+        if (ht && (!H || dy < H.dy || (dy === H.dy && g2.x > H.x))) H = { dy: dy, x: g2.x, y: g2.y, t: ht };
+      });
+      segs.forEach(function (g2) {
+        var dy = g2.y - c.y;
+        if (dy <= 1.5 || dy > 110 || g2.x < c.x - 120 || g2.x > c.x + 15) return;
+        if (H && g2.y >= H.y) return;
+        if (CIRC.test(g2.t) || /^■/.test(g2.t) || !hiNameLike(g2.t) || /ホワイト|ブラック|ベージュ|ブラウン|シルバー/.test(g2.t)) return;
+        if (g2.para && g2.para.stop) return;
+        if (!PL || dy < PL.dy || (dy === PL.dy && Math.abs(g2.x - c.x) < Math.abs(PL.x - c.x))) PL = { dy: dy, x: g2.x, y: g2.y, t: g2.t, g: g2 };
+      });
+      var name = '', ns = 2, fits = [];
+      if (left) { name = left; ns = 3; }     // 形名と同じ行の名前がいちばん確か
+      else if (PL && H && H.t.indexOf(PL.t) < 0 && PL.t.indexOf(H.t) < 0) name = H.t + '（' + PL.t + '）';
+      else if (H) name = H.t;
+      else if (PL) name = PL.t;
+      else { var h2 = sectionOf(c.x, c.y); if (h2) { name = titleText(h2); ns = 1; } else ns = 0; }
+      if (/-SS$/.test(code) && /ステンレス製/.test(all)) qual.push('（ステンレス製・受注生産品）');
+      name = (name + rest + qual.join('')).replace(/\s+/g, '');
+      // 品名の段落にある「（RAF-D36F・D40F2・D50F2 用）」
+      if (!left && !H && PL && PL.g.para) PL.g.para.segs.forEach(function (g3) { if (/^（/.test(g3.t)) fits = fits.concat(ccFits(hiCodeList(g3.t, ''))); });
+
+      // 付く機種の文
+      //  a) すぐ左の列の、この高さを含む行の並び（表の行「XJシリーズ・ZJシリーズ…」）
+      var xs = [];
+      lines.forEach(function (L) { var f0 = L.its[0]; if (Math.abs(L.y - c.y) <= 6 && f0 && f0.x < c.x - 20) xs.push(f0.x); });
+      if (xs.length) {
+        var rx0 = Math.max.apply(null, xs);
+        var colL = lines.filter(function (L) { return L.its[0] && Math.abs(L.its[0].x - rx0) <= 4; }).sort(function (a, b) { return b.y - a.y; });
+        var k0 = -1;
+        colL.forEach(function (L, i) { if (k0 < 0 && Math.abs(L.y - c.y) <= 6) k0 = i; });
+        if (k0 >= 0) {
+          var a0 = k0, b0 = k0;
+          while (a0 > 0 && colL[a0 - 1].y - colL[a0].y <= 13) a0--;
+          while (b0 < colL.length - 1 && colL[b0].y - colL[b0 + 1].y <= 13) b0++;
+          var rt0 = colL.slice(a0, b0 + 1).map(function (L) { return nos(L.its.filter(function (q) { return q.x < c.x - 3; }).map(function (q) { return q.s; }).join('')); }).join('');
+          if (/シリーズ/.test(rt0) && !/^※/.test(rt0)) fits = fits.concat(hiSeriesFits(rt0));
+        }
+      }
+      if (best) {
+        //  b) 同じ列の上（110まで）・下（70まで）の文。列の幅は右どなりの形名の手前まで（60まで）。
+        //     75ページのリモコンホルダーは3つの列が5しか離れていないので、かたまりではなく字の位置で切る
+        var xr = c.x + 60;
+        its.forEach(function (q) { if (q !== o && Math.abs(q.y - c.y) <= 15 && q.x > c.x + 10 && q.x - 5 < xr && HI_OPT_CODE.test(nos(q.s))) xr = q.x - 5; });
+        var wl = lines.filter(function (L) { var dy = L.y - c.y; return (dy > 1.5 && dy <= 110) || (dy < -1.5 && dy >= -70); })
+          .map(function (L) { var li = L.its.filter(function (q) { return q.x >= c.x - 5 && q.x < xr; }); return { y: L.y, x0: li.length ? li[0].x : 0, t: nos(li.map(function (q) { return q.s; }).join('')) }; })
+          .filter(function (l) { return l.t; }).sort(function (a, b) { return b.y - a.y; });
+        var blocks = [], cb = null;
+        wl.forEach(function (l) {
+          var cl = /^((?:SP|HA|PSC)-|RAC-N)/.test(l.t);
+          if (cb && cb.yb - l.y <= 10.5 && (cb.yb - c.y) * (l.y - c.y) > 0) { cb.t += l.t; cb.yb = l.y; cb.code = cb.code || cl; return; }
+          cb = { yt: l.y, yb: l.y, t: l.t, code: cl, x0: l.x0 }; blocks.push(cb);
+        });
+        // 上は近い順に見て、形名の行・この品の名前の行に着いたら止める（その先は別の品の文）。下は「本カタログ掲載の…に使用できます」だけ
+        var nameY = PL ? PL.y : (H ? H.y : null);
+        var isAll = function (t) { return /本カタログ(に)?掲載の(ルームエアコン|機種)/.test(t) && /使用でき/.test(t) && !/除く/.test(t); };
+        var ups = blocks.filter(function (B) { return B.yb > c.y; }).sort(function (a, b) { return a.yb - b.yb; });
+        for (var u = 0; u < ups.length; u++) {
+          var B = ups[u];
+          if (isAll(B.t)) { fits.push({ all: true }); break; }
+          if (B.code) break;
+          if (/シリーズ/.test(B.t) && !/^※/.test(B.t)) { fits = fits.concat(hiSeriesFits(B.t)); break; }
+          if (nameY != null && nameY <= B.yt + 1 && nameY >= B.yb - 1) break;
+        }
+        blocks.forEach(function (B) { if (B.yt < c.y && Math.abs(B.x0 - c.x) <= 15 && isAll(B.t)) fits.push({ all: true }); });
+        //  c) 同じ■見出しの中の「適用機種」
+        var hh = sectionOf(c.x, c.y);
+        stmts.forEach(function (st) {
+          if (!hh || st.h !== hh) return;
+          st.fits.forEach(function (f) {
+            // 電源を本体からとる品（プラス換気ユニット）は、単相100V用＝形名の末尾S、200V用＝D
+            var pw = name.match(/単相(100|200)V用/);
+            if (f.re && ownPower && pw && /^\^RAS-/.test(f.re)) fits.push({ re: f.re + (pw[1] === '100' ? 'S' : 'D') });
+            else fits.push(f);
+          });
+        });
+      }
+      out.push({ page: page, code: code, name: name, ns: ns, y: best ? best.a.v : null, d: best ? best.d : null, open: !!(best && best.a.open), fits: fits });
+    });
+    return out;
+  }
+
+  function hiRoomOptFinish(list) {
+    var labels = {}, drain = [];
+    list.forEach(function (o) { if (o.meritRows) labels[o.page] = o.meritRows; });
+    list.forEach(function (o) {
+      if (!o.meritMarks) return;
+      var rows = (labels[o.page] || []).concat(labels[o.page - 1] || []);
+      o.meritMarks.forEach(function (y) { rows.filter(function (r) { return Math.abs(r.y - y) < 3; }).forEach(function (r) { drain = drain.concat(r.fits); }); });
+    });
+    var by = {}, order = [];
+    list.forEach(function (o) {
+      if (!o.code) return;
+      var v = by[o.code];
+      if (!v) { v = by[o.code] = { es: [], fits: [] }; order.push(o.code); }
+      v.es.push(o);
+      (o.fits || []).forEach(function (f) { if (f.merit) v.fits = v.fits.concat(drain); else v.fits.push(f); });
+    });
+    var ok = [];
+    order.forEach(function (c) {
+      var v = by[c];
+      // 値段は形名にいちばん近く書いてあるもの。品名もそのカードから（表の中の同じ形名は付く機種だけ借りる）
+      var pr = v.es.filter(function (e) { return e.y != null; }).sort(function (a, b) { return a.d - b.d; })[0];
+      if (!pr) return;                       // 値段の載っていない形名（CS-NET機器 PSC-…）
+      // 品名は、値段のあるカード → 名前の確かさ（同じ行3・見出し2・■だけ1）→ 値段の近さ の順
+      var nm = (v.es.filter(function (e) { return e.name; }).sort(function (a, b) {
+        return ((b.y != null) - (a.y != null)) || ((b.ns || 0) - (a.ns || 0)) || ((a.d == null ? 1e9 : a.d) - (b.d == null ? 1e9 : b.d));
+      })[0] || {}).name;
+      ok.push({ page: pr.page, code: c, name: (nm || c) + (pr.open ? '（オープン価格）' : ''), y: pr.y, fits: v.fits.length ? v.fits : [{ all: true }] });
+    });
+    return optResult(ok, '日立', 'ルームエアコン（住宅設備用） 別売品');
+  }
+
+  /* --------------------------------------------------------------------
      三菱電機 ルームエアコン（住宅設備用総合カタログ 2026-06・100ページ）
 
      1台ぶんは列のかたまり（1ページに3列×2段）：
@@ -4789,6 +5259,24 @@
       finish: hiRoomFinish
     },
     {
+      id: 'hitachi-room-opt',
+      name: '日立（ルームエアコン別売品）',
+      catalog: '住宅設備用エアコン の別売部品（71〜76ページ）',
+      size: '機種と同じPDFでかまいません。88ページ・175MBほど。読み取りに3〜5分かかります。',
+      kind: 'options',
+      layout: true,
+      howto: [
+        '機種と同じPDFでかまいません',
+        '下のリンクを押すとカタログのPDFが開く。保存する',
+        '保存したPDFを「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://kadenfan.hitachi.co.jp/catalog/raj/book/data/Target.pdf',
+      urlNote: '値段は紙面の税抜価格で入ります（税込だけ書いてある品は税抜に直します）。付く機種は紙面の適用一覧表と「適用機種」の文から決めます。業務用の日立の別売品とは別に入ります。',
+      min: 50,
+      readPage: hiRoomOptReadPage,
+      finish: hiRoomOptFinish
+    },
+    {
       id: 'mitsubishi-room-opt',
       name: '三菱電機（ルームエアコン別売品）',
       catalog: '住宅設備用総合カタログ の別売部品（44・55〜57・67〜70ページ）',
@@ -5374,6 +5862,8 @@
     if (fit.mc) return [model.m, model.om, model.im].some(function (c) { return roomCodeIs(fit.mc, c); });
     // 形名の頭（三菱のルームエアコン「MSZ-FZV」「MLZ-RX」、マルチ用室内機の「ZXAS」）
     if (fit.cc) return [model.m, model.im].some(function (c) { return String(c || '').indexOf(fit.cc) >= 0; });
+    // 形名の形（日立のルームエアコン「^RAS-XJ\d{2}26」＝XJシリーズの2026年度）
+    if (fit.re) { var rx = new RegExp(fit.re); return [model.m, model.im].some(function (c) { return rx.test(String(c || '')); }); }
     if (fit.im) return imInRange(fit.im, model.im);
     if (fit.type && !looseSame(fit.type, model.i)) return false;
     if (fit.series && !looseSame(fit.series, model.s)) return false;
