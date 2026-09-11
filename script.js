@@ -170,6 +170,10 @@ function handleSubmit(e) {
   data.append(GOOGLE_FORM.entries.email,   form.email.value || '');
   data.append(GOOGLE_FORM.entries.service, selectedService);
   data.append(GOOGLE_FORM.entries.message, form.message.value || '');
+  // Googleフォーム側で「メールアドレスを収集する」がオンになっている（2026-09-12 確認）。
+  // この欄を送らないと、必須の欄が空として受け付けられず、回答が1件も残らない
+  // （GA4では送信3回・フォームの回答は0件だった）
+  data.append('emailAddress', form.email.value || '');
 
   const url = `https://docs.google.com/forms/d/e/${GOOGLE_FORM.formId}/formResponse`;
 
