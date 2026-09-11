@@ -1701,6 +1701,223 @@
   }
 
   /* --------------------------------------------------------------------
+     パナソニック ルームエアコン（住宅設備エアコン総合カタログ 26夏号・128ページ）
+
+     1台ぶんは列のかたまり（1行に4〜5台）：
+       「冷暖房時おもに 6 畳用」「単相 100V」／室内機の形名「CS-226DHX」／「（室外）CU-226DHX」／セット品番
+       ／「本体希望小売価格 484,000 円（税抜440,000円）」／その下に「室内：」「室外：」の内訳
+     天井・壁ビルトインは、その下に「合計希望小売価格（別販化粧グリル…を使用した場合）」→ 合計で入れる。
+     値段は税込で書いてあり、（ ）内が税抜 → 税抜を入れる。F・TX・UY・Y・三相モデルはオープン価格（値段0）。
+     マルチ：室内機（CS-ME・MJ・MB・M…）は室外機の形名が無い。室外機（CU-M450D2・CU-3M680D2…）は別の値段。
+     耐塩害仕様（118ページ）は表：形名の末尾E（CS-226DHE／CS-286DH2E）。中身は元の機種（CS-226DHX／CS-286DHX2）を写す。
+     2〜6ページの一覧表（室外機の形名が無い）は読まない（物差しに使う）
+     -------------------------------------------------------------------- */
+  var PANA_CS = /^CS-([A-Z]{0,2})(\d{2})(\d)([A-Z]{1,3})(\d?)(E?)(?=$|-)/;
+  function panaRoomKind(code) {
+    var m = code.match(PANA_CS);
+    if (!m) return null;
+    var pre = m[1], lt = m[4], dg = m[5];
+    var salt = !!m[6] || (lt.length === 3 && /^D[A-Z]E$/.test(lt));
+    if (salt && !m[6]) lt = lt.slice(0, 2);
+    var multi = /^M/.test(pre);
+    var i = '壁掛形';
+    if (/^(B|UB|MB)$/.test(pre)) {
+      if (lt === 'DC') i = '天井ビルトイン形（1方向）';
+      else if (lt === 'DW' || lt === 'CW') i = '天井ビルトイン形（2方向）';
+      else if (lt === 'CK' || lt === 'DK') i = '壁ビルトイン形';
+      else if (lt === 'CA' || lt === 'DA') i = 'フリービルトイン形';
+    }
+    if (/Y$/.test(lt)) i = '床置形';
+    var s;
+    if (multi) s = 'マルチ用室内機';
+    else if (pre === 'TX' || pre === 'K' || pre === 'UB') s = pre + 'シリーズ';
+    else if (pre === 'B') s = ({ DC: 'BC', DW: 'BW', CW: 'BW', CK: 'BK', CA: 'BA' }[lt] || 'B' + lt) + 'シリーズ';
+    else if (lt === 'DU' && dg === '3') s = '三相電源対応モデル';
+    else s = ({ DFL: 'F', CY: 'Y' }[lt] || lt.replace(/^D/, '')) + 'シリーズ';
+    return { kw: Number(m[2]) / 10, pre: pre, lt: lt, dg: dg, salt: salt, multi: multi, i: i, s: s,
+             cold: pre === 'TX' || pre === 'K' || pre === 'UB' || lt === 'DUX' || lt === 'DUY' };
+  }
+
+  function panaRoomReadPage(items, page) {
+    function clean(t) { return String(t).replace(/[\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim(); }
+    function nos(t) { return String(t).replace(/\s+/g, ''); }
+    var its = [], seenIt = {};
+    items.forEach(function (o) {
+      var t = clean(o.s);
+      if (!t) return;
+      var key = t + '|' + o.x.toFixed(1) + '|' + o.y.toFixed(1);
+      if (seenIt[key]) return;
+      seenIt[key] = 1;
+      its.push({ s: t, x: o.x, y: o.y, w: o.w || 0 });
+    });
+    var all = nos(its.map(function (o) { return o.s; }).join(' '));
+    if (!/税抜|オープン価格/.test(all)) return [];
+    function endX(o) { return o.x + (o.w || nos(o.s).length * 5); }
+    // 割れた形名をつなぐ（「CS-256D」「EX」、「CS-406D」「EX」「2」、「CU-」「B404DC2」）
+    its.forEach(function (o) {
+      var t = nos(o.s);
+      if (!/^(CS|CU)-([A-Z]{0,2}\d{3}[A-Z]?)?$/.test(t)) return;
+      var px = endX(o);
+      its.filter(function (q) { return q !== o && q.s && Math.abs(q.y - o.y) < 1.5 && q.x > o.x && q.x - o.x < 90; })
+        .sort(function (a, b) { return a.x - b.x; })
+        .forEach(function (q) {
+          if (px === null) return;
+          var qt = nos(q.s);
+          if (q.x - px > 10 || !/^([A-Z]{1,3}\d?|\d|[A-Z0-9]{4,})$/.test(qt)) { px = null; return; }
+          o.s = nos(o.s) + qt; q.s = ''; px = endX(q);
+        });
+    });
+    its = its.filter(function (o) { return o.s; });
+    var out = [];
+
+    // 値段（税抜・合計・オープン価格）。「室内：」「室外：」の内訳と、フィルターなどの「希望小売価格」は採らない
+    var prices = [];
+    its.forEach(function (o) {
+      var t = nos(o.s), m;
+      if (/税抜/.test(t)) {
+        if (!/円/.test(t)) {
+          var nx = its.filter(function (q) { return Math.abs(q.y - o.y) < 1.5 && q.x > o.x && q.x - o.x < 40; }).sort(function (a, b) { return a.x - b.x; })[0];
+          if (nx) t += nos(nx.s);
+        }
+        m = t.match(/税抜([\d,]+)円/);
+        if (!m) return;
+        var left = nos(its.filter(function (q) { return Math.abs(q.y - o.y) < 1.5 && q.x < o.x && o.x - q.x < 70; }).map(function (q) { return q.s; }).join(''));
+        if (/室内|室外/.test(left)) return;
+        if (/希望小売価格/.test(left) && !/本体|合計/.test(left)) return;
+        var tot = its.some(function (q) { return /^合計/.test(nos(q.s)) && q.y - o.y >= -1.5 && q.y - o.y <= 20 && q.x <= o.x && o.x - q.x <= 95; });   // 76ページのマルチは見出しが18上
+        prices.push({ x: o.x, y: o.y, v: yen(m[1]), tot: tot });
+      } else if (/^オープン価格/.test(t)) {
+        prices.push({ x: o.x, y: o.y, v: 0, open: true });
+      }
+    });
+
+    // 形名（室内機と、マルチの室外機）。46・71ページの「●室内機」「●室外機」のプラン例は読まない
+    var codes = [];
+    its.forEach(function (o) {
+      var t = nos(o.s), m = t.match(PANA_CS), mu = !m && t.match(/^CU-(\d?)M(E?)(\d{2})\d[A-Z]\d/);
+      if (!m && !mu) return;
+      if (its.some(function (q) { return /^●室(内|外)機/.test(nos(q.s)) && Math.abs(q.y - o.y) <= 3 && q.x < o.x && o.x - q.x < 40; })) return;
+      if (mu && its.some(function (q) { return /（室外）/.test(q.s) && Math.abs(q.y - o.y) < 1.5 && q.x < o.x && o.x - q.x < 25; })) return;
+      codes.push({ o: o, code: m ? m[0] : t.match(/^CU-[A-Z0-9]+/)[0], x: o.x, y: o.y, mu: mu });
+    });
+    // 近くの字をどの形名のものにするか（下 dy は形名から見て下に正）
+    function owner(a, dyMin, dyMax, dxMax) {
+      var best = null;
+      codes.forEach(function (c) {
+        var dy = c.y - a.y, dx = a.x - c.x;
+        if (dy < dyMin || dy > dyMax || dx < -15 || dx > dxMax) return;
+        var d = Math.abs(dy) + 0.5 * Math.abs(dx);
+        if (!best || d < best.d) best = { d: d, c: c };
+      });
+      return best ? best.c : null;
+    }
+    prices.forEach(function (a) { var c = owner(a, -2, 80, 150); if (c) (c.ps = c.ps || []).push(a); });
+    // 室外機の形名（「（室外）」「CU-226DHX」、耐塩害の表は同じ行の右）
+    its.forEach(function (o) {
+      var t = nos(o.s), m = t.match(/^CU-[A-Z0-9]{5,}/);
+      if (!m) return;
+      var lab = its.some(function (q) { return /（室外）/.test(q.s) && Math.abs(q.y - o.y) < 1.5 && q.x < o.x && o.x - q.x < 25; });
+      var c = owner({ x: o.x, y: o.y }, -2, 25, 70);
+      if (c && (lab || c.y === o.y || Math.abs(c.y - o.y) < 1.5)) c.om = c.om || m[0];
+    });
+    // 電源（「単相」「100V」、「単相 200V」）
+    its.forEach(function (o) {
+      var t = nos(o.s);
+      if (!/^(単相|三相)/.test(t)) return;
+      if (!/V/.test(t)) {
+        var nx = its.filter(function (q) { return Math.abs(q.y - o.y) < 1.5 && q.x > o.x && q.x - o.x < 25; }).sort(function (a, b) { return a.x - b.x; })[0];
+        if (nx) t += nos(nx.s);
+      }
+      var m = t.match(/^(単相|三相)(100|200)V/);
+      if (!m) return;
+      var c = owner({ x: o.x, y: o.y }, -15, 12, 110);
+      if (c && !c.pw) c.pw = m[1] + m[2] + 'V';
+    });
+    // 畳数（「冷暖房時おもに」「6」「畳用」）
+    its.forEach(function (h) {
+      if (nos(h.s) !== '畳用') return;
+      var dg = its.filter(function (q) { return /^\d{1,2}$/.test(nos(q.s)) && Math.abs(q.y - h.y) <= 8 && q.x < h.x && h.x - q.x < 45; })
+        .sort(function (a, b) { return a.x - b.x; }).map(function (q) { return nos(q.s); }).join('');
+      if (!dg) return;
+      var c = owner({ x: h.x - 55, y: h.y }, -30, 2, 110);
+      if (c && !c.tat) c.tat = Number(dg);
+    });
+
+    var saltPage = /耐塩害/.test(all), threePhase = /室外三相/.test(all);
+    codes.forEach(function (c) {
+      var ps = c.ps || [];
+      function nearest(list) { return list.sort(function (a, b) { return (c.y - a.y) - (c.y - b.y); })[0]; }
+      var tot = nearest(ps.filter(function (p) { return p.tot; }));
+      var body = nearest(ps.filter(function (p) { return !p.tot && !p.open; }));
+      var open = nearest(ps.filter(function (p) { return p.open; }));
+      var pr = tot || body || open;
+      if (!pr) return;
+      if (c.mu) {
+        var n = Number(c.mu[1] || 2);
+        out.push({ page: page, m: c.code, kw: Number(c.mu[3]) / 10, s: c.mu[2] ? 'MEシリーズ（室外機）' : 'フリーマルチ（室外機）',
+                   i: 'マルチ室外機', pw: '単相200V', tp: n + '室用', y: pr.v, open: !!pr.open, tot: false, om: c.code, im: '' });
+        return;
+      }
+      var k = panaRoomKind(c.code);
+      if (!k) return;
+      if (k.salt && !saltPage) return;
+      if (!k.multi && !c.om) return;          // 室外機の形名が無い＝一覧表（2〜6ページ）
+      out.push({ page: page, m: c.code, kw: k.kw, s: k.s, i: k.i, salt: k.salt, multi: k.multi, cold: k.cold,
+                 pw: k.multi ? '室外機から' : (c.pw || (threePhase ? '三相200V' : '')), tat: c.tat || 0,
+                 tp: k.multi ? 'マルチ用室内機' : 'シングル', y: pr.v, open: !!pr.open, tot: !!pr.tot, om: c.om || '', im: c.code });
+    });
+    return out;
+  }
+
+  function panaRoomFinish(list) {
+    // 同じ形名が何か所にもあるときは、合計（化粧グリル込み）→ 室外機の形名つき → あとのページ の順に採る
+    var by = {}, order = [];
+    list.forEach(function (x) {
+      var v = by[x.m];
+      if (!v) { by[x.m] = x; order.push(x.m); return; }
+      var score = function (e) { return (e.tot ? 4 : 0) + (e.om ? 2 : 0) + (e.tat ? 1 : 0); };
+      if (score(x) >= score(v)) by[x.m] = x;
+    });
+    var rows = [], pages = {};
+    order.forEach(function (m) {
+      var x = by[m];
+      if (x.salt) {
+        // 元の機種：CS-226DHE → CS-226DH…（末尾の数字も同じ）
+        var k = PANA_CS.exec(m) ? m.match(PANA_CS) : null;
+        var sk = panaRoomKind(m);
+        var re = new RegExp('^CS-' + k[1] + k[2] + k[3] + sk.lt + '[A-Z]*' + (sk.dg || '') + '$');
+        var b = order.map(function (c) { return by[c]; }).filter(function (e) { return !e.salt && re.test(e.m); })[0];
+        if (!b) return;
+        x = { page: x.page, m: m, kw: b.kw, s: b.s, i: b.i, cold: b.cold, pw: b.pw, tat: b.tat, tp: b.tp, y: x.y, open: x.open,
+              tot: false, om: x.om, im: m, saltOf: b.m };
+      }
+      pages[x.page] = 1;
+      var cap = x.kw.toFixed(1) + 'kW' + (x.tat ? '（おもに' + x.tat + '畳）' : '');
+      var opt = [x.saltOf ? '耐塩害仕様（受注生産品）' : '', x.open ? 'オープン価格' : '', x.tot ? '化粧グリル等込み（合計希望小売価格）' : '',
+                 x.cold ? '寒冷地向け' : ''].filter(Boolean).join('／');
+      rows.push({
+        m: m, hp: x.i === 'マルチ室外機' ? x.kw.toFixed(1) + 'kW' : cap, y: x.y, u: String(x.page),
+        s: x.s, i: x.i, ab: cap, pw: x.pw || '単相200V', rc: x.i === 'マルチ室外機' ? '' : 'ワイヤレス', tp: x.tp,
+        opt: opt, om: x.om, im: x.im, pm: '', rm: ''
+      });
+    });
+    return {
+      rows: rows,
+      pricePages: Object.keys(pages).length,
+      head: {
+        maker: 'パナソニック',
+        brand: 'ルームエアコン（住宅設備用）',
+        source: '住宅設備エアコン総合カタログ 26夏号（公開Webカタログ）',
+        note: '希望小売価格（事業者向け・積算見積価格）の税抜。配管/据付工事費は含まず。F・TX・UY・Y・三相モデルはオープン価格（値段0）。天井・壁ビルトインは別売の化粧グリル等を含む合計。耐塩害仕様は形名の末尾E。社内利用限定（第三者提供不可）。',
+        seriesOrder: ['HXシリーズ', 'EXシリーズ', 'GXシリーズ', 'Jシリーズ', 'Fシリーズ', 'ELシリーズ', 'Nシリーズ', 'Cシリーズ',
+                      'UXシリーズ', 'TXシリーズ', 'Kシリーズ', 'UBシリーズ', 'UYシリーズ', 'LVシリーズ', '三相電源対応モデル', 'Yシリーズ',
+                      'BCシリーズ', 'BWシリーズ', 'BKシリーズ', 'BAシリーズ', 'MEシリーズ（室外機）', 'フリーマルチ（室外機）', 'マルチ用室内機'],
+        typeOrder: ['シングル', '2室用', '3室用', '4室用', 'マルチ用室内機']
+      }
+    };
+  }
+
+  /* --------------------------------------------------------------------
      日立 ルームエアコン（住宅設備用エアコン 2026-3・88ページ）
 
      1台ぶんは列のかたまり（1ページに3列）：
@@ -5257,6 +5474,23 @@
       layout: true,
       readPage: hiRoomReadPage,
       finish: hiRoomFinish
+    },
+    {
+      id: 'panasonic-room',
+      name: 'パナソニック（ルームエアコン）',
+      catalog: '住宅設備エアコン総合カタログ（エオリア・住宅設備用）',
+      size: '128ページ・65MBほど。読み取りに2〜3分かかります。',
+      howto: [
+        '下のリンクを押すとカタログのページが開く',
+        '「ダウンロード」を押す（「ご利用条件」が出たら、読んで同意する）',
+        '保存したPDFを「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://panasonic.icata.net/iportal/CatalogDetail.do?method=initial_screen&type=clcsr&volumeID=PEWJ0001&catalogID=7901270000&designID=standard_sp',
+      urlNote: '壁掛け（HX・EX・GX・J・F・EL・N・C）・寒冷地（UX・TX・K・UB・UY）・加湿換気（LV）・三相モデル・床置き（Y）・天井ビルトイン（BC・BW）・壁ビルトイン（BK）・フリービルトイン（BA）・マルチ（室外機と室内機）・耐塩害仕様を読みます。値段は税抜（カタログは税込で、（ ）内が税抜）。ビルトインは別売の化粧グリル等込みの合計です。オープン価格の機種は値段0で入ります。',
+      min: 100,
+      layout: true,
+      readPage: panaRoomReadPage,
+      finish: panaRoomFinish
     },
     {
       id: 'hitachi-room-opt',
