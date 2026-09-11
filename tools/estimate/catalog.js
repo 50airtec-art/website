@@ -1034,6 +1034,637 @@
     return out;
   }
 
+
+  /* --------------------------------------------------------------------
+     ダイキン ルームエアコンの別売品（住宅設備用カタログ 69〜77ページ）
+     --------------------------------------------------------------------
+     紙面の表は3通り
+       ・●の表：縦に別売品（品番・税込価格）、横に機種の列。列の見出しは「【RX】S22～406ATRS」のような品番の範囲。
+         1つの列の見出しに、上の段（セパレート）と下の段（システムマルチ）の範囲が縦に積まれている。
+         見出しの文字の左はしと●の位置はずれるので、●の列のあいだのまん中を境目にして区画に分け、
+         見出しのまん中がどの区画に入るかで列を決める（69ページは1列目に見出しが2つ〔RX・AX と DX〕ある）
+       ・一覧の表（70ページ）：「機種名 システムマルチ C28～56ZCV」の下に品目が並ぶ。●は無い。表の中の範囲全部に付く
+       ・配管の太さの表（71ページ、ビルトイン形のダクト）：列が φ100～φ200。見出しの形の名前で付ける
+     **値段は税込**（「本ページに掲載の別売品は税込価格を表記しています」）。1.1で割って税抜きにする。
+       パネル BC40JF-WF は税込136,400円 → 124,000円で、機種のページの税抜きと合う
+     -------------------------------------------------------------------- */
+  // 別売品の品番（頭がKかBで、数字を含む。うしろの（WW）（W）（T）は色）
+  // 数字の無い品番もある（71ページ「K-FDSKD」断熱材・「K-FDSKDP」ダクトテープ・「K-FDBPA」バンド本体・「K-FDBSPA」サドルバンド）
+  var DKO_CODE = /^((?:K-?[A-Z]{1,6}|B[A-Z]{1,3})[A-Z0-9-]*\d[A-Z0-9-]*|K-[A-Z]{4,8})((?:\([A-Z]+\))*)$/;
+  var DKO_MONEY = /([\d,]{2,})\s*円/;
+
+  // 見出しの品番の範囲 → 付く機種の形
+  function dkoRangeFit(txt) {
+    var t = String(txt || '').replace(/[\u0000-\u001f\s]/g, '');
+    var m = t.match(/^(MP|\dM|[SC])(\d{2})([～~〜・])(\d{2})([0-9]?[A-Z][A-Z0-9]*)$/);
+    if (m) return { rm: { p: m[1], t: m[5], r: m[3] !== '・', c: [Number(m[2]), Number(m[4])] } };
+    m = t.match(/^(MP|\dM|[SC])(\d{2,4}[A-Z][A-Z0-9]*)$/);
+    if (m) return { mc: m[1] + m[2] };
+    return null;
+  }
+
+  function dkRoomOptReadPage(items, page) {
+    function clean(t) { return String(t || '').replace(/[\u0000-\u001f]/g, ' '); }
+    var all = clean(items.map(function (o) { return o.s; }).join(''));
+    // 別売品のページ（69〜78）には必ず「本ページに掲載の別売品は税込価格を表記しています」とある。
+    // 機種のページ（43〜48）の「パネル（別売）価格…」まで読んでいたので、これで絞る
+    if (!/税込価格を表記/.test(all.replace(/\s/g, ''))) return [];
+    var its = items.filter(function (o) { return clean(o.s).trim(); });
+
+    // 「S40」「・566ATRP」のように割れて来る見出しをつなぐ
+    var merged = its.slice();
+    its.forEach(function (o) {
+      var t0 = clean(o.s).trim();
+      if (!/^(MP|\dM|[SC])\d{2}/.test(t0) || dkoRangeFit(t0)) return;
+      var txt = t0, end = o.x + (o.w || 0), grew = false;
+      for (var guard = 0; guard < 4; guard++) {
+        var nx = null;
+        its.forEach(function (q) {
+          var tq = clean(q.s).trim();
+          if (q !== o && Math.abs(q.y - o.y) < 1 && q.x >= end - 2 && q.x - end < 4 &&
+              /^[・～~〜0-9A-Z]+$/.test(tq) && (!nx || q.x < nx.x)) nx = q;
+        });
+        if (!nx) break;
+        txt += clean(nx.s).trim(); end = nx.x + (nx.w || 0); grew = true;
+      }
+      if (grew && dkoRangeFit(txt)) merged.push({ s: txt, x: o.x, y: o.y, w: end - o.x });
+    });
+
+    // 表の見出し（「…別売品」）で区切る。左右2段のページは左右に分ける
+    /* 表の見出しは「…用別売品」「…関連別売品」「室外機用別売品（…」で終わる行。
+       ページの下の注記（「…他のHA端子S21を使用する別売品との併用は…」）にも「別売品」の字があり、
+       それを右の段の見出しと取り違えて、ページを左右2段に分け、右半分の●の列を捨てていた（73ページ） */
+    var titles = its.filter(function (o) {
+      var t = clean(o.s).replace(/\s+/g, '');
+      return /(用|関連|配管)別売品/.test(t) && !/。|注|別売品名|別売品の|別売品は|別売品に|別売品と|別売品を|別売品が/.test(t);
+    });
+    var twoCol = titles.some(function (o) { return o.x >= 300; });
+    var out = [];
+    // 78ページのスカイダクト（配管化粧ダクト）も見出しに「別売品」が無い。どの機種にも使う部材
+    if (!titles.length) { readDkoTable(merged, /スカイダクト/.test(all) ? 'スカイダクト' : '', page, out, clean); return out; }
+    titles.forEach(function (T) {
+      var right = twoCol && T.x >= 300;
+      var xLo = right ? 305 : 0, xHi = (twoCol && !right) ? 310 : 1e9;
+      // 表の下の端。70ページのいちばん下の行（KDG99C41-X）は高さ40にあり、40より上としていて落ちていた
+      var yLo = 20;
+      titles.forEach(function (U) {
+        if (U === T || U.y >= T.y - 2) return;
+        if ((twoCol && U.x >= 300) !== right) return;
+        yLo = Math.max(yLo, U.y + 2);
+      });
+      var reg = merged.filter(function (o) { return o.x >= xLo && o.x < xHi && o.y < T.y + 2 && o.y > yLo; });
+      var title = its.filter(function (o) { return Math.abs(o.y - T.y) < 2 && o.x <= T.x + 1 && o.x > T.x - 200; })
+        .sort(function (a, b) { return a.x - b.x; }).map(function (o) { return clean(o.s); }).join('').replace(/\s+/g, '');
+      readDkoTable(reg, title, page, out, clean);
+    });
+    return out;
+  }
+
+  /* 別売品の表の品名（2026-09-11）
+     左の欄は2段のことが多い（74ページ）。
+       左の段：大きなまとまり「樹脂製日除け屋根」「防雪屋根」「防雪フード」（何行ぶんものマスのまん中）
+       右の段：その中の区分「塗装」「ステンレス」「（加湿部）」「（吸込側面）」（これも何行ぶんものまん中）
+     いちばん近い名前を採ると、となりのまとまりの区分（「ステンレス」）を取ってしまう。
+     日立の別売品と同じく、「分けた行のまん中」と「名前の高さ」がいちばん合う分け方で割り当てる。
+     区分は、大きなまとまりの中だけで分ける */
+  function dkoAssign(rowYs, labels, U, E, glue) {
+    var n = rowYs.length, k = labels.length, INF = 1e12, i, j, p, t;
+    var f = [], from = [];
+    for (i = 0; i <= n; i++) { f.push([]); from.push([]); for (j = 0; j <= k; j++) { f[i].push(INF); from[i].push(null); } }
+    f[0][0] = 0;
+    for (i = 0; i <= n; i++) {
+      for (j = 0; j <= k; j++) {
+        if (!i && !j) continue;
+        var best = INF, how = null;
+        if (i > 0 && f[i - 1][j] + U < best) { best = f[i - 1][j] + U; how = ['skip']; }
+        if (j > 0 && f[i][j - 1] + E < best) { best = f[i][j - 1] + E; how = ['empty']; }
+        if (j > 0) {
+          for (p = 0; p < i; p++) {
+            if (f[p][j - 1] >= INF) continue;
+            // glue[t]：t-1行目とt行目は同じマス。その境目でまとまりを切らない
+            if (glue && ((p > 0 && glue[p]) || (i < n && glue[i]))) continue;
+            var sum = 0;
+            for (t = p; t < i; t++) sum += rowYs[t];
+            var c = f[p][j - 1] + Math.abs(sum / (i - p) - labels[j - 1].y);
+            if (c < best) { best = c; how = ['block', p]; }
+          }
+        }
+        f[i][j] = best; from[i][j] = how;
+      }
+    }
+    var asg = [];
+    for (t = 0; t < n; t++) asg.push(-1);
+    i = n; j = k;
+    while (i > 0 || j > 0) {
+      var h = from[i][j];
+      if (!h) break;
+      if (h[0] === 'skip') i--;
+      else if (h[0] === 'empty') j--;
+      else { for (t = h[1]; t < i; t++) asg[t] = j - 1; i = h[1]; j--; }
+    }
+    return asg;
+  }
+
+  function dkoNames(reg, codes, top, clean) {
+    function isNameBit(o) {
+      var tt = clean(o.s).trim();
+      if (!tt || /^注\s*[\d,\s]*$/.test(tt) || /^[●―□★※]+$/.test(tt)) return false;
+      if (DKO_CODE.test(tt) || /^[SCRF]\d{2}/.test(tt) || DKO_MONEY.test(tt) || /^[\d,]+$/.test(tt)) return false;
+      if (/。/.test(tt)) return false;                        // 表の下の注記の文
+      return true;
+    }
+    function tidy(t) {
+      // 全角の英字と数字は半角にそろえる（「Ｐ板」「高さ １２０」）
+      t = t.replace(/[Ａ-Ｚａ-ｚ０-９]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0); });
+      t = t.replace(/注\s*[\d,]+/g, ' ').replace(/★\s*\d?|□|※/g, ' ').replace(/別売品名/g, ' ')
+        .replace(/([ぁ-んァ-ヶー一-龥（）])\s+(?=[ぁ-んァ-ヶー一-龥（）])/g, '$1')
+        .replace(/\s+/g, ' ').trim();
+      // 1文字ずつあいた英数字（73ページ「L A N」「H E M S」、70ページ「N 3 . 3」、77ページ「高さ ３ ０ ０」）をつなぐ
+      // かっこを離してから数える（「３０ ０）」の「０）」も1けたの数字として見る）
+      var tok = t.replace(/（/g, '（ ').replace(/）/g, ' ）').replace(/\s+/g, ' ').trim().split(' '), outT = [], prevOne = false;
+      tok.forEach(function (w) {
+        var one1 = /^[A-Za-z0-9.０-９Ａ-Ｚ．]$/.test(w);
+        // 「３０」「０」のように数字が2つに割れて来ることもある（77ページ「高さ 300」）
+        var digAfterDigits = /^[0-9]$/.test(w) && /^[0-9.]+$/.test(outT[outT.length - 1] || '');
+        if (one1 && (prevOne || digAfterDigits)) outT[outT.length - 1] += w; else outT.push(w);
+        prevOne = one1;
+      });
+      return outT.join(' ').replace(/（\s+/g, '（').replace(/\s+）/g, '）');
+    }
+    // 品番の行
+    var rows = [];
+    codes.forEach(function (c) { if (!rows.some(function (y) { return Math.abs(y - c.y) < 2.5; })) rows.push(c.y); });
+    rows.sort(function (a, b) { return b - a; });
+    var xsC = codes.map(function (c) { return c.x; }).sort(function (a, b) { return a - b; });
+    /* 名前の欄の端にする品番の列は、左から見て「いちばん多い列の3分の1以上（3個以上）の品番がある列」。
+       70ページ左下は上の表（x167 に17個）と下のワイドグリルの表（x123 に4個）が1つの区切りに入り、
+       x123 を端にして、上の表の名前の右半分（「壁用」「間用」「空清フィルタ」の「ー」）を捨てていた */
+    var colN = xsC.map(function (x0) { return xsC.filter(function (x) { return Math.abs(x - x0) < 6; }).length; });
+    var maxN = Math.max.apply(null, colN);
+    var codeX = xsC[0];
+    for (var q = 0; q < xsC.length; q++) {
+      if (colN[q] >= 3 && colN[q] * 3 >= maxN) { codeX = xsC[q]; break; }
+    }
+    var lo = Math.min.apply(null, rows) - 12;
+    /* 名前の欄の左の端。名前の欄の左に、同じ高さで別の小さな表（78ページ「バンドホルダー K-TH7A 99 円」）があると、
+       その表の名前がまとまりの名前になり、TM シリーズの35品目が「バンドホルダー」になっていた。
+       名前の列の品番と同じ高さの範囲で、名前の列より左にある品番・値段の右はしより右だけを名前にする */
+    var colYs = codes.filter(function (c) { return Math.abs(c.x - codeX) < 6; }).map(function (c) { return c.y; });
+    var yHi = Math.max.apply(null, colYs) + 4, yLo = Math.min.apply(null, colYs) - 4;
+    var xLeft = -1e9;
+    reg.forEach(function (o) {
+      if (o.x >= codeX - 20 || o.y > yHi || o.y < yLo) return;
+      var tt = clean(o.s).trim();
+      if ((DKO_CODE.test(tt) && !/^[SCRF]\d/.test(tt)) || DKO_MONEY.test(tt)) xLeft = Math.max(xLeft, o.x + (o.w || 0));
+    });
+    var bits = reg.filter(function (o) { return o.x < codeX - 2 && o.x > xLeft + 2 && o.y <= top + 4 && o.y >= lo && isNameBit(o); })
+      .sort(function (a, b) { return b.y - a.y || a.x - b.x; });
+    /* 縦書きの名前（70ページ「前」「面」「グ」「リ」「ル※」が x57 に1文字ずつ縦に並ぶ）は、
+       となりの横書きの名前（「和 風 （ 白 木 ）」）とくっついて「前和 風（白」になっていた。
+       同じ x に1文字の字が4つ以上、4〜9ポイントの間で縦に続き、その多くが右どなりに1文字の字を持たない
+       （字間をあけた横書き「簡　単」「気　密」ではない）ものは、上から読んで1つの名前にする */
+    var single = bits.filter(function (o) { return /^[ぁ-んァ-ヶー一-龥]※?$/.test(clean(o.s).trim()); });
+    var used = [], vert = [];
+    single.forEach(function (o) {
+      if (used.indexOf(o) >= 0) return;
+      var ch = [o];
+      for (;;) {
+        var a0 = ch[ch.length - 1];
+        var nx = single.filter(function (p) {
+          return used.indexOf(p) < 0 && ch.indexOf(p) < 0 && Math.abs(p.x - a0.x) <= 1.5 && a0.y - p.y >= 4 && a0.y - p.y <= 9;
+        })[0];
+        if (!nx) break;
+        ch.push(nx);
+      }
+      if (ch.length < 4) return;
+      var spread = ch.filter(function (c) {
+        // 右か左に、同じ高さの1文字の字があれば字間をあけた横書き（「ミ ン ト グ リ ー ン」の右はしの「ン」）
+        return single.some(function (p) { return p !== c && Math.abs(p.y - c.y) < 0.6 && Math.abs(p.x - c.x) > 4 && Math.abs(p.x - c.x) < 60; });
+      }).length;
+      if (spread * 2 >= ch.length) return;
+      ch.forEach(function (c) { used.push(c); });
+      vert.push({ x: o.x, hi: ch[0].y, lo: ch[ch.length - 1].y, t: ch.map(function (c) { return clean(c.s).trim(); }).join('') });
+    });
+    bits = bits.filter(function (o) { return used.indexOf(o) < 0; });
+    // 同じ高さで続く文字を1行に（「ペ」「ア」「コ」「イ」「ル」）
+    var lines = [];
+    function one(o) { return /^[ぁ-んァ-ヶー一-龥（）・]$/.test(clean(o.s).trim()); }
+    bits.forEach(function (o) {
+      var L = null;
+      lines.forEach(function (x) {
+        if (Math.abs(x.y - o.y) >= 2.5 || o.x < x.x - 1) return;
+        // 1文字ずつ間をあけて組んだ名前（39ページ「パ　ネ　ル」「気　密　枠」）は、字の間が広くても1行
+        // 70ページ「気　　密　　枠」は字の間が47ある（同じ高さぴったりのときだけ60まで）
+        if (o.x - x.end < 14 || (x.one && one(o) && Math.abs(x.y - o.y) < 1.2 &&
+            (o.x - x.end < 36 || (Math.abs(x.y - o.y) < 0.6 && o.x - x.end < 60)))) L = x;
+      });
+      if (!L) { L = { x: o.x, end: o.x + (o.w || 0), y: o.y, t: '' }; lines.push(L); }
+      L.t += ' ' + clean(o.s); L.end = Math.max(L.end, o.x + (o.w || 0));
+      L.one = one(o) || /\s[ぁ-んァ-ヶー一-龥]$/.test(clean(o.s).trim());
+    });
+    lines.forEach(function (L) { L.t = tidy(L.t); });
+    // 縦書きの名前は、まん中の高さの1行として足す
+    vert.forEach(function (v) { lines.push({ x: v.x, end: v.x + 6, y: (v.hi + v.lo) / 2, t: tidy(v.t) }); });
+    // 1文字の英字の行（78ページ「Ｔ」）は、すぐ下の英字で始まる行（「M シリーズ」）の頭につなぐ（「TM シリーズ」）
+    lines.forEach(function (L) {
+      if (!/^[A-Za-z]$/.test(L.t.trim())) return;
+      var below = lines.filter(function (M) {
+        return M !== L && /^[A-Za-z]/.test(M.t) && L.y - M.y > 2 && L.y - M.y <= 20 && Math.abs(M.x - L.x) <= 6;
+      }).sort(function (a, b) { return b.y - a.y; })[0];
+      if (below) { below.t = L.t.trim() + below.t; L.t = ''; }
+    });
+    // 表の下の注記（「注 1. 防雪フード（加湿部）…」は「注 1」を抜くと「. 防雪フード…」になる）は名前にしない
+    lines = lines.filter(function (L) { return L.t && !/^[.．、,注※]/.test(L.t) && !/[、。]/.test(L.t) && /[ぁ-んァ-ヶー一-龥\dａ-ｚA-Za-z]/.test(L.t); });
+    // 句点が別の文字で来る注記の文（77ページ「…のいずれかを使用してくださ」「い。」）も名前にしない
+    lines = lines.filter(function (L) { return !/くださ|ます|です|ません|を使用する|のいずれか|お願い|納品姿|ご注文|販売単位/.test(L.t) && !/^[\d\s.]+$/.test(L.t); });
+    // 表の見出しの言葉（78ページ「梱包入数」「外観」「室内用」「ダクト外寸（mm）…」）と、英字1文字だけの行は名前にしない
+    lines = lines.filter(function (L) { return !/^(梱包入数|外観|品番|価格|機種名|適用銅管|室内用|ダクト外寸.*|外形寸法.*|[Ａ-ＺA-Z]|[\d,]+ ?個)$/.test(L.t.trim()); });
+    /* 区切りの見出し（73ページ「■遠隔制御Ｐ板による遠隔制御」「■ＬＡＮ接続」）は区切りの頭に書いてある。
+       まん中に書く名前と同じに扱うと、上の区切りの品物にまで下の見出しを付けていた。
+       名前には使わず、見出しから次の見出しまでを1つの区切りにする */
+    var heads = lines.filter(function (L) { return /^■/.test(L.t); }).map(function (L) { return L.y; });
+    lines = lines.filter(function (L) { return !/^■/.test(L.t); });
+    function sectionOf(y) {
+      var best = null;
+      heads.forEach(function (h) { if (h > y && (best == null || h < best)) best = h; });
+      return best == null ? 1e9 : best;
+    }
+    if (!lines.length) return { rows: rows, names: [], codeX: codeX };
+    // 値段のある品番の行ぜんぶで見る（70ページ KAF968B41「枠付」は2列目の品番の行）
+    var rowsX = rows;
+    // 一覧の名前は行の高さぴったり（0.3 以内）。69ページ「埋込配管用／シングルコイル／組合せ」は行から1.0ずれた3行の名前
+    function onRow(y) { return y != null && rowsX.some(function (r) { return Math.abs(r - y) <= 0.8; }); }
+    function len(t) { return t.replace(/\s+/g, '').length; }
+    // 段：いちばん左に始まる行が「まとまり」、それより右が「区分」
+    var minX = Math.min.apply(null, lines.map(function (L) { return L.x; }));
+    function labelsOf(col) {
+      var ls = lines.filter(function (L) { return (L.x - minX < 6) === (col === 0); })
+        .sort(function (a, b) { return b.y - a.y; });
+      // 縦に続く行（「防雪」「フード」）は1つの名前
+      var out = [];
+      ls.forEach(function (L) {
+        var last = out[out.length - 1];
+        /* 1行に1つ名前がある一覧の表（45ページ「集塵・脱臭フィルター枠付」「抗ウイルスフィルター枠付」「木台」…）は、
+           行の高さに名前が1つずつある。縦に続く1つの名前（「防雪三点」「セット」）と思ってつなげると、
+           表の名前が全部1つにつながった（39・45・70ページの34品目）。行の高さにある長い名前どうしはつなげない */
+        // 長い名前（9文字以上）のあとだけ止める。73ページ「無線 L A N 接」「続アダプター」は1つの名前の途中で割れている
+        var lt = last ? (last.lt || last.t) : '';
+        var paren = /^[（(]/.test(L.t);
+        var own = col === 0 && last && !paren && (
+          (onRow(last.lo) && onRow(L.y) && len(lt) >= 5 && len(L.t) >= 5) ||   // 行の高さの名前どうし（「防振フレーム」「ブラケット」）
+          (onRow(last.lo) && len(L.t) > 5 && len(lt) > 8) ||                    // 39ページ「ワイドパネル（470…）」のあとの「ワイドパネル（670…）」
+          (onRow(L.y) && len(lt) > 8));                                         // 「ワイドパネル（670…）」のあとの「気密枠」
+        // かっこで始まる行どうし（74ページ「（吸込側面）」「（吸込背面）」、77ページ「（標準）」「（戸袋用）」）は別々の区分
+        var sib = last && paren && /^[（(]/.test(lt) &&
+          (lt.match(/[（(]/g) || []).length <= (lt.match(/[）)]/g) || []).length;   // 前の行のかっこが閉じていなければ続き
+        /* 縦に3行以上、行の高さに1つずつ名前が並ぶ欄は一覧（39ページの色「フレッシュホワイト」「ホワイト」「ブラウン」「木目」）。
+           2行だけ（「防雪三点」「セット」、「配管スペーサー」「付き」）は1つの名前の続き */
+        var run = last && onRow(last.lo) && onRow(L.y) && lines.some(function (M) {
+          return M !== L && Math.abs(M.x - L.x) < 8 && onRow(M.y) &&
+            ((M.y < L.y - 2 && M.y > L.y - 10) || (M.y > last.hi + 2 && M.y < last.hi + 10));
+        });
+        /* かっこで始まる続きの行（69ページ「前面パネル」…「（交換用）」）は、マスの上と下に分けて書いてある。
+           間にほかの名前が無ければ、離れていてもつなぐ */
+        var near = last && (last.lo - L.y <= 7 ||
+          (last.lo - L.y <= 30 && /^[（(]/.test(L.t) && !ls.some(function (M) { return M.y < last.lo - 1 && M.y > L.y + 1; })));
+        if (last && !own && !run && !sib && near && Math.abs(last.x - L.x) < 8) { last.t += L.t; last.lo = L.y; last.ys.push(L.y); last.lt = L.t; }
+        else out.push({ x: L.x, hi: L.y, lo: L.y, t: L.t, ys: [L.y], lt: L.t });
+      });
+      out.forEach(function (x) { x.y = (x.hi + x.lo) / 2; });
+      return out;
+    }
+    var g = labelsOf(0), sub = labelsOf(1);
+    var names = rows.map(function () { return ''; });
+    /* 2つの行のまん中に名前の文字があれば、その2行は同じマスの中。
+       71ページのドレンアップキットは4行（K-KDU573MS・MV・NS・NV）で、名前は上寄りに書いてある。
+       まん中の高さだけで分けると3行と1行に分け、NV を下の「ドレンポンプキット」にしていた。
+       NS と NV のまん中には「ハーフサイズ」があるので、ここは切れない */
+    var glue = rows.map(function (y, t) {
+      if (!t) return false;
+      var a = rows[t - 1], gap = a - y, mid = (a + y) / 2;
+      if (gap > 9) return false;
+      return lines.some(function (L) { return Math.abs(L.y - mid) < gap / 4; });
+    });
+    // まとまりは区切りごとに割り当てる（区切りの中の名前だけを使う）
+    var ga = rows.map(function () { return -1; });
+    var sec = rows.map(function (y) { return sectionOf(y); });
+    var s0 = 0;
+    while (s0 < rows.length) {
+      var s1 = s0;
+      // 品番の行が30以上あいたら別の表（77ページの下の「防雪三点セットの組み合わせ」）
+      while (s1 + 1 < rows.length && sec[s1 + 1] === sec[s0] && rows[s1] - rows[s1 + 1] <= 30) s1++;
+      var top0 = (s0 > 0 && sec[s0 - 1] === sec[s0]) ? rows[s0 - 1] : sec[s0], bottom0 = s1 + 1 < rows.length ? rows[s1 + 1] : -1e9;
+      var gIn = g.filter(function (x) { return x.y < top0 && x.y > bottom0 && sectionOf(x.y) === sec[s0]; });
+      var part = dkoAssign(rows.slice(s0, s1 + 1), gIn, 40, 9, glue.slice(s0, s1 + 1).map(function (v, t) { return t > 0 && v; }));
+      for (var t0 = s0; t0 <= s1; t0++) ga[t0] = part[t0 - s0] >= 0 ? g.indexOf(gIn[part[t0 - s0]]) : -1;
+      s0 = s1 + 1;
+    }
+    // まとまりごとに、区分を割り当てる
+    var leaf = rows.map(function () { return false; });
+    function hasOn(lab, y) { return lab.ys.some(function (v) { return Math.abs(v - y) <= 1.2; }); }
+    var i = 0;
+    while (i < rows.length) {
+      var j = i;
+      while (j + 1 < rows.length && ga[j + 1] === ga[i] && sec[j + 1] === sec[i]) j++;
+      var blockRows = rows.slice(i, j + 1);
+      var hi = blockRows[0] + 4, lw = blockRows[blockRows.length - 1] - 4;
+      var subs = sub.filter(function (x) { return x.y <= hi && x.y >= lw; });
+      var sa = dkoAssign(blockRows, subs, 9, 9);
+      for (var t = i; t <= j; t++) {
+        var parts = [];
+        if (ga[t] >= 0) parts.push(g[ga[t]].t);
+        var sl = sa[t - i] >= 0 ? subs[sa[t - i]] : null;
+        if (sl) parts.push(sl.t);
+        names[t] = parts.join(' ').trim();
+        /* 品番の行の高さに書いてあり、その行だけに付いた名前なら「その品物だけの名前」。
+           同じ品番が何ページにもあるとき（KRP413BB1S は70・71・73ページ）は、これを使う */
+        var k0 = t - i;
+        leaf[t] = (sl && sa.filter(function (v) { return v === sa[k0]; }).length === 1 && hasOn(sl, rows[t])) ||
+                  (ga[t] >= 0 && ga.filter(function (v) { return v === ga[t]; }).length === 1 && hasOn(g[ga[t]], rows[t]));
+      }
+      i = j + 1;
+    }
+    return { rows: rows, names: names, codeX: codeX, leaf: leaf };
+  }
+
+  /* 1つの見出しの下に、列の間隔の違う表が上下に並ぶことがある（72ページのリモコン用別売品）。
+     2つの表の●の列を混ぜると、見出しの当たらない列ができて品目が落ちる。
+     品番の範囲の見出しが縦に続くかたまりごとに、表を分けて読む */
+  function readDkoTable(reg, title, page, out, clean) {
+    var hs = reg.filter(function (o) { return dkoRangeFit(clean(o.s)); })
+      .map(function (o) { return o.y; }).sort(function (a, b) { return b - a; });
+    var blocks = [];
+    hs.forEach(function (y) {
+      var last = blocks[blocks.length - 1];
+      if (last && last.lo - y <= 20) { last.lo = y; last.n++; }
+      else blocks.push({ hi: y, lo: y, n: 1 });
+    });
+    /* 表を分けるのは、本物の見出しのかたまり（品番の範囲が3つ以上）で、
+       その上の見出しとの間に品番の行が2つ以上あるときだけ。
+       表の途中にある範囲の文字1つ（注記の中など）で分けると、74・75ページの品目がごっそり落ちた */
+    var codeRows = [];
+    reg.forEach(function (o) {
+      var t = clean(o.s).trim();
+      if (DKO_CODE.test(t) && !/^[SCRF]\d/.test(t) && !codeRows.some(function (y) { return Math.abs(y - o.y) < 2.5; })) codeRows.push(o.y);
+    });
+    var real = [];
+    blocks.forEach(function (b) {
+      if (!real.length) { real.push({ hi: b.hi, lo: b.lo }); return; }
+      var prev = real[real.length - 1];
+      var between = codeRows.filter(function (y) { return y < prev.lo && y > b.hi; }).length;
+      if (b.n >= 3 && between >= 2) real.push({ hi: b.hi, lo: b.lo });
+    });
+    if (real.length <= 1) { readDkoTable1(reg, title, page, out, clean); return; }
+    real.forEach(function (b, i) {
+      var bottom = i + 1 < real.length ? real[i + 1].hi + 12 : -1e9;
+      // 下の表は、その見出しの12上（【RX】などの札）から。上の表の品番の行は含めない
+      var sub = reg.filter(function (o) { return o.y > bottom && (i === 0 || o.y <= b.hi + 12); });
+      readDkoTable1(sub, title, page, out, clean);
+    });
+  }
+
+  function readDkoTable1(reg, title, page, out, clean) {
+    var codes = reg.filter(function (o) {
+      var t = clean(o.s).trim();
+      return DKO_CODE.test(t) && !/^[SCRF]\d/.test(t) && !/^K[A-Z]$/.test(t);
+    });
+    if (!codes.length) return;
+    /* 表の上の端は、品番が縦に3つ以上ならぶ列の品番で決める。
+       71ページのドレンの表は、左の写真の説明（「● ドレンアップキット K-KDU573NS（NV）」）の品番が
+       見出しの高さにあり、それを表の上の端にして、見出しの範囲を31のうち7つしか数えなかった */
+    var inCol = codes.filter(function (c) {
+      return codes.filter(function (d) { return Math.abs(d.x - c.x) < 6; }).length >= 3;
+    });
+    if (inCol.length) {
+      var topCol = Math.max.apply(null, inCol.map(function (o) { return o.y; }));
+      codes = codes.filter(function (o) { return inCol.indexOf(o) >= 0 || o.y <= topCol + 2; });
+    }
+    var top = Math.max.apply(null, codes.map(function (o) { return o.y; }));
+    var heads = reg.filter(function (o) { return o.y > top + 2 && dkoRangeFit(clean(o.s)); });
+    // 列は ● だけで決める。一覧の表の「―」（その色は無い）を列と思い込み、表ごと捨てていた（70ページ）
+    var marks = reg.filter(function (o) { return /^●/.test(clean(o.s).trim()) && o.y <= top + 2; });
+
+    // ●の列：まん中の位置をまとめる
+    var mcols = [];
+    marks.forEach(function (o) {
+      var cx = o.x + 3, c = null;
+      mcols.forEach(function (k) { if (!c && Math.abs(k.x - cx) < 10) c = k; });
+      if (!c) { c = { x: cx, n: 0, fits: [] }; mcols.push(c); }
+      c.n++;
+    });
+    /* ●が1つしかない列も列と見る（72ページ下の表の KRC944A2 は、その列の●がこれ1つ）。
+       見出しの範囲が当たらない列は、下の「一覧の表として読む」で捨てられる */
+    mcols = mcols.sort(function (a, b) { return a.x - b.x; });
+    // 見出しを、●の列のあいだのまん中を境目にした区画に割り当てる
+    heads.forEach(function (h) {
+      var cx = h.x + (h.w || 0) / 2, best = -1;
+      for (var i = 0; i < mcols.length; i++) {
+        var lo = i ? (mcols[i - 1].x + mcols[i].x) / 2 : -1e9;
+        var hi = i < mcols.length - 1 ? (mcols[i].x + mcols[i + 1].x) / 2 : 1e9;
+        if (cx >= lo && cx < hi) best = i;
+      }
+      if (best >= 0) mcols[best].fits.push(dkoRangeFit(clean(h.s)));
+    });
+    /* ●の列に見出しの範囲が1つも当たらないなら、●の表ではない（注記の「●」を拾っただけ）。
+       71ページのビルトイン形のダクトの表を●の表と思い込み、●の無い行を120品目ほど捨てていた */
+    if (!mcols.some(function (k) { return k.fits.length; })) mcols = [];
+    var allFits = heads.map(function (h) { return dkoRangeFit(clean(h.s)); });
+    // 品名は表ごとにまとめて作る（何行ぶんもあるマスのまん中に書いた名前を、行に割り当てる）
+    /* 品名の行は、値段のある品番の行だけ。77ページは上の注記の中にも品番（「K-KW5G」など）があり、
+       その行まで名前の割り当てに入って、いちばん下の「つかみ金具」が40行に付いた */
+    var priced = codes.filter(function (c) {
+      return reg.some(function (o) {
+        if (Math.abs(o.y - c.y) >= 2.5 || o.x <= c.x) return false;
+        var tt = clean(o.s).trim();
+        return DKO_MONEY.test(tt) || /オープン価格/.test(tt) || /^[\d,]{4,}$/.test(tt);
+      });
+    });
+    /* 品名は、値段のある品番の行を「行が20以上あいたところ」で分けた帯ごとに作る。
+       78ページは1つの区切りに D シリーズ・TL シリーズ・TM シリーズの表が縦に並び、品番の列の位置が表ごとに違う（x225 と x382）。
+       1つとして読むと、TM シリーズの品名を x225 より左の文字（となりの「バンドホルダー」の表）から付けていた */
+    var src = priced.length ? priced : codes;
+    var bys = [];
+    src.forEach(function (c) { if (!bys.some(function (y) { return Math.abs(y - c.y) < 2.5; })) bys.push(c.y); });
+    bys.sort(function (a, b) { return b - a; });
+    var bands = [];
+    bys.forEach(function (y) { var b = bands[bands.length - 1]; if (b && b.lo - y <= 20) b.lo = y; else bands.push({ hi: y, lo: y }); });
+    var nameRows = { rows: [], names: [], leaf: [], codeXs: [] };
+    bands.forEach(function (b, k) {
+      var up = k ? bands[k - 1].lo - 2 : 1e9, down = k + 1 < bands.length ? bands[k + 1].hi + 2 : -1e9;
+      var subReg = reg.filter(function (o) { return o.y < up && o.y > down; });
+      var subCodes = src.filter(function (c) { return c.y <= b.hi + 2.5 && c.y >= b.lo - 2.5; });
+      // 帯の上の端は最初の行より10上まで（73ページ「無線 LAN 接」、70ページ「ワイドグリル※」は最初の行より上に書いてある）
+      var r = dkoNames(subReg, subCodes, k ? Math.min(b.hi + 10, up - 1) : top, clean);
+      r.rows.forEach(function (y, t) {
+        nameRows.rows.push(y); nameRows.names.push(r.names[t] || '');
+        nameRows.leaf.push(!!(r.leaf && r.leaf[t])); nameRows.codeXs.push(r.codeX);
+      });
+    });
+    var names = nameRows.names;
+    /* 組み合わせの表（77ページ「防雪三点セットの組み合わせについて」）は、品番が横に何列も並び、
+       列の頭に「置台」「防雪屋根」「防雪パネル」と書いてある。左の欄の名前ではなく列の頭で呼ぶ。
+       品番が3つ以上ならぶ列が3列以上ある表だけ（2列の表は、機種ちがいの同じ品物） */
+    var cols = [];
+    codes.forEach(function (c) {
+      if (cols.some(function (x) { return Math.abs(x - c.x) < 6; })) return;
+      if (codes.filter(function (d) { return Math.abs(d.x - c.x) < 6; }).length >= 3) cols.push(c.x);
+    });
+    function stem(o) { var m = clean(o.s).trim().match(/^[A-Z]+(?:-[A-Z]+)?/); return m ? m[0] : ''; }
+    function colHead(c) {
+      if (cols.length < 3 || Math.abs(c.x - nameRows.codeXs[rowOf(c.y)]) < 20) return '';
+      /* 同じ行の品番が同じ頭（78ページ K-TD6A・K-TD8A・K-TD10A）なら、大きさ違いの同じ品物の表。
+         列の頭は太さ（「（φ6.35×φ9.52）」）なので名前にしない */
+      var mates = codes.filter(function (d) { return d !== c && Math.abs(d.y - c.y) < 2.5; });
+      if (!mates.length || mates.some(function (d) { return stem(d) === stem(c); })) return '';
+      // 列の上の端は、c から続いている品番だけで決める（77ページは上の注記の中にも同じ x の品番がある）
+      var col = codes.filter(function (d) { return Math.abs(d.x - c.x) < 6; });
+      var colTop = c.y, colBot = c.y;
+      col.slice().sort(function (a, b) { return a.y - b.y; }).forEach(function (d) { if (d.y > colTop && d.y - colTop <= 12) colTop = d.y; });
+      col.slice().sort(function (a, b) { return b.y - a.y; }).forEach(function (d) { if (d.y < colBot && colBot - d.y <= 12) colBot = d.y; });
+      if (col.filter(function (d) { return d.y <= colTop && d.y >= colBot; }).length < 3) return '';
+      var hs = reg.filter(function (o) {
+        var tt = clean(o.s).trim();
+        return o.y > colTop + 2 && o.y <= colTop + 12 && o.x >= c.x - 8 && o.x <= c.x + 32 &&
+          tt && !DKO_CODE.test(tt) && !DKO_MONEY.test(tt) && !dkoRangeFit(tt) && !/^[●―【】]/.test(tt);
+      }).sort(function (a, b) { return Math.abs(a.x - c.x) - Math.abs(b.x - c.x); });
+      if (!hs.length) return '';
+      var h = hs[0], ht = clean(h.s).replace(/\s+/g, '');
+      // 表の題（「防雪三点セットの組み合わせについて」）を頭に付ける
+      var cap = reg.filter(function (o) { return o.y > h.y + 4 && o.y <= h.y + 20 && /について/.test(clean(o.s)); })[0];
+      var pre = '';
+      if (cap) pre = reg.filter(function (o) { return Math.abs(o.y - cap.y) < 1.5 && o.x <= cap.x + 1 && o.x > cap.x - 120; })
+        .sort(function (a, b) { return a.x - b.x; }).map(function (o) { return clean(o.s); }).join('')
+        .replace(/\s+/g, '').replace(/の組み?合わせについて$/, '');
+      return (pre + ' ' + (/品番/.test(ht) ? '' : ht)).trim();
+    }
+    function rowOf(y) {
+      var best = 0, bd = 1e9;
+      nameRows.rows.forEach(function (ry, i) { var d = Math.abs(ry - y); if (d < bd) { bd = d; best = i; } });
+      return best;
+    }
+    // 配管の太さの表（ビルトイン形のダクト）は見出しに品番が無い。表の名前の形で付ける
+    if (!allFits.length && /ビルトイン/.test(title)) allFits = [{ type: 'ビルトイン形' }];
+    // スカイダクト（配管化粧ダクト）は、ルームエアコンのどの機種にも使う部材。
+    // ルームエアコンの別売品は、ルームエアコンの機種にしか出ない（app.js の showOptionsFor）
+    if (!allFits.length && /スカイダクト/.test(title)) allFits = [{ all: true }];
+
+    codes.forEach(function (c) {
+      var t = clean(c.s).trim(), cm = t.match(DKO_CODE);
+      var code = cm[1];
+      // 値段：同じ行の右（次の品番の手前まで）
+      var nextX = 1e9;
+      codes.forEach(function (d) { if (d !== c && Math.abs(d.y - c.y) < 2.5 && d.x > c.x && d.x < nextX) nextX = d.x; });
+      var row = reg.filter(function (o) { return Math.abs(o.y - c.y) < 2.5; });
+      var priceItem = null;
+      row.forEach(function (o) {
+        if (o.x <= c.x || o.x >= nextX) return;
+        var tt = clean(o.s);
+        if ((DKO_MONEY.test(tt) || /オープン価格/.test(tt)) && (!priceItem || o.x < priceItem.x)) priceItem = o;
+      });
+      // 値段が「108,240」「円」と2つに割れて来ることがある（76ページ K-AWS8H）
+      var splitYen = null;
+      if (!priceItem) {
+        row.forEach(function (o) {
+          if (o.x <= c.x || o.x >= nextX || !/^[\d,]{4,}$/.test(clean(o.s).trim())) return;
+          var en = row.some(function (q) { return /^円/.test(clean(q.s).trim()) && q.x > o.x && q.x - (o.x + (o.w || 0)) < 12; });
+          if (en && (!priceItem || o.x < priceItem.x)) { priceItem = o; splitYen = clean(o.s).trim(); }
+        });
+      }
+      if (!priceItem) return;
+      var open = /オープン価格/.test(clean(priceItem.s));
+      var y = open ? 0 : Math.round(yen(splitYen || clean(priceItem.s).match(DKO_MONEY)[1]) / 1.1);
+
+      // 付く機種：●の列の見出し。●の無い表は表の中の範囲全部
+      var fits = [], mates = [];
+      if (mcols.length) {
+        /* ●は品番の行より少し上に組まれていることがある（72ページ KRC944A1 は2.6上）。3.5まで同じ行と見る。
+           それでも無ければ、すぐ上の「品番の無い行」の●（74ページ「上下吹出 KPW937F4 ＋ KPW081A41（アタッチメント）」は
+           ●が上の行にある） */
+        var dots = reg.filter(function (o) { return /^●/.test(clean(o.s).trim()) && Math.abs(o.y - c.y) < 3.5 && o.x > priceItem.x; });
+        if (!dots.length) {
+          var up = reg.filter(function (o) { return /^●/.test(clean(o.s).trim()) && o.y - c.y >= 3.5 && o.y - c.y <= 7.5 && o.x > priceItem.x; });
+          var upHasCode = up.length && codes.some(function (d) { return d !== c && Math.abs(d.y - up[0].y) < 2.5; });
+          if (!upHasCode) dots = up;
+        }
+        dots.forEach(function (o) {
+          var cx = o.x + 3, best = null, bd = 1e9;
+          mcols.forEach(function (k) { var d = Math.abs(k.x - cx); if (d < bd) { bd = d; best = k; } });
+          if (best && bd < 20) best.fits.forEach(function (f) { if (f) fits.push(f); });
+        });
+        /* ●の無いセットの表（77ページ「防雪三点セット」の防雪パネル K-APC6HL）。
+           同じ行のほかの品番（K-AH63HL・K-KP6H）の付く機種を、あとで借りる */
+        if (!fits.length) {
+          codes.forEach(function (d) { if (d !== c && Math.abs(d.y - c.y) < 2.5) mates.push(clean(d.s).trim().match(DKO_CODE)[1]); });
+          if (!mates.length) return;
+        }
+      } else {
+        fits = allFits.slice();
+      }
+      if (!fits.length && !mates.length) return;
+
+      // 品名：同じ行で品番より左の文字。短い（「3m」「枠付」）ときは、左の欄のいちばん近い名前を頭に付ける
+      var head = colHead(c);
+      var name = head || names[rowOf(c.y)] || '';
+      /* 名前の欄より左にある品番（78ページ「バンドホルダー K-TH7A 99 円」は TM シリーズの表の左の小さな表）は、
+         その行の左の文字で呼ぶ。名前の欄の行の名前（「ひねりエルボ」）を付けていた */
+      if (!head && c.x < nameRows.codeXs[rowOf(c.y)] - 20) {
+        var leftBits = reg.filter(function (o) {
+          var tt = clean(o.s).trim();
+          return o.x < c.x - 2 && o.x > c.x - 160 && Math.abs(o.y - c.y) <= 4 && tt &&
+            !DKO_CODE.test(tt) && !DKO_MONEY.test(tt) && !/^注|^[●―□★※]+$|^[\d,]+ ?個?$|。/.test(tt);
+        }).sort(function (a, b) { return b.y - a.y || a.x - b.x; });
+        var lt0 = leftBits.map(function (o) { return clean(o.s).trim(); }).join(' ')
+          .replace(/([ぁ-んァ-ヶー一-龥（）])\s+(?=[ぁ-んァ-ヶー一-龥（）])/g, '$1').replace(/\s+/g, ' ').trim();
+        if (lt0) name = lt0;
+      }
+      if (!name) name = title.replace(/用?別売品.*$/, '') + '用 別売品';
+      if (open) name += '（オープン価格）';
+      if (cm[2]) name += '　色 ' + cm[2].replace(/[()]/g, ' ').trim().split(/\s+/).join('・');
+      out.push({ page: page, code: code, name: name, y: y, fits: fits, mates: mates, weak: !!head,
+                 leaf: !head && !!(nameRows.leaf && nameRows.leaf[rowOf(c.y)]) });
+    });
+  }
+
+  /** ●の無いセットの表の品目に、同じ行のほかの品番の付く機種を貸す。借りられなかったものは入れない */
+  function dkRoomOptFinish(list) {
+    var byCode = {}, strong = {};
+    /* 同じ品番が何ページにもある（KRP413BB1S は70・71・73ページ）。
+       品番の行の高さに、その品物だけの名前が書いてある表（73ページ「遠隔制御用Ｐ板セット」）の名前がいちばん確か。
+       そういう名前がいくつかあれば短いほう（70ページの「ドレンポンプキット エアコンと離して」より「変換コネクタ」）。
+       無ければ最初に読んだ名前。「いちばん短い名前」だけで選ぶと、途中で切れた名前（「ドレンパイプ用」）を選んだ */
+    // そういう名前が表ごとに違うときは、いちばん多い名前（同じ数なら短いほう）
+    var votes = {};
+    function n0(t) { return t.replace(/\s+/g, '').length; }
+    list.forEach(function (o) {
+      if (o.weak || !o.name) return;
+      if (!strong[o.code]) strong[o.code] = o.name;
+      if (!o.leaf || n0(o.name) < 4) return;
+      var v = votes[o.code] = votes[o.code] || {};
+      v[o.name] = (v[o.name] || 0) + 1;
+    });
+    Object.keys(votes).forEach(function (k) {
+      var best = null;
+      Object.keys(votes[k]).forEach(function (nm) {
+        var c = votes[k][nm];
+        if (!best || c > votes[k][best] || (c === votes[k][best] && n0(nm) < n0(best))) best = nm;
+      });
+      strong[k] = best;
+    });
+    list.forEach(function (o) {
+      if (!o.fits.length) return;
+      var v = byCode[o.code] = byCode[o.code] || [];
+      o.fits.forEach(function (f) { v.push(f); });
+    });
+    var ok = [];
+    list.forEach(function (o) {
+      if (!o.fits.length) {
+        (o.mates || []).forEach(function (m) { (byCode[m] || []).forEach(function (f) { o.fits.push(f); }); });
+      }
+      if (o.fits.length) ok.push({ page: o.page, code: o.code, name: strong[o.code] || o.name, y: o.y, fits: o.fits });
+    });
+    return optResult(ok, 'ダイキン', 'ルームエアコン（住宅設備用） 別売品');
+  }
+
   function dkRoomFinish(sets) {
     var rows = [], seen = {}, pages = {};
     sets.forEach(function (x) {
@@ -3448,6 +4079,24 @@
       finish: dkRoomFinish
     },
     {
+      id: 'daikin-room-opt',
+      name: 'ダイキン（ルームエアコン別売品）',
+      catalog: '住宅設備用カタログ の別売品（69〜77ページ）',
+      size: '機種と同じPDFでかまいません。100ページ・96MBほど。読み取りに2分ほどかかります。',
+      kind: 'options',
+      layout: true,
+      howto: [
+        '機種と同じPDFでかまいません',
+        '下のリンクを押すと「全ページのPDF」を作る画面が出る。［ダウンロード開始］で保存する',
+        '保存したPDFを「カタログのファイルを選ぶ」で選ぶ'
+      ],
+      url: 'https://ec.daikinaircon.com/cgi-bin/ecatalog/bindPDF.cgi?C=CR25227BXX&S=0&E=99&CT=1&CV=1',
+      urlNote: '値段は紙面の税込価格を1.1で割った税抜きで入ります。業務用（スカイエア）の別売品とは別に入ります。',
+      min: 150,
+      readPage: dkRoomOptReadPage,
+      finish: dkRoomOptFinish
+    },
+    {
       id: 'mitsubishi',
       name: '三菱電機',
       catalog: 'Mr.SLIM の機種データ（価格つき）',
@@ -3987,9 +4636,32 @@
     return mid.split(/[・,、]/).map(Number).indexOf(cap) >= 0;
   }
 
+  /* ルームエアコンの別売品の「付く機種」。紙面の見出しは「S22～406ATRS」「S40・566ATRP」「C22～563ATSV」「MP40・453AV」。
+     頭（S・C・2M・MP）＋能力＋うしろ（6ATRS）に分けて持つ。機種の品番・室外機・室内機のどれかが入れば付く。
+     うしろの字のあとに色の W・K が付く品番（C223ATSVW）も同じ機種として見る */
+  function roomCodeIn(f, code) {
+    code = String(code || '').replace(/×\d+$/, '');
+    if (!f.p || code.indexOf(f.p) !== 0) return false;
+    var rest = code.slice(f.p.length);
+    if (rest.slice(-f.t.length) !== f.t) {
+      if (/[WK]$/.test(rest) && rest.slice(0, -1).slice(-f.t.length) === f.t) rest = rest.slice(0, -1);
+      else return false;
+    }
+    var cap = rest.slice(0, rest.length - f.t.length);
+    if (!/^\d{2,3}$/.test(cap)) return false;
+    cap = Number(cap);
+    return f.r ? (cap >= f.c[0] && cap <= f.c[1]) : f.c.indexOf(cap) >= 0;
+  }
+  function roomCodeIs(mc, code) {
+    code = String(code || '').replace(/×\d+$/, '');
+    return code === mc || code === mc + 'W' || code === mc + 'K';
+  }
+
   function optFits(fit, model) {
     if (!fit || !model) return false;
     if (fit.all) return true;
+    if (fit.rm) return [model.m, model.om, model.im].some(function (c) { return roomCodeIn(fit.rm, c); });
+    if (fit.mc) return [model.m, model.om, model.im].some(function (c) { return roomCodeIs(fit.mc, c); });
     if (fit.im) return imInRange(fit.im, model.im);
     if (fit.type && !looseSame(fit.type, model.i)) return false;
     if (fit.series && !looseSame(fit.series, model.s)) return false;
