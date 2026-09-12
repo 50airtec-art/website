@@ -1,0 +1,47 @@
+# ==========================================================================
+# GitHub Pages（Jekyll）に「サイトに出さないもの」を教える
+# --------------------------------------------------------------------------
+# 空調王を月額で売るために、本体をクラウドの中に隠しました（[[project-kuchoo-lock]]）。
+# ソースがサイトに残っていたら、隠した意味がありません。
+# ここに並べたものは、50airtec.com には出ません。
+#
+# ★ 出してみないと効いているか確かめられません。
+#   公開したあと、ブラウザで
+#       https://50airtec.com/tools/estimate/app.js
+#   を開いてください。**404（見つかりません）になれば成功**です。
+#   中身が出てきたら効いていないので、ソースを別の場所へ移す必要があります。
+#
+# ★ ソースは動かしていません（tools/estimate/ の中にあります）。
+#   デスクトップの点検道具が、その場所を決め打ちで読んでいるからです。
+#   「リポジトリにはあるが、サイトには出ない」状態にしてあります。
+# ==========================================================================
+exclude:
+  # 元締めの道具（キーの発行・本体の載せ替え）。BIGBOSSの手元だけで動かす
+  - _kuchoo-admin
+
+  # 空調王の中身。ここが本体そのもの
+  - tools/estimate/body.html
+  - tools/estimate/style.css
+  - tools/estimate/pricebook.js
+  - tools/estimate/survey.js
+  - tools/estimate/firebase-config.js
+  - tools/estimate/catalog.js
+  - tools/estimate/app.js
+  - tools/estimate/sync.js
+
+  # 本体を1本に固めたもの。クラウドに載せるので、サイトには要らない
+  # （手元で直すときの ?dev=1 は、自分のパソコンの中だけで使う）
+  - tools/estimate/bundle.js
+
+  # 組み立ての道具
+  - tools/estimate/build.mjs
+
+  # クラウドの許可設定。Firebaseコンソールに貼るための控えなので、配る必要はない
+  - tools/estimate/firestore.rules
+
+# 出しておくもの（消さないこと）
+#   tools/estimate/index.html   入口。これが無いと誰も開けない
+#   tools/estimate/version.txt  新しい版が出たかを見に行く先
+#   tools/estimate/manifest.json・icon-*.png   ホーム画面に追加するため
+#   tools/estimate/vendor/      html2canvas・jsPDF・pdf-parse。借り物なので隠す意味がない
+#   tools/estimate/manual.html  使い方の説明

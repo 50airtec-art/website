@@ -24,17 +24,35 @@
 <!-- ======================================================================
      ここは「入口」です。空調王の中身はここにはありません。
 
-     空調王を月額で売るために、二つに割りました（[[project-kuchoo-lock]]）。
+     月額で売るために、二つに割ってあります（[[project-kuchoo-lock]]）。
 
-       入口（このファイル）… 誰でも読める。本体を呼びに行くだけ
-       本体（bundle.js）  … 画面・見た目・中身ぜんぶ
+       入口（このファイル）… 誰でも読める。鍵を確かめて、本体を呼びに行くだけ
+       本体            … 画面・見た目・中身ぜんぶ。クラウドの中にある
 
-     いまはまだ鍵をかけていません。bundle.js をそのまま読みに行きます。
-     動きも見た目も、割る前とまったく同じです。
+     ■ 置き場所の形（Firestore）
 
-     本体は build.mjs が組み立てます。**bundle.js を手で直さないこと。**
+       airtec/<sha256("airtec-lic-v1:"+ライセンスキー)>_lic
+           契約者の札。中身は {until 期限, name 契約者名, secret 合鍵}
+           ライセンスキーで暗号にしてある。**キーを知らない＝札の在処が分からない**
+
+       airtec/<sha256("airtec-app-v1:"+合鍵)>_app
+           本体。合鍵で暗号にしてある。**契約者ごとにコピーを作らない。1つだけ**
+
+     止めるときは、その人の札を1件消すだけ。合鍵の在処が分からなくなるので、
+     次に開いた瞬間から本体が降りてこない。
+
+     ■ 圏外でも動く（ここが大事）
+
+     一度ひらけたら、本体（暗号のまま）と期限を端末に控える。
+     前の確認から30日以内なら、クラウドに聞かずにそのまま開く。
+     機械室でも屋上でも、今までどおり動く。
+
+     ■ 手元で直すとき
+
        cd tools\estimate
        node build.mjs
+       http://localhost:8765/tools/estimate/?dev=1
+     ?dev=1 は localhost のときだけ効きます。本番では効きません。
      ====================================================================== -->
 <style>
   /* 入口の見た目だけ。本体の style.css は、本体が来てから流し込みます。
@@ -50,7 +68,7 @@
     font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
     background: #f6f6f4; color: #1a1a1a;
   }
-  #kuchoo-boot .boot-card { max-width: 30rem; width: 100%; text-align: center; }
+  #kuchoo-boot .boot-card { max-width: 26rem; width: 100%; text-align: center; }
   #kuchoo-boot .boot-mark {
     display: inline-flex; align-items: center; justify-content: center;
     width: 3rem; height: 3rem; border-radius: .75rem;
@@ -58,17 +76,28 @@
     letter-spacing: .05em;
   }
   #kuchoo-boot .boot-name { margin: .75rem 0 .25rem; font-size: 1.25rem; font-weight: 700; }
-  #kuchoo-boot .boot-msg  { margin: 0; color: #666; font-size: .9rem; line-height: 1.7; }
-  #kuchoo-boot .boot-card.is-error .boot-mark { background: #9a2b2b; }
-  #kuchoo-boot .boot-card.is-error .boot-msg  { color: #9a2b2b; }
-  #kuchoo-boot .boot-retry {
-    margin-top: 1rem; padding: .6rem 1.2rem; font: inherit; font-size: .9rem;
-    border: 1px solid #ccc; border-radius: .5rem; background: #fff; cursor: pointer;
+  #kuchoo-boot .boot-msg  { margin: 0; color: #666; font-size: .9rem; line-height: 1.8; }
+  #kuchoo-boot .boot-sub  { margin: .75rem 0 0; color: #8a8a8a; font-size: .8rem; line-height: 1.8; }
+  #kuchoo-boot.is-bad .boot-mark { background: #9a2b2b; }
+  #kuchoo-boot.is-bad .boot-msg  { color: #9a2b2b; }
+  #kuchoo-boot .boot-form { margin-top: 1.25rem; }
+  #kuchoo-boot input {
+    width: 100%; box-sizing: border-box; padding: .7rem .8rem; font: inherit;
+    font-size: 1.05rem; text-align: center; letter-spacing: .08em;
+    border: 1px solid #ccc; border-radius: .5rem; background: #fff; color: inherit;
   }
+  #kuchoo-boot .boot-btn {
+    margin-top: .75rem; width: 100%; padding: .7rem 1.2rem; font: inherit; font-size: .95rem;
+    border: 0; border-radius: .5rem; background: #1a1a1a; color: #fff; cursor: pointer;
+  }
+  #kuchoo-boot .boot-btn.is-ghost { background: #fff; color: inherit; border: 1px solid #ccc; }
+  #kuchoo-boot .boot-err { margin: .6rem 0 0; color: #9a2b2b; font-size: .85rem; min-height: 1.2em; }
   @media (prefers-color-scheme: dark) {
     #kuchoo-boot { background: #15161a; color: #e9e9ea; }
     #kuchoo-boot .boot-msg { color: #a0a0a6; }
-    #kuchoo-boot .boot-retry { background: #24262c; border-color: #3a3d45; color: inherit; }
+    #kuchoo-boot .boot-sub { color: #7c7c84; }
+    #kuchoo-boot input,
+    #kuchoo-boot .boot-btn.is-ghost { background: #24262c; border-color: #3a3d45; color: inherit; }
   }
 </style>
 </head>
@@ -79,6 +108,7 @@
     <span class="boot-mark" id="boot-mark">空調</span>
     <p class="boot-name">空調王</p>
     <p class="boot-msg" id="boot-msg">読み込んでいます…</p>
+    <div id="boot-extra"></div>
   </div>
 </div>
 
@@ -87,40 +117,266 @@
   'use strict';
 
   var V = '202609122100';
-  var card = document.getElementById('boot-card');
-  var msg  = document.getElementById('boot-msg');
 
-  function fail(text, detail) {
-    card.className = 'boot-card is-error';
-    document.getElementById('boot-mark').textContent = '！';
-    msg.innerHTML = text;
-    if (detail) { try { console.error('[空調王]', detail); } catch (e) {} }
-    var b = document.createElement('button');
-    b.className = 'boot-retry'; b.type = 'button'; b.textContent = 'もう一度ためす';
-    b.addEventListener('click', function () { location.reload(); });
-    card.appendChild(b);
+  /* 連動（sync.js）と同じクラウドの住所。apiKey は秘密の鍵ではなく“住所”。
+     本体が来るまで sync.js は居ないので、入口にも書いておく。 */
+  var CFG = { apiKey: 'AIzaSyC2OqPA7QwRfi9IMEOg3dD0TY2E-oN_SAo', projectId: 'airtec-sync' };
+  window.AIRTEC_FIREBASE = CFG;
+
+  var K_LIC  = 'airtec_lic_v1';           // 契約の控え（キー・期限・合鍵・最後に確かめた日）
+  var K_AUTH = 'airtec_sync_auth_v1';     // ログインの引換券（sync.js と共用）
+  /* 本体の控えは localStorage ではなく IndexedDB（下の cacheGet/cachePut）に置く */
+
+  var GRACE_DAYS = 30;                    // 何日つながらなくても開けるか
+  var RENKAKU = 'info@50airtec.com';      // 期限切れのときの連絡先
+
+  /* ====================================================================
+     ちいさな道具
+     ==================================================================== */
+  function lsGet(k, fb) {
+    try { var r = localStorage.getItem(k); return r ? JSON.parse(r) : fb; } catch (e) { return fb; }
+  }
+  function lsSet(k, v) {
+    try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; }
+  }
+  function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
+
+  /* ------------------------------------------------------------------
+     本体の控えは IndexedDB に置く。localStorage ではない。
+
+     localStorage は端末ぜんたいで5MBほどしかなく、空調王はもう
+     単価マスタ・機種データ・別売品で2.4MBほど使っている。
+     暗号にした本体は333KBあるので、入るには入るが、残りが心もとない。
+     **控えられないと、圏外で開けなくなる。**そこがいちばん大事なところなので、
+     余裕のある置き場にする（写真も同じ理由で IndexedDB にある）。
+
+     入れ物の名前を app.js のもの（'airtec'）とわざと分けてある。
+     同じ入れ物を別々の版番号で開けると、片方が「作り直し」を始めて
+     もう片方が巻き添えになるため。
+     ------------------------------------------------------------------ */
+  var DB_NAME = 'airtec-app', DB_STORE = 'app';
+  function idb() {
+    return new Promise(function (res, rej) {
+      var q = indexedDB.open(DB_NAME, 1);
+      q.onupgradeneeded = function () {
+        if (!q.result.objectStoreNames.contains(DB_STORE)) q.result.createObjectStore(DB_STORE);
+      };
+      q.onsuccess = function () { res(q.result); };
+      q.onerror = function () { rej(q.error); };
+    });
+  }
+  function idbRun(mode, fn) {
+    return idb().then(function (db) {
+      return new Promise(function (res, rej) {
+        var tx = db.transaction(DB_STORE, mode);
+        var r = fn(tx.objectStore(DB_STORE));
+        tx.oncomplete = function () { res(r && r.result); };
+        tx.onerror = function () { rej(tx.error); };
+      });
+    });
+  }
+  function cacheGet()    { return idbRun('readonly',  function (s) { return s.get('bundle'); }).catch(function () { return null; }); }
+  function cachePut(v)   { return idbRun('readwrite', function (s) { s.put(v, 'bundle'); }).then(function () { return true; },
+                                                                                             function () { return false; }); }
+  function cacheDel()    { return idbRun('readwrite', function (s) { s.delete('bundle'); }).catch(function () {}); }
+
+  /* 試し作りのころ、本体の控えを localStorage に置いていた。
+     残っていると333KBを取られたままになるので、片付ける */
+  lsDel('airtec_app_v1');
+
+  function todayISO() {
+    var d = new Date(), p = function (n) { return ('0' + n).slice(-2); };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+  }
+
+  function b64dec(str) {
+    var bin = atob(str), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  async function sha256hex(str) {
+    var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.prototype.map.call(new Uint8Array(buf), function (b) {
+      return ('0' + b.toString(16)).slice(-2);
+    }).join('');
+  }
+
+  /* 打ち間違いをある程度そろえる。sync.js の normCode と同じ決まり */
+  function normKey(s) {
+    return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+      .replace(/O/g, '0').replace(/I/g, '1');
+  }
+
+  async function gunzip(bytes) {
+    var st = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    return new Uint8Array(await new Response(st).arrayBuffer());
   }
 
   /* ------------------------------------------------------------------
-     本体を画面に組み上げる。
+     鍵の作り方が2通りあるのは、わざとです。
+
+     ・ライセンスキーは**人が打つ**ので、短くて当てられやすい。
+       だから PBKDF2 を20万回まわして、総当たりを重くする。
+       これを使うのはクラウドに聞きに行くときだけ（最大でも30日に1回）。
+
+     ・合鍵は**機械が作った長い乱数**なので、総当たりは端から無理。
+       重い計算をしても得るものが無いので、SHA-256 一発で鍵にする。
+       これは起動のたびに使うので、速いことが大事。
+     ------------------------------------------------------------------ */
+  async function keyFromPassphrase(code) {
+    var base = await crypto.subtle.importKey('raw', new TextEncoder().encode(normKey(code)),
+      'PBKDF2', false, ['deriveKey']);
+    var saltSrc = await sha256hex('airtec-salt-v1:' + normKey(code));
+    return crypto.subtle.deriveKey(
+      { name: 'PBKDF2', salt: new TextEncoder().encode(saltSrc), iterations: 200000, hash: 'SHA-256' },
+      base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  }
+  async function keyFromSecret(secret) {
+    var raw = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(secret)));
+    return crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+  }
+
+  /** 暗号の封筒 → 中身。鍵が違えば例外になる */
+  async function unseal(str, key) {
+    var env = JSON.parse(str);
+    var plain = new Uint8Array(await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: b64dec(env.iv) }, key, b64dec(env.ct)));
+    if (env.z) plain = await gunzip(plain);
+    return JSON.parse(new TextDecoder().decode(plain));
+  }
+
+  /* ====================================================================
+     クラウド（Firestore）から読むだけ。書きはしない
+     ==================================================================== */
+  async function idToken() {
+    var a = lsGet(K_AUTH, null);
+    if (a && a.idToken && a.exp - 60000 > Date.now()) return a.idToken;
+
+    var res, j;
+    if (a && a.refreshToken) {
+      res = await fetch('https://securetoken.googleapis.com/v1/token?key=' + CFG.apiKey, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(a.refreshToken)
+      });
+      if (res.ok) {
+        j = await res.json();
+        var t1 = { idToken: j.id_token, refreshToken: j.refresh_token, exp: Date.now() + Number(j.expires_in) * 1000 };
+        lsSet(K_AUTH, t1);
+        return t1.idToken;
+      }
+    }
+    res = await fetch('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' + CFG.apiKey, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ returnSecureToken: true })
+    });
+    if (!res.ok) throw new Error('login:' + res.status);
+    j = await res.json();
+    var t2 = { idToken: j.idToken, refreshToken: j.refreshToken, exp: Date.now() + Number(j.expiresIn) * 1000 };
+    lsSet(K_AUTH, t2);
+    return t2.idToken;
+  }
+
+  /** 1件読む。無ければ null。つながらなければ例外 */
+  async function docGet(name) {
+    var url = 'https://firestore.googleapis.com/v1/projects/' + CFG.projectId +
+              '/databases/(default)/documents/airtec/' + name;
+    var res = await fetch(url, { headers: { Authorization: 'Bearer ' + (await idToken()) } });
+    if (res.status === 404) return null;
+    /* 403 は「つながらない」ではなく「クラウドの許可設定が古い」。
+       ルール（firestore.rules）を貼り直していないと、全員がここで止まる。
+       電波のせいにすると原因にたどり着けないので、別のこととして扱う。
+       [[project-kuchoo-firestore-rules]] */
+    if (res.status === 403) { var e = new Error('rules'); e.rules = true; throw e; }
+    if (!res.ok) throw new Error('get:' + res.status);
+    var f = (await res.json()).fields || {};
+    return { blob: f.blob ? f.blob.stringValue : '', at: f.at ? Number(f.at.integerValue) : 0 };
+  }
+
+  /* ====================================================================
+     画面
+     ==================================================================== */
+  var boot  = document.getElementById('kuchoo-boot');
+  var msg   = document.getElementById('boot-msg');
+  var extra = document.getElementById('boot-extra');
+
+  function say(html, sub) {
+    boot.className = '';
+    document.getElementById('boot-mark').textContent = '空調';
+    msg.innerHTML = html;
+    extra.innerHTML = sub ? '<p class="boot-sub">' + sub + '</p>' : '';
+  }
+  function sayBad(html, sub, detail) {
+    say(html, sub);
+    boot.className = 'is-bad';
+    document.getElementById('boot-mark').textContent = '！';
+    if (detail) { try { console.error('[空調王]', detail); } catch (e) {} }
+  }
+  function addButton(label, ghost, fn) {
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'boot-btn' + (ghost ? ' is-ghost' : '');
+    b.textContent = label;
+    b.addEventListener('click', fn);
+    extra.appendChild(b);
+    return b;
+  }
+
+  /** ライセンスキーを入れてもらう画面 */
+  function askKey(note) {
+    say('ご契約のライセンスキーを入れてください。',
+        'キーは1社に1つです。人数の制限はありません。<br>お持ちでない方は ' + RENKAKU + ' までご連絡ください。');
+    var form = document.createElement('div');
+    form.className = 'boot-form';
+    var inp = document.createElement('input');
+    inp.type = 'text'; inp.autocapitalize = 'characters'; inp.spellcheck = false;
+    inp.placeholder = 'ABCDE-FGHJK-LMNPQ-RSTUV';
+    form.appendChild(inp);
+    extra.appendChild(form);
+
+    var err = document.createElement('p');
+    err.className = 'boot-err'; err.textContent = note || '';
+    var go = addButton('はじめる', false, function () {
+      var k = normKey(inp.value);
+      if (k.length < 12) { err.textContent = 'キーが短いようです。もう一度お確かめください。'; return; }
+      go.disabled = true;
+      lsSet(K_LIC, { key: k });
+      start();
+    });
+    extra.appendChild(err);
+    inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') go.click(); });
+    inp.focus();
+  }
+
+  /** 期限が切れている画面 */
+  function sayExpired(lic) {
+    sayBad('ご契約の期間が終わっています。',
+      (lic && lic.until ? '期限：' + lic.until + '<br>' : '') +
+      'お手数ですが ' + RENKAKU + ' までご連絡ください。<br><br>' +
+      '<b>入れた単価も見積も消えていません。</b>お支払いいただければ、そのまま続きから使えます。');
+    addButton('別のキーを入れる', true, function () { lsDel(K_LIC); cacheDel(); askKey(); });
+  }
+
+  /* ====================================================================
+     本体を画面に組み上げる
      順番が大事。**画面（html）を先に置いてから、中身（js）を動かす。**
      app.js は読み込まれたその場で #… を探しにいくので、
      先に置いておかないと「そんな部品はない」で止まる。
-     ------------------------------------------------------------------ */
+     ==================================================================== */
   function mount(bundle) {
+    if (!bundle || !bundle.html || !bundle.js) {
+      sayBad('本体がこわれています。', 'お手数ですが ' + RENKAKU + ' までご連絡ください。');
+      return;
+    }
     try {
-      // 1. 見た目
       var st = document.createElement('style');
       st.setAttribute('data-kuchoo', 'sheet');
       st.textContent = bundle.css;
       document.head.appendChild(st);
 
-      // 2. 画面。読み込み中の札を消してから入れる
-      var boot = document.getElementById('kuchoo-boot');
       if (boot && boot.parentNode) boot.parentNode.removeChild(boot);
       document.body.insertAdjacentHTML('afterbegin', bundle.html);
 
-      // 3. 中身。1本ずつ、もとの <script> と同じ順番で走らせる
       bundle.js.forEach(function (pair) {
         var s = document.createElement('script');
         s.setAttribute('data-kuchoo', pair[0]);
@@ -128,37 +384,140 @@
         document.body.appendChild(s);
       });
     } catch (e) {
-      fail('空調王をひらけませんでした。<br>電波のよいところで、もう一度ためしてください。', e);
+      sayBad('空調王をひらけませんでした。', 'もう一度ためしてください。', e);
     }
   }
 
-  /* 本体が自分を渡してくる窓口（bundle.js の最後の1行が、これを呼ぶ） */
-  var came = false;
-  window.__KUCHOO_BUNDLE__ = function (bundle) {
-    came = true;
-    if (!bundle || !bundle.html || !bundle.js) {
-      fail('本体がこわれています。<br>お手数ですが、ご連絡ください。');
+  /* ====================================================================
+     手順
+     ==================================================================== */
+  var DAY = 86400000;
+
+  /** 手元の控えから本体を取り出して開く。できなければ false */
+  async function openFromCache(lic) {
+    if (!lic.secret) return false;
+    var cached = await cacheGet();
+    if (!cached || !cached.blob) return false;
+    try {
+      mount(await unseal(cached.blob, await keyFromSecret(lic.secret)));
+      return true;
+    } catch (e) {
+      await cacheDel();      // 壊れていた。次はクラウドから取り直す
+      return false;
+    }
+  }
+
+  /** クラウドに聞きに行って、契約を確かめ、本体をもらう */
+  async function fetchFromCloud(lic) {
+    // 1. 契約者の札
+    var licDoc = await docGet((await sha256hex('airtec-lic-v1:' + normKey(lic.key))) + '_lic');
+    if (!licDoc) {
+      lsDel(K_LIC); await cacheDel();
+      askKey('このキーは使えません。お確かめのうえ、もう一度入れてください。');
       return;
     }
+    var info;
+    try {
+      info = await unseal(licDoc.blob, await keyFromPassphrase(lic.key));
+    } catch (e) {
+      lsDel(K_LIC); await cacheDel();
+      askKey('このキーでは開けませんでした。お確かめのうえ、もう一度入れてください。');
+      return;
+    }
+
+    // 2. 期限
+    if (!info.until || info.until < todayISO()) {
+      lsSet(K_LIC, { key: lic.key, until: info.until, name: info.name });
+      await cacheDel();                   // 控えも消す。次からは開けない
+      sayExpired(info);
+      return;
+    }
+
+    // 3. 本体
+    say('空調王を用意しています…');
+    var appDoc = await docGet((await sha256hex('airtec-app-v1:' + info.secret)) + '_app');
+    if (!appDoc) throw new Error('app-missing');
+    var bundle = await unseal(appDoc.blob, await keyFromSecret(info.secret));
+
+    // 4. 控えておく（暗号のまま。中を開くのは起動のたびにやる）
+    lsSet(K_LIC, {
+      key: lic.key, until: info.until, name: info.name,
+      secret: info.secret, checkedAt: Date.now()
+    });
+    if (!await cachePut({ v: bundle.v, blob: appDoc.blob, at: appDoc.at })) {
+      /* 端末の置き場がいっぱい。開くことはできるので、控えだけあきらめる */
+      try { console.warn('[空調王] 本体を控えられませんでした（置き場がいっぱい）'); } catch (e) {}
+    }
     mount(bundle);
-  };
+  }
 
-  /* ------------------------------------------------------------------
-     本体を呼びに行く。
+  async function start() {
+    var lic = lsGet(K_LIC, null);
 
-     ★ いまは鍵をかけていません。同じ場所の bundle.js をそのまま読みます。
-       ここを「クラウドに聞きに行く」に差し替えるのが、次の段階です。
-     ------------------------------------------------------------------ */
-  var sc = document.createElement('script');
-  sc.src = 'bundle.js?v=' + V;
-  sc.onerror = function () {
-    fail('空調王の本体が読み込めませんでした。<br>電波のよいところで、もう一度ためしてください。');
-  };
-  sc.onload = function () {
-    // 読めたのに窓口が呼ばれない＝中身が壊れている
-    if (!came) fail('本体がこわれています。<br>お手数ですが、ご連絡ください。');
-  };
-  document.head.appendChild(sc);
+    /* 手元で直すとき用。localhost のときだけ効く。
+       本番（50airtec.com）では bundle.js を置かないので、そもそも動かない */
+    var local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+    if (local && /[?&]dev=1\b/.test(location.search)) {
+      window.__KUCHOO_BUNDLE__ = mount;
+      var sc = document.createElement('script');
+      sc.src = 'bundle.js?v=' + V;
+      sc.onerror = function () { sayBad('bundle.js がありません。', '<code>node build.mjs</code> を走らせてください。'); };
+      document.head.appendChild(sc);
+      return;
+    }
+
+    if (!lic || !lic.key) { askKey(); return; }
+
+    /* 前に確かめてから30日以内なら、クラウドに聞かずに開く。
+       機械室でも屋上でも、電波が無くても今までどおり動かすため。 */
+    var fresh = lic.checkedAt && (Date.now() - lic.checkedAt) < GRACE_DAYS * DAY;
+    var expired = lic.until && lic.until < todayISO();
+    if (fresh && !expired && await openFromCache(lic)) {
+      // 開いたあとで、裏でこっそり確かめ直しておく（失敗しても画面は触らない）
+      setTimeout(function () { quietRecheck(lic); }, 8000);
+      return;
+    }
+
+    say('ご契約を確かめています…');
+    try {
+      await fetchFromCloud(lic);
+    } catch (e) {
+      /* つながらなかった。手元に本体があるなら、それで開く */
+      if (!expired && await openFromCache(lic)) return;
+      if (expired) { sayExpired(lic); return; }
+      if (e && e.rules) {
+        sayBad('空調王の設定に直しが要ります。',
+          'お客さまのせいではありません。<br>お手数ですが ' + RENKAKU + ' までご連絡ください。',
+          'Firestore のルールに _lic / _app が入っていません。' +
+          'tools/estimate/firestore.rules を Firebase コンソールに貼り直してください。');
+        addButton('もう一度ためす', false, function () { location.reload(); });
+        return;
+      }
+      sayBad('ご契約を確かめられませんでした。',
+        '電波のよいところで、もう一度ためしてください。<br>' +
+        (lic.checkedAt
+          ? '最後に確かめたのは ' + Math.floor((Date.now() - lic.checkedAt) / DAY) + '日前です。'
+          : ''), e);
+      addButton('もう一度ためす', false, function () { location.reload(); });
+      addButton('別のキーを入れる', true, function () { lsDel(K_LIC); cacheDel(); askKey(); });
+    }
+  }
+
+  /** 開いたあとの、裏での確かめ直し。画面は絶対に触らない */
+  async function quietRecheck(lic) {
+    try {
+      var licDoc = await docGet((await sha256hex('airtec-lic-v1:' + normKey(lic.key))) + '_lic');
+      if (!licDoc) { await cacheDel(); return; }  // 解約された。次に開くときに気づく
+      var info = await unseal(licDoc.blob, await keyFromPassphrase(lic.key));
+      var keep = lsGet(K_LIC, {}) || {};
+      keep.until = info.until; keep.name = info.name;
+      keep.secret = info.secret; keep.checkedAt = Date.now();
+      lsSet(K_LIC, keep);
+      if (!info.until || info.until < todayISO()) await cacheDel();
+    } catch (e) { /* 圏外。次の機会でよい */ }
+  }
+
+  start();
 })();
 </script>
 

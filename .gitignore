@@ -16,3 +16,14 @@ npm-debug.log*
 # Temporary
 *.tmp
 *.bak
+
+# 空調王の元締めの道具（[[project-kuchoo-lock]]）
+# どちらも秘密そのもの。GitHubに上げない。
+#   service-account.json … クラウドに書き込むための鍵
+#   licences.json        … 誰にどのキーを渡したかの控え
+_kuchoo-admin/service-account.json
+_kuchoo-admin/licences.json
+
+# 本体を1本に固めたもの。build.mjs がいつでも作り直せるので、GitHubには置かない
+# （クラウドに載せるのが本番。サイトには出さない）
+tools/estimate/bundle.js
