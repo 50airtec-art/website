@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609121800';
+  var APP_VERSION = '202609121900';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -65,11 +65,32 @@
     { id: 'plain', name: 'すっきり',
       hint: '横線だけで縦の罫線なし。余白広め。読みやすい今風' },
     { id: 'band', name: '色帯',
-      hint: '表題と見出しを炭色のベタに。名刺と同じ色。カラーで渡すとき' }
+      hint: '表題と見出しを色のベタに。カラーで渡すとき' },
+    { id: 'logo', name: 'ロゴ大きく左',
+      hint: 'ロゴを左上に大きく。便箋のような形。ロゴが無いときは会社名が大きく出る' }
   ];
   function skinId(v) {
     for (var i = 0; i < SHEET_SKINS.length; i++) if (SHEET_SKINS[i].id === v) return v;
     return 'standard';
+  }
+
+  /* 見積書の色。CSS変数 --sheet-accent に入れて、各見た目がそれを使う。
+     「標準」は色を使わない（白黒のままが正解なので）。
+     「きっちり枠」「すっきり」は線だけ、「色帯」「ロゴ大きく左」はしっかり出る。 */
+  var SHEET_COLORS = [
+    { id: 'charcoal', name: '炭',   hex: '#1A1D21', note: '名刺と同じ色' },
+    { id: 'navy',     name: '紺',   hex: '#1F3A63', note: '' },
+    { id: 'forest',   name: '深緑', hex: '#1E4D3B', note: '' },
+    { id: 'wine',     name: 'えんじ', hex: '#7A2230', note: '' },
+    { id: 'brown',    name: '茶',   hex: '#5A3E2B', note: '' }
+  ];
+  function colorHex(v) {
+    for (var i = 0; i < SHEET_COLORS.length; i++) if (SHEET_COLORS[i].id === v) return SHEET_COLORS[i].hex;
+    return SHEET_COLORS[0].hex;
+  }
+  function colorId(v) {
+    for (var i = 0; i < SHEET_COLORS.length; i++) if (SHEET_COLORS[i].id === v) return v;
+    return 'charcoal';
   }
 
   /** 取り込んだ自社情報を整える。足りない項目は初期値で埋め、画像は上の判定を通す */
@@ -78,6 +99,7 @@
     c.sealImage = safeImage(c.sealImage);
     c.logoImage = safeImage(c.logoImage);
     c.sheetSkin = skinId(c.sheetSkin);
+    c.sheetColor = colorId(c.sheetColor);
     return c;
   }
 
@@ -4623,6 +4645,7 @@
     $('#seal-size').value = pb.company.sealSizeMm || 18;
     $('#logo-size').value = pb.company.logoHeightMm || 12;
     renderSkinPick();
+    renderColorPick();
     renderSealPreview();
     renderLogoPreview();
     renderPresets();
@@ -4906,10 +4929,47 @@
         pb.company.sheetSkin = sk.id;
         savePB();
         renderSkinPick();
+        renderColorPick();
         toast('見積書の見た目を「' + sk.name + '」にしました');
       });
       box.appendChild(b);
     });
+    // 見本の紙の絵も、選んだ色で見せる
+    box.style.setProperty('--sheet-accent', colorHex(pb.company.sheetColor));
+  }
+
+  function renderColorPick() {
+    var box = $('#color-pick');
+    if (!box) return;
+    box.innerHTML = '';
+    var now = colorId(pb.company.sheetColor);
+    var skin = skinId(pb.company.sheetSkin);
+    SHEET_COLORS.forEach(function (co) {
+      var b = el('button', 'color-card' + (co.id === now ? ' is-on' : ''));
+      b.type = 'button';
+      b.setAttribute('aria-pressed', co.id === now ? 'true' : 'false');
+      var sw = el('span', 'color-swatch');
+      sw.style.background = co.hex;
+      b.appendChild(sw);
+      b.appendChild(el('span', 'color-name', co.name + (co.note ? '（' + co.note + '）' : '')));
+      b.addEventListener('click', function () {
+        pb.company.sheetColor = co.id;
+        savePB();
+        renderColorPick();
+        renderSkinPick();
+        toast('見積書の色を「' + co.name + '」にしました');
+      });
+      box.appendChild(b);
+    });
+    // 「標準」は白黒のままが正解なので、色が効かないことを言っておく
+    var note = $('#color-note');
+    if (note) {
+      note.textContent = skin === 'standard'
+        ? '※いま選んでいる「標準」は白黒のままです（色は使いません）。色を出したいときは「色帯」か「ロゴ大きく左」を選んでください。'
+        : (skin === 'band' || skin === 'logo'
+            ? '※いまの見た目では、表題・見出し・合計にこの色が出ます。'
+            : '※いまの見た目では、線と表題だけにこの色が出ます（控えめに入ります）。');
+    }
   }
 
   $('#seal-size').addEventListener('input', function () {
@@ -6194,6 +6254,7 @@
     /* 見た目を先に着せる。paginateSheet は実際の高さを測って紙を割るので、
        あとから着せると線の太さの分だけ割り方がずれる */
     $('#sheet').className = 'skin-' + skinId(pb.company.sheetSkin);
+    $('#sheet').style.setProperty('--sheet-accent', colorHex(pb.company.sheetColor));
     var inv = (mode === 'invoice');
     var t = calcOf(d);
     var c = pb.company;
@@ -6274,7 +6335,24 @@
 
     var remarks = (d.note || '') + (c.bank ? '\n\n【お振込先】' + c.bank : '');
 
+    /* 「ロゴ大きく左」用の置き場所。ほかの見た目では CSS で隠している。
+       いつも書き出しておけば、見た目の切り替えは CSS だけで済む。
+       ロゴが無い会社は会社名が大きく出る（空白の帯にならないように） */
+    // ロゴが無い会社は、左上に会社名が大きく出る。右の欄にも会社名があると2回出るので、
+    // そのときだけ右の会社名を隠す印を付ける（CSSの #sheet.skin-logo.no-logo）
+    $('#sheet').classList.toggle('no-logo', !logoSrc);
+    /* 左上のロゴは、［自社情報］の「ロゴの高さ」の2倍にする（16〜34mmの範囲）。
+       つまみを1つ増やさずに大きさを変えられる。
+       ロゴのPNGは周りに余白があることが多く、小さく見えがちなので下限を16mmにした */
+    var brandMm = Math.min(34, Math.max(16, logoMm * 2));
+    var brandHTML =
+        '<div class="sheet-brand">' +
+          (logoSrc ? '<img class="brand-logo" src="' + esc(logoSrc) + '" alt="" style="height:' + brandMm + 'mm">'
+                   : '<span class="brand-name">' + esc(c.name) + '</span>') +
+        '</div>';
+
     var headHTML =
+        brandHTML +
         '<div class="sheet-title">' + (inv ? '御請求書' : '御見積書') + '</div>' +
         '<div class="sheet-meta">' +
           (inv ? '請求番号：' : '見積番号：') + esc(d.no) + '<br>' +

@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <title>空調王</title>
-<link rel="stylesheet" href="style.css?v=202609121800">
+<link rel="stylesheet" href="style.css?v=202609121900">
 
 <!-- ホーム画面に追加できるようにする。
      iPhoneのSafariは「7日間そのサイトを開かないと、保存した中身を消す」決まりがある。
      ホーム画面から開くアプリはその決まりの外に置かれるので、消えない。
      入れた見積を守るための仕込みであって、見た目の話ではない。 -->
-<link rel="manifest" href="manifest.json?v=202609121800">
+<link rel="manifest" href="manifest.json?v=202609121900">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <!-- black-translucent にすると、時計や電池の下に画面が潜り込んで
@@ -19,8 +19,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="空調王">
 <meta name="theme-color" content="#1a1a1a">
-<link rel="apple-touch-icon" href="icon-180.png?v=202609121800">
-<link rel="icon" href="icon-192.png?v=202609121800">
+<link rel="apple-touch-icon" href="icon-180.png?v=202609121900">
+<link rel="icon" href="icon-192.png?v=202609121900">
 </head>
 <body>
 
@@ -539,6 +539,10 @@
           <small>※［プレビュー］で実物を確かめられます。</small>
         </p>
         <div class="skin-pick" id="skin-pick"></div>
+
+        <h3 class="sub-title">色</h3>
+        <div class="color-pick" id="color-pick"></div>
+        <p class="hint" id="color-note"></p>
       </div>
 
       <div class="card">
@@ -562,7 +566,7 @@
             </div>
 
             <label class="f seal-size-field">
-              <span>ロゴの高さ（mm）　※10〜16mm くらいが見積書になじみます</span>
+              <span>ロゴの高さ（mm）　※10〜16mm くらいが見積書になじみます（「ロゴ大きく左」では、この2倍の大きさで左上に出ます）</span>
               <input type="number" id="logo-size" min="5" max="40" step="1">
             </label>
           </div>
@@ -628,11 +632,11 @@
   </div>
 </div>
 
-<script src="pricebook.js?v=202609121800"></script>
-<script src="survey.js?v=202609121800"></script>
-<script src="firebase-config.js?v=202609121800"></script>
-<script src="catalog.js?v=202609121800"></script>
-<script src="app.js?v=202609121800"></script>
-<script src="sync.js?v=202609121800"></script>
+<script src="pricebook.js?v=202609121900"></script>
+<script src="survey.js?v=202609121900"></script>
+<script src="firebase-config.js?v=202609121900"></script>
+<script src="catalog.js?v=202609121900"></script>
+<script src="app.js?v=202609121900"></script>
+<script src="sync.js?v=202609121900"></script>
 </body>
 </html>

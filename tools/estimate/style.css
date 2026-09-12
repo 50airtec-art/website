@@ -1031,7 +1031,11 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
    ・skin-standard … これまでの形（下に何も書かない＝素のまま）
    ・skin-frame    … 枠と罫線を濃く。白黒コピー向け
    ・skin-plain    … 横線だけ・縦罫なし。余白広め
-   ・skin-band     … 表題と見出しを炭色のベタに（名刺と同じ #1A1D21）
+   ・skin-band     … 表題と見出しを色のベタに
+   ・skin-logo     … ロゴを左上に大きく（便箋のような形）
+
+   色は CSS変数 --sheet-accent。buildSheet が ［自社情報］の設定から入れる。
+   「標準」だけは色を使わない（白黒のままが正解なので）。
 
    高さが変わると紙の割り方も変わるが、buildSheet が着せてから
    実際の高さを測って割るので、どれを選んでもずれない。
@@ -1039,39 +1043,41 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
 
 /* ---------- きっちり枠 ---------- */
 #sheet.skin-frame .sheet-title {
-  border: 1.4pt solid #000; padding: 2.5mm 0 2mm;
+  border: 1.4pt solid var(--sheet-accent, #1A1D21);
+  color: var(--sheet-accent, #1A1D21); padding: 2.5mm 0 2mm;
   letter-spacing: .6em; text-indent: .6em; margin-bottom: 5mm;
 }
 #sheet.skin-frame .sheet-to { border-bottom-width: 1.6pt; }
 #sheet.skin-frame .sheet-total-box { border-width: 1.6pt; }
-#sheet.skin-frame table.sheet-lines { border: 1.2pt solid #000; }
+#sheet.skin-frame table.sheet-lines { border: 1.2pt solid var(--sheet-accent, #1A1D21); }
 #sheet.skin-frame table.sheet-lines th,
 #sheet.skin-frame table.sheet-lines td { border: .8pt solid #000; }
 #sheet.skin-frame table.sheet-lines th { background: #e6e6e6; font-weight: 700; }
 #sheet.skin-frame .sheet-remarks { border: 1pt solid #000; }
-#sheet.skin-frame table.sheet-sum { border: 1.2pt solid #000; }
+#sheet.skin-frame table.sheet-sum { border: 1.2pt solid var(--sheet-accent, #1A1D21); }
 #sheet.skin-frame table.sheet-sum th,
 #sheet.skin-frame table.sheet-sum td { border: .8pt solid #000; }
 #sheet.skin-frame table.sheet-sum th { background: #ededed; font-weight: 700; }
 #sheet.skin-frame table.sheet-sum tr.grand th,
 #sheet.skin-frame table.sheet-sum tr.grand td {
-  background: #dcdcdc; border-top: 1.6pt double #000;
+  background: #dcdcdc; border-top: 1.6pt double var(--sheet-accent, #1A1D21);
 }
 
 /* ---------- すっきり（横線だけ） ---------- */
 #sheet.skin-plain .sheet-title {
   text-align: left; font-size: 17pt; font-weight: 600;
   letter-spacing: .25em; text-indent: 0;
-  border-bottom: .8pt solid #111; padding-bottom: 2.5mm; margin-bottom: 6mm;
+  border-bottom: .8pt solid var(--sheet-accent, #1A1D21); padding-bottom: 2.5mm; margin-bottom: 6mm;
+  color: var(--sheet-accent, #1A1D21);
 }
 #sheet.skin-plain .sheet-meta { margin-top: -12mm; }
 #sheet.skin-plain .sheet-to { border-bottom: .5pt solid #bbb; }
 #sheet.skin-plain .sheet-total-box {
-  border: 0; border-bottom: 1.4pt solid #111; padding: 1mm 0 2mm;
+  border: 0; border-bottom: 1.4pt solid var(--sheet-accent, #1A1D21); padding: 1mm 0 2mm;
 }
 #sheet.skin-plain table.sheet-lines { font-size: 9.5pt; }
 #sheet.skin-plain table.sheet-lines th {
-  background: none; border: 0; border-bottom: .9pt solid #111;
+  background: none; border: 0; border-bottom: .9pt solid var(--sheet-accent, #1A1D21);
   padding: 1.4mm 2mm 2mm; color: #333; font-weight: 600;
 }
 #sheet.skin-plain table.sheet-lines td {
@@ -1087,30 +1093,30 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
 #sheet.skin-plain table.sheet-sum th { background: none; color: #333; }
 #sheet.skin-plain table.sheet-sum tr.grand th,
 #sheet.skin-plain table.sheet-sum tr.grand td {
-  background: none; border-top: .9pt solid #111; border-bottom: 0; padding-top: 2.2mm;
+  background: none; border-top: .9pt solid var(--sheet-accent, #1A1D21); border-bottom: 0; padding-top: 2.2mm;
 }
 
 /* ---------- 色帯（名刺と同じ炭色） ---------- */
 #sheet.skin-band .sheet-title {
-  background: #1A1D21; color: #fff; padding: 3mm 0 2.6mm;
+  background: var(--sheet-accent, #1A1D21); color: #fff; padding: 3mm 0 2.6mm;
   letter-spacing: .6em; text-indent: .6em; font-size: 18pt; margin-bottom: 5mm;
 }
-#sheet.skin-band .sheet-to { border-bottom: 1.2pt solid #1A1D21; }
+#sheet.skin-band .sheet-to { border-bottom: 1.2pt solid var(--sheet-accent, #1A1D21); }
 #sheet.skin-band .sheet-total-box {
-  border: 0; border-left: 3.5pt solid #1A1D21; background: #f2f3f4;
+  border: 0; border-left: 3.5pt solid var(--sheet-accent, #1A1D21); background: #f2f3f4;
   padding: 3mm 4mm;
 }
 #sheet.skin-band table.sheet-lines th {
-  background: #1A1D21; color: #fff; border-color: #1A1D21; font-weight: 600;
+  background: var(--sheet-accent, #1A1D21); color: #fff; border-color: var(--sheet-accent, #1A1D21); font-weight: 600;
 }
 #sheet.skin-band table.sheet-lines td { border-color: #c9ccd0; }
 #sheet.skin-band .sheet-remarks { border-color: #c9ccd0; background: #fafafa; }
 #sheet.skin-band table.sheet-sum th,
 #sheet.skin-band table.sheet-sum td { border-color: #c9ccd0; }
-#sheet.skin-band table.sheet-sum th { background: #f2f3f4; color: #1A1D21; }
+#sheet.skin-band table.sheet-sum th { background: #f2f3f4; color: var(--sheet-accent, #1A1D21); }
 #sheet.skin-band table.sheet-sum tr.grand th,
 #sheet.skin-band table.sheet-sum tr.grand td {
-  background: #1A1D21; color: #fff; border-color: #1A1D21;
+  background: var(--sheet-accent, #1A1D21); color: #fff; border-color: var(--sheet-accent, #1A1D21);
 }
 /* 色ベタは「背景を印刷しない」設定だと消えてしまうので、必ず刷るよう頼む */
 #sheet.skin-band .sheet-title,
@@ -1175,8 +1181,101 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
 .skin-demo-plain .sd-sum { background: none; border-top: 1.5px solid #111; height: 4px; }
 
 /* 色帯 */
-.skin-demo-band .sd-title { background: #1A1D21; color: #fff; padding: 3px 0; }
-.skin-demo-band .sd-head { background: #1A1D21; }
+.skin-demo-band .sd-title { background: var(--sheet-accent, #1A1D21); color: #fff; padding: 3px 0; }
+.skin-demo-band .sd-head { background: var(--sheet-accent, #1A1D21); }
 .skin-demo-band .sd-head > span { background: #6b7076; }
 .skin-demo-band .sd-row { padding: 2px 0; }
-.skin-demo-band .sd-sum { background: #1A1D21; height: 8px; }
+.skin-demo-band .sd-sum { background: var(--sheet-accent, #1A1D21); height: 8px; }
+
+/* ---------- ロゴを置く帯（ふつうは隠れている） ----------
+   buildSheet はいつも書き出しておき、「ロゴ大きく左」のときだけ見せる。
+   こうすると見た目の切り替えはCSSだけで済み、組み立てる関数は1つで足りる。 */
+.sheet-brand { display: none; }
+
+/* ---------- ロゴ大きく左（便箋のような形） ---------- */
+#sheet.skin-logo .sheet-brand {
+  display: block;
+  border-bottom: 2.2pt solid var(--sheet-accent, #1A1D21);
+  padding-bottom: 3mm; margin-bottom: 4mm;
+}
+#sheet.skin-logo .sheet-brand .brand-logo {
+  display: block; width: auto; max-width: 95mm; object-fit: contain;   /* 高さは buildSheet が入れる */
+}
+/* ロゴが無い会社は会社名を大きく出す（空白の帯にしない） */
+#sheet.skin-logo .sheet-brand .brand-name {
+  display: block; font-size: 16pt; font-weight: 700; letter-spacing: .04em;
+  color: var(--sheet-accent, #1A1D21);
+}
+/* 右の会社欄の小さいロゴは、左上と二重になるので隠す */
+#sheet.skin-logo .sheet-company .sheet-logo { display: none; }
+
+#sheet.skin-logo .sheet-title {
+  text-align: left; font-size: 16pt; font-weight: 700;
+  letter-spacing: .5em; text-indent: 0;
+  color: var(--sheet-accent, #1A1D21); margin-bottom: 1mm;
+}
+#sheet.skin-logo .sheet-meta { margin-top: -8mm; margin-bottom: 5mm; }
+#sheet.skin-logo .sheet-to { border-bottom: .8pt solid var(--sheet-accent, #1A1D21); }
+#sheet.skin-logo .sheet-total-box {
+  border: 0; border-top: .8pt solid var(--sheet-accent, #1A1D21);
+  border-bottom: 2.2pt solid var(--sheet-accent, #1A1D21); padding: 2.5mm 1mm;
+}
+#sheet.skin-logo table.sheet-lines th {
+  background: none; color: var(--sheet-accent, #1A1D21); font-weight: 700;
+  border: 0; border-top: .8pt solid var(--sheet-accent, #1A1D21);
+  border-bottom: .8pt solid var(--sheet-accent, #1A1D21);
+}
+#sheet.skin-logo table.sheet-lines td { border: 0; border-bottom: .4pt solid #d5d5d5; padding: 2.2mm 2mm; }
+#sheet.skin-logo .sheet-remarks { border: 0; border-top: .5pt solid #d5d5d5; padding: 2.5mm 0 0; }
+#sheet.skin-logo table.sheet-sum th,
+#sheet.skin-logo table.sheet-sum td { border: 0; border-bottom: .4pt solid #d5d5d5; padding: 1.8mm 1mm; }
+#sheet.skin-logo table.sheet-sum th { background: none; color: #333; }
+#sheet.skin-logo table.sheet-sum tr.grand th,
+#sheet.skin-logo table.sheet-sum tr.grand td {
+  background: none; color: var(--sheet-accent, #1A1D21);
+  border-top: .9pt solid var(--sheet-accent, #1A1D21); border-bottom: 0; padding-top: 2.2mm;
+}
+#sheet.skin-logo .sheet-brand,
+#sheet.skin-logo .sheet-title,
+#sheet.skin-logo table.sheet-lines th {
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+
+/* ---------- 見本の紙の絵：ロゴ大きく左 ---------- */
+.skin-demo-logo .sd-title { text-align: left; letter-spacing: .12em; color: var(--sheet-accent, #1A1D21); }
+.skin-demo-logo::before {
+  content: ''; display: block; width: 46%; height: 11px; margin-bottom: 5px;
+  background: var(--sheet-accent, #1A1D21); border-radius: 1px;
+}
+.skin-demo-logo .sd-table { border-top: 1.5px solid var(--sheet-accent, #1A1D21); }
+.skin-demo-logo .sd-head { border-bottom: 1.5px solid var(--sheet-accent, #1A1D21); }
+.skin-demo-logo .sd-head > span { background: #cfd2d6; }
+.skin-demo-logo .sd-row { border-bottom: 1px solid #e6e7ea; padding: 3px 0; }
+.skin-demo-logo .sd-sum { background: none; border-top: 1.5px solid var(--sheet-accent, #1A1D21); height: 4px; }
+
+/* 見本の絵も選んだ色で（きっちり枠・すっきりは線だけ） */
+.skin-demo-frame .sd-title { border-color: var(--sheet-accent, #1A1D21); color: var(--sheet-accent, #1A1D21); }
+.skin-demo-frame .sd-table,
+.skin-demo-frame .sd-sum { border-color: var(--sheet-accent, #1A1D21); }
+.skin-demo-plain .sd-title { border-bottom-color: var(--sheet-accent, #1A1D21); color: var(--sheet-accent, #1A1D21); }
+.skin-demo-plain .sd-head { border-bottom-color: var(--sheet-accent, #1A1D21); }
+.skin-demo-plain .sd-sum { border-top-color: var(--sheet-accent, #1A1D21); }
+
+/* ======================================================================
+   色を選ぶ欄
+   ====================================================================== */
+.sub-title { font-size: 14px; font-weight: 700; margin: 18px 0 8px; }
+.color-pick { display: flex; flex-wrap: wrap; gap: 10px; }
+.color-card {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 12px 7px 8px; border: 2px solid var(--line); border-radius: 999px;
+  background: #fff; cursor: pointer; font: inherit;
+}
+.color-card:hover { border-color: #9aa1a9; }
+.color-card.is-on { border-color: var(--dark); box-shadow: 0 0 0 3px rgba(26,29,33,.12); }
+.color-swatch { display: block; width: 20px; height: 20px; border-radius: 50%; flex: none; }
+.color-name { font-size: 13px; }
+.color-card.is-on .color-name { font-weight: 700; }
+
+/* ロゴが無い会社は左上に会社名が大きく出るので、右の会社欄の会社名は隠す（2回出さない） */
+#sheet.skin-logo.no-logo .sheet-company b { display: none; }
