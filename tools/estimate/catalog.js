@@ -1258,10 +1258,101 @@
         if (o.x - x.end < 14 || (x.one && one(o) && Math.abs(x.y - o.y) < 1.2 &&
             (o.x - x.end < 36 || (Math.abs(x.y - o.y) < 0.6 && o.x - x.end < 60)))) L = x;
       });
-      if (!L) { L = { x: o.x, end: o.x + (o.w || 0), y: o.y, t: '' }; lines.push(L); }
+      if (!L) { L = { x: o.x, end: o.x + (o.w || 0), y: o.y, t: '', src: [] }; lines.push(L); }
       L.t += ' ' + clean(o.s); L.end = Math.max(L.end, o.x + (o.w || 0));
+      L.src.push(o);
       L.one = one(o) || /\s[ぁ-んァ-ヶー一-龥]$/.test(clean(o.s).trim());
     });
+    /* 区分の列をまたいだ札を切る（2026-09-12）
+       70ページのパネルの欄は、区分がどれも x=130.4 から始まる
+       （「フレッシュホワイト」「ブラウン」「木目」「枠付」「枠なし」）。
+       外側のまとまり「パ ネ ル」は x=53.9 から字間27で組んであり、
+       「ル」の終わり124.7 と「ブ」の始まり130.4 の間は 5.7 しかないので1行につながって
+       「パネルブラウン」になり、BG50N-WF（白）と BG50F-T（茶）が同じ名前になっていた。
+       間の広さでは見分けられない（「空 清 フ ィ ル タ ー」の字間も5.4）。
+       札を組んだあとで「3つ以上の札が同じxから始まる」ところを列の境目とし、
+       そこをまたぐ札だけを切る。字ひとつずつのxで決めると、よその行の字と
+       たまたま揃ったところで切ってしまう（「パネル」が「パ」になった）*/
+    (function () {
+      var cl = [];
+      lines.forEach(function (L) {
+        var c = null;
+        cl.forEach(function (g) { if (Math.abs(g.x - L.x) <= 1.5) c = g; });
+        if (!c) { c = { x: L.x, ys: [] }; cl.push(c); }
+        if (!c.ys.some(function (y) { return Math.abs(y - L.y) < 2.5; })) c.ys.push(L.y);
+      });
+      var cols = cl.filter(function (g) { return g.ys.length >= 3; }).map(function (g) { return g.x; })
+        .sort(function (a, b) { return a - b; });
+      if (!cols.length) return;
+      var add = [];
+      lines.forEach(function (L) {
+        if (!L.src || L.src.length < 2) return;
+        /* その境目を、この札の近くの行が本当に使っているか。
+           ページ全体で見ると「揚程」102.0 や「単相100V」135.2 も境目に見えるが、
+           それはずっと下のドレンの欄の列。近くの行（上下30ポイント）で
+           2つ以上の札がそこから始まっているものだけを境目として使う */
+        var cut = cols.filter(function (cx) {
+          if (!(cx > L.x + 1.5 && cx <= L.end + 1.5)) return false;
+          var near = lines.filter(function (M) {
+            return M !== L && Math.abs(M.x - cx) <= 1.5 && Math.abs(M.y - L.y) <= 30;
+          });
+          return near.length >= 2;
+        });
+        if (!cut.length) return;
+        var src = L.src.slice().sort(function (a, b) { return a.x - b.x; });
+        // 字と字の間（前の字の終わりから次の字の始まりまで）
+        var gaps = [0];
+        for (var q1 = 1; q1 < src.length; q1++) gaps.push(src[q1].x - (src[q1 - 1].x + (src[q1 - 1].w || 0)));
+        function med(lo2, hi2) {
+          var v = [];
+          for (var q2 = lo2; q2 <= hi2; q2++) if (q2 >= 1 && q2 < gaps.length) v.push(gaps[q2]);
+          if (!v.length) return -1;
+          v.sort(function (a, b) { return a - b; });
+          return v[v.length >> 1];
+        }
+        // 列の境目に当たる字の場所
+        var cand = [];
+        for (var q3 = 1; q3 < src.length; q3++) {
+          if (cut.some(function (cx) { return src[q3].x >= cx - 1.5 && src[q3 - 1].x < cx - 1.5; })) cand.push(q3);
+        }
+        if (!cand.length) return;
+        /* 札の切れ目は「字間が変わるところ」（2026-09-12）
+           70ページ「据 付 枠 | 塗 壁 用」……字間 7.3 → 26.5 で変わる。ここが切れ目
+             （2文字目の「付」も列の境目に当たるが、字間が7.3のまま続くので切らない）
+           77ページ「屋 根 直 角 置 台 | 塗 装」……7.0 → 17.3
+           70ページ「パ ネ ル | ブ ラ ウ ン」……27.1 → 4.5
+           右が1文字だけのときは、切れ目の間の広さを左の字間とくらべる
+             （71ページ「キ ッ ト | 3m」……字間20.8に対し切れ目11.6）*/
+        var acc = [], start = 0;
+        cand.forEach(function (ci, k1) {
+          var before = med(start + 1, ci - 1);
+          var nextC = k1 + 1 < cand.length ? cand[k1 + 1] : src.length;
+          var after = med(ci + 1, nextC - 1);
+          var ok;
+          /* 字間の話は「1文字ずつ間をあけて組んだ札」だけの話。
+             ふつうの語どうし（「TLシリーズ」＋「ウォールカバー丸フランジ」）は
+             間が狭いのがふつうなので、列の境目をそのまま信じる */
+          if (!(one(src[ci - 1]) && one(src[ci]))) ok = true;
+          else if (before < 0) ok = /^[A-Za-z]$/.test(clean(src[0].s).trim());   // 左が1文字（英字1文字だけ切ってよい）
+          else if (after >= 0) ok = Math.abs(after - before) > Math.max(after, before) * 0.35;
+          else ok = Math.abs(gaps[ci] - before) > before * 0.35;
+          if (ok) { acc.push(ci); start = ci; }
+        });
+        if (!acc.length) return;
+        var groups = [[]];
+        src.forEach(function (o, oi) { if (acc.indexOf(oi) >= 0) groups.push([]); groups[groups.length - 1].push(o); });
+        if (groups.length < 2) return;
+        var first = groups.shift();
+        L.t = first.map(function (o) { return ' ' + clean(o.s); }).join('');
+        L.x = first[0].x; L.end = first[first.length - 1].x + (first[first.length - 1].w || 0);
+        groups.forEach(function (g) {
+          if (!g.length) return;
+          add.push({ x: g[0].x, end: g[g.length - 1].x + (g[g.length - 1].w || 0), y: L.y,
+                     t: g.map(function (o) { return ' ' + clean(o.s); }).join(''), src: g });
+        });
+      });
+      lines.push.apply(lines, add);
+    })();
     lines.forEach(function (L) { L.t = tidy(L.t); });
     // 縦書きの名前は、まん中の高さの1行として足す
     vert.forEach(function (v) { lines.push({ x: v.x, end: v.x + 6, y: (v.hi + v.lo) / 2, t: tidy(v.t) }); });
@@ -1295,10 +1386,25 @@
     // 一覧の名前は行の高さぴったり（0.3 以内）。69ページ「埋込配管用／シングルコイル／組合せ」は行から1.0ずれた3行の名前
     function onRow(y) { return y != null && rowsX.some(function (r) { return Math.abs(r - y) <= 0.8; }); }
     function len(t) { return t.replace(/\s+/g, '').length; }
-    // 段：いちばん左に始まる行が「まとまり」、それより右が「区分」
+    /* 段：いちばん左に始まる行が「まとまり」、それより右が「区分」。
+       区分は1列と決めつけていたが、2列ある表がある（2026-09-12）。
+       71ページの断熱フレキシブルダクトは
+         「断熱フレキシブルダクト関連」（x52.7）／「キット」（x65.2）／「1m」「2m」「3m」（x134.9）
+       の3段。1列しか採らないと「3m」が落ちて、1mも2mも3mも「キット」になる。
+       札の左端でまとめて、左から順に列とし、列ごとに1つずつ札を割り当ててつなぐ */
     var minX = Math.min.apply(null, lines.map(function (L) { return L.x; }));
+    var colXs = (function () {
+      var xs = lines.map(function (L) { return L.x; }).sort(function (a, b) { return a - b; }), cs = [];
+      xs.forEach(function (x) { if (!cs.length || x - cs[cs.length - 1] >= 6) cs.push(x); });
+      return cs;
+    })();
+    function colOfX(x) {
+      var k = 0;
+      for (var t = 0; t < colXs.length; t++) if (colXs[t] <= x + 3) k = t;
+      return k;
+    }
     function labelsOf(col) {
-      var ls = lines.filter(function (L) { return (L.x - minX < 6) === (col === 0); })
+      var ls = lines.filter(function (L) { return colOfX(L.x) === col; })
         .sort(function (a, b) { return b.y - a.y; });
       // 縦に続く行（「防雪」「フード」）は1つの名前
       var out = [];
@@ -1333,7 +1439,9 @@
       out.forEach(function (x) { x.y = (x.hi + x.lo) / 2; });
       return out;
     }
-    var g = labelsOf(0), sub = labelsOf(1);
+    var g = labelsOf(0), subCols = [];
+    for (var ci0 = 1; ci0 < colXs.length; ci0++) { var lv = labelsOf(ci0); if (lv.length) subCols.push(lv); }
+    var sub = subCols.length ? subCols[0] : [];
     var names = rows.map(function () { return ''; });
     /* 2つの行のまん中に名前の文字があれば、その2行は同じマスの中。
        71ページのドレンアップキットは4行（K-KDU573MS・MV・NS・NV）で、名前は上寄りに書いてある。
@@ -1368,18 +1476,31 @@
       while (j + 1 < rows.length && ga[j + 1] === ga[i] && sec[j + 1] === sec[i]) j++;
       var blockRows = rows.slice(i, j + 1);
       var hi = blockRows[0] + 4, lw = blockRows[blockRows.length - 1] - 4;
-      var subs = sub.filter(function (x) { return x.y <= hi && x.y >= lw; });
-      var sa = dkoAssign(blockRows, subs, 9, 9);
+      // 区分の列ごとに割り当てる（左から順に名前をつなぐ）
+      var picks = subCols.map(function (lv) {
+        var subs = lv.filter(function (x) { return x.y <= hi && x.y >= lw; });
+        return { subs: subs, sa: dkoAssign(blockRows, subs, 9, 9) };
+      });
       for (var t = i; t <= j; t++) {
-        var parts = [];
+        var parts = [], k0 = t - i, leafSub = false;
         if (ga[t] >= 0) parts.push(g[ga[t]].t);
-        var sl = sa[t - i] >= 0 ? subs[sa[t - i]] : null;
-        if (sl) parts.push(sl.t);
+        picks.forEach(function (P, pi) {
+          var sl = P.sa[k0] >= 0 ? P.subs[P.sa[k0]] : null;
+          if (!sl) return;
+          /* 2列目より右の区分は、品番の行の高さに書いてある札（「1m」「2m」…）が多い。
+             それは「その行だけの札」なので、よその行に付けてはいけない。
+             （付けると「TM シリーズ 端末カバー 2m」のように関係ない長さが混ざった）
+             行の間に書いてある札（何行ぶんかのマスのまん中＝「キット」）はそのまま使う */
+          if (pi >= 1 && sl.ys.every(onRow) && !hasOn(sl, rows[t])) return;
+          // すでに入っている言葉は足さない（「高さ 500 アルミ」のあとの「アルミ」）
+          var joined = parts.join(' ');
+          if (parts.indexOf(sl.t) < 0 && joined.replace(/\s/g, '').indexOf(sl.t.replace(/\s/g, '')) < 0) parts.push(sl.t);
+          /* 品番の行の高さに書いてあり、その行だけに付いた名前なら「その品物だけの名前」。
+             同じ品番が何ページにもあるとき（KRP413BB1S は70・71・73ページ）は、これを使う */
+          if (P.sa.filter(function (v) { return v === P.sa[k0]; }).length === 1 && hasOn(sl, rows[t])) leafSub = true;
+        });
         names[t] = parts.join(' ').trim();
-        /* 品番の行の高さに書いてあり、その行だけに付いた名前なら「その品物だけの名前」。
-           同じ品番が何ページにもあるとき（KRP413BB1S は70・71・73ページ）は、これを使う */
-        var k0 = t - i;
-        leaf[t] = (sl && sa.filter(function (v) { return v === sa[k0]; }).length === 1 && hasOn(sl, rows[t])) ||
+        leaf[t] = leafSub ||
                   (ga[t] >= 0 && ga.filter(function (v) { return v === ga[t]; }).length === 1 && hasOn(g[ga[t]], rows[t]));
       }
       i = j + 1;
