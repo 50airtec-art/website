@@ -1477,9 +1477,15 @@
       var blockRows = rows.slice(i, j + 1);
       var hi = blockRows[0] + 4, lw = blockRows[blockRows.length - 1] - 4;
       // 区分の列ごとに割り当てる（左から順に名前をつなぐ）
-      var picks = subCols.map(function (lv) {
+      var picks = subCols.map(function (lv, pi0) {
         var subs = lv.filter(function (x) { return x.y <= hi && x.y >= lw; });
-        return { subs: subs, sa: dkoAssign(blockRows, subs, 9, 9) };
+        /* 2列目より右の区分は、表の一部の行にしか札が無いのがふつう
+           （72ページのリモコンコードの長さ「3m」「8m」「12m」「20m」は15行のうち4行だけ）。
+           行を飛ばす代金を9にすると、札を大きなかたまりに付けてしまい、
+           そのあと「行の高さに無い」で捨てられて長さが消える（2026-09-12）。
+           5にすると、長さは自分の行に付き、ほかの名前は動かなかった
+           （0.5まで下げると別のものが壊れる。617品目で確かめた値が5）*/
+        return { subs: subs, sa: dkoAssign(blockRows, subs, pi0 ? 5 : 9, 9) };
       });
       for (var t = i; t <= j; t++) {
         var parts = [], k0 = t - i, leafSub = false;
