@@ -1022,3 +1022,161 @@ table.sheet-sum tr.grand th, table.sheet-sum tr.grand td { background: #e8e8e8; 
   font-size: 11px; color: var(--text-light); text-align: right;
   margin-top: 1px; white-space: nowrap;
 }
+
+/* ======================================================================
+   見積書の見た目（着せ替え）
+   ----------------------------------------------------------------------
+   組み立てるHTMLは1つだけ。#sheet に付くクラスで線と色だけを変える。
+   だから紙に出る金額・明細はどれを選んでも同じ。
+   ・skin-standard … これまでの形（下に何も書かない＝素のまま）
+   ・skin-frame    … 枠と罫線を濃く。白黒コピー向け
+   ・skin-plain    … 横線だけ・縦罫なし。余白広め
+   ・skin-band     … 表題と見出しを炭色のベタに（名刺と同じ #1A1D21）
+
+   高さが変わると紙の割り方も変わるが、buildSheet が着せてから
+   実際の高さを測って割るので、どれを選んでもずれない。
+   ====================================================================== */
+
+/* ---------- きっちり枠 ---------- */
+#sheet.skin-frame .sheet-title {
+  border: 1.4pt solid #000; padding: 2.5mm 0 2mm;
+  letter-spacing: .6em; text-indent: .6em; margin-bottom: 5mm;
+}
+#sheet.skin-frame .sheet-to { border-bottom-width: 1.6pt; }
+#sheet.skin-frame .sheet-total-box { border-width: 1.6pt; }
+#sheet.skin-frame table.sheet-lines { border: 1.2pt solid #000; }
+#sheet.skin-frame table.sheet-lines th,
+#sheet.skin-frame table.sheet-lines td { border: .8pt solid #000; }
+#sheet.skin-frame table.sheet-lines th { background: #e6e6e6; font-weight: 700; }
+#sheet.skin-frame .sheet-remarks { border: 1pt solid #000; }
+#sheet.skin-frame table.sheet-sum { border: 1.2pt solid #000; }
+#sheet.skin-frame table.sheet-sum th,
+#sheet.skin-frame table.sheet-sum td { border: .8pt solid #000; }
+#sheet.skin-frame table.sheet-sum th { background: #ededed; font-weight: 700; }
+#sheet.skin-frame table.sheet-sum tr.grand th,
+#sheet.skin-frame table.sheet-sum tr.grand td {
+  background: #dcdcdc; border-top: 1.6pt double #000;
+}
+
+/* ---------- すっきり（横線だけ） ---------- */
+#sheet.skin-plain .sheet-title {
+  text-align: left; font-size: 17pt; font-weight: 600;
+  letter-spacing: .25em; text-indent: 0;
+  border-bottom: .8pt solid #111; padding-bottom: 2.5mm; margin-bottom: 6mm;
+}
+#sheet.skin-plain .sheet-meta { margin-top: -12mm; }
+#sheet.skin-plain .sheet-to { border-bottom: .5pt solid #bbb; }
+#sheet.skin-plain .sheet-total-box {
+  border: 0; border-bottom: 1.4pt solid #111; padding: 1mm 0 2mm;
+}
+#sheet.skin-plain table.sheet-lines { font-size: 9.5pt; }
+#sheet.skin-plain table.sheet-lines th {
+  background: none; border: 0; border-bottom: .9pt solid #111;
+  padding: 1.4mm 2mm 2mm; color: #333; font-weight: 600;
+}
+#sheet.skin-plain table.sheet-lines td {
+  border: 0; border-bottom: .4pt solid #d5d5d5; padding: 2.2mm 2mm;
+}
+#sheet.skin-plain .sheet-remarks {
+  border: 0; border-top: .5pt solid #d5d5d5; padding: 2.5mm 0 0;
+}
+#sheet.skin-plain table.sheet-sum th,
+#sheet.skin-plain table.sheet-sum td {
+  border: 0; border-bottom: .4pt solid #d5d5d5; padding: 1.8mm 1mm;
+}
+#sheet.skin-plain table.sheet-sum th { background: none; color: #333; }
+#sheet.skin-plain table.sheet-sum tr.grand th,
+#sheet.skin-plain table.sheet-sum tr.grand td {
+  background: none; border-top: .9pt solid #111; border-bottom: 0; padding-top: 2.2mm;
+}
+
+/* ---------- 色帯（名刺と同じ炭色） ---------- */
+#sheet.skin-band .sheet-title {
+  background: #1A1D21; color: #fff; padding: 3mm 0 2.6mm;
+  letter-spacing: .6em; text-indent: .6em; font-size: 18pt; margin-bottom: 5mm;
+}
+#sheet.skin-band .sheet-to { border-bottom: 1.2pt solid #1A1D21; }
+#sheet.skin-band .sheet-total-box {
+  border: 0; border-left: 3.5pt solid #1A1D21; background: #f2f3f4;
+  padding: 3mm 4mm;
+}
+#sheet.skin-band table.sheet-lines th {
+  background: #1A1D21; color: #fff; border-color: #1A1D21; font-weight: 600;
+}
+#sheet.skin-band table.sheet-lines td { border-color: #c9ccd0; }
+#sheet.skin-band .sheet-remarks { border-color: #c9ccd0; background: #fafafa; }
+#sheet.skin-band table.sheet-sum th,
+#sheet.skin-band table.sheet-sum td { border-color: #c9ccd0; }
+#sheet.skin-band table.sheet-sum th { background: #f2f3f4; color: #1A1D21; }
+#sheet.skin-band table.sheet-sum tr.grand th,
+#sheet.skin-band table.sheet-sum tr.grand td {
+  background: #1A1D21; color: #fff; border-color: #1A1D21;
+}
+/* 色ベタは「背景を印刷しない」設定だと消えてしまうので、必ず刷るよう頼む */
+#sheet.skin-band .sheet-title,
+#sheet.skin-band table.sheet-lines th,
+#sheet.skin-band table.sheet-sum tr.grand th,
+#sheet.skin-band table.sheet-sum tr.grand td,
+#sheet.skin-band .sheet-total-box {
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+
+/* ======================================================================
+   ［自社情報］の「見積書の見た目」を選ぶ欄
+   小さな紙の絵を並べて、印刷しなくても違いが見えるようにする
+   ====================================================================== */
+.skin-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.skin-card {
+  display: flex; flex-direction: column; gap: 6px; align-items: stretch;
+  padding: 10px; border: 2px solid var(--line); border-radius: 10px;
+  background: #fff; cursor: pointer; text-align: left; font: inherit;
+}
+.skin-card:hover { border-color: #9aa1a9; }
+.skin-card.is-on { border-color: var(--dark); box-shadow: 0 0 0 3px rgba(26,29,33,.12); }
+.skin-name { font-weight: 700; font-size: 14px; }
+.skin-card.is-on .skin-name::after { content: '　選択中'; font-size: 11px; font-weight: 500; color: var(--dark); }
+.skin-hint { font-size: 11.5px; color: #5A6068; line-height: 1.5; }
+
+.skin-demo {
+  display: block; background: #fff; border: 1px solid #e3e5e8; border-radius: 4px;
+  padding: 8px 8px 10px; margin-bottom: 2px;
+}
+.skin-demo .sd-title {
+  display: block; text-align: center; font-size: 9px; letter-spacing: .25em;
+  font-weight: 700; color: #111; margin-bottom: 6px;
+}
+.skin-demo .sd-table { display: block; margin-bottom: 6px; }
+.skin-demo .sd-row { display: flex; gap: 3px; padding: 2px 0; }
+.skin-demo .sd-row > span { display: block; height: 4px; background: #d8dade; border-radius: 1px; }
+.skin-demo .sd-c1 { flex: 3; }
+.skin-demo .sd-c2 { flex: 1; }
+.skin-demo .sd-c3 { flex: 1.2; }
+.skin-demo .sd-head > span { background: #b9bdc3; }
+.skin-demo .sd-sum { display: block; height: 6px; width: 45%; margin-left: auto; background: #c6c9ce; border-radius: 1px; }
+
+/* 標準 */
+.skin-demo-standard .sd-row { border: 1px solid #d0d3d7; border-bottom: 0; padding: 2px; }
+.skin-demo-standard .sd-table { border-bottom: 1px solid #d0d3d7; }
+.skin-demo-standard .sd-head { background: #f0f1f3; }
+
+/* きっちり枠 */
+.skin-demo-frame .sd-title { border: 1.5px solid #111; padding: 3px 0; }
+.skin-demo-frame .sd-table { border: 1.5px solid #111; }
+.skin-demo-frame .sd-row { border-bottom: 1px solid #111; padding: 2px; }
+.skin-demo-frame .sd-row:last-child { border-bottom: 0; }
+.skin-demo-frame .sd-head { background: #dedede; }
+.skin-demo-frame .sd-sum { border: 1.5px solid #111; height: 8px; background: #dedede; }
+
+/* すっきり */
+.skin-demo-plain .sd-title { text-align: left; letter-spacing: .12em; border-bottom: 1.5px solid #111; padding-bottom: 3px; }
+.skin-demo-plain .sd-row { border-bottom: 1px solid #e6e7ea; padding: 3px 0; }
+.skin-demo-plain .sd-head { border-bottom: 1.5px solid #111; }
+.skin-demo-plain .sd-head > span { background: #cfd2d6; }
+.skin-demo-plain .sd-sum { background: none; border-top: 1.5px solid #111; height: 4px; }
+
+/* 色帯 */
+.skin-demo-band .sd-title { background: #1A1D21; color: #fff; padding: 3px 0; }
+.skin-demo-band .sd-head { background: #1A1D21; }
+.skin-demo-band .sd-head > span { background: #6b7076; }
+.skin-demo-band .sd-row { padding: 2px 0; }
+.skin-demo-band .sd-sum { background: #1A1D21; height: 8px; }

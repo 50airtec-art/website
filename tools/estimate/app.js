@@ -9,7 +9,7 @@
   /* ---------- 保存キー ---------- */
   /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
      配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609121700';
+  var APP_VERSION = '202609121800';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -55,11 +55,29 @@
     return /^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(s) ? s : '';
   }
 
+  /* 見積書の見た目。中身の組み立ては1つで、変わるのはCSSだけ。
+     だから紙に出る金額・明細はどれを選んでも同じになる。 */
+  var SHEET_SKINS = [
+    { id: 'standard', name: '標準',
+      hint: '罫線はふつうの太さ。迷ったらこれ' },
+    { id: 'frame', name: 'きっちり枠',
+      hint: '枠と罫線を濃く、表題を囲む。白黒コピーでもはっきり出る' },
+    { id: 'plain', name: 'すっきり',
+      hint: '横線だけで縦の罫線なし。余白広め。読みやすい今風' },
+    { id: 'band', name: '色帯',
+      hint: '表題と見出しを炭色のベタに。名刺と同じ色。カラーで渡すとき' }
+  ];
+  function skinId(v) {
+    for (var i = 0; i < SHEET_SKINS.length; i++) if (SHEET_SKINS[i].id === v) return v;
+    return 'standard';
+  }
+
   /** 取り込んだ自社情報を整える。足りない項目は初期値で埋め、画像は上の判定を通す */
   function adoptCompany(src) {
     var c = Object.assign({}, DEFAULT_PRICEBOOK.company, src || {});
     c.sealImage = safeImage(c.sealImage);
     c.logoImage = safeImage(c.logoImage);
+    c.sheetSkin = skinId(c.sheetSkin);
     return c;
   }
 
@@ -3728,6 +3746,8 @@
    * だから全部の画像が出そろうのを待ってから window.print() を呼ぶ。
    */
   function showSheetAndPrint(html) {
+    // 現調シートは見積書ではないので、見積書の見た目は外す
+    $('#sheet').className = '';
     $('#sheet').innerHTML = html;
     var imgs = $$('#sheet img');
     var waits = imgs.map(function (im) {
@@ -4602,6 +4622,7 @@
     renderCostRates();
     $('#seal-size').value = pb.company.sealSizeMm || 18;
     $('#logo-size').value = pb.company.logoHeightMm || 12;
+    renderSkinPick();
     renderSealPreview();
     renderLogoPreview();
     renderPresets();
@@ -4851,6 +4872,45 @@
     renderSealPreview();
     toast('社判を削除しました');
   });
+
+  /* ---------- 見積書の見た目 ----------
+     押すとその場で切り替える。小さな紙の絵を並べて、
+     印刷しなくても違いが見えるようにしてある（絵のCSSは style.css の .skin-demo）。 */
+  function renderSkinPick() {
+    var box = $('#skin-pick');
+    if (!box) return;
+    box.innerHTML = '';
+    var now = skinId(pb.company.sheetSkin);
+    SHEET_SKINS.forEach(function (sk) {
+      var b = el('button', 'skin-card' + (sk.id === now ? ' is-on' : ''));
+      b.type = 'button';
+      b.setAttribute('aria-pressed', sk.id === now ? 'true' : 'false');
+
+      var demo = el('span', 'skin-demo skin-demo-' + sk.id);
+      demo.appendChild(el('span', 'sd-title', '御見積書'));
+      var tb = el('span', 'sd-table');
+      for (var i = 0; i < 3; i++) {
+        var r = el('span', 'sd-row' + (i ? '' : ' sd-head'));
+        r.appendChild(el('span', 'sd-c1'));
+        r.appendChild(el('span', 'sd-c2'));
+        r.appendChild(el('span', 'sd-c3'));
+        tb.appendChild(r);
+      }
+      demo.appendChild(tb);
+      demo.appendChild(el('span', 'sd-sum'));
+      b.appendChild(demo);
+
+      b.appendChild(el('span', 'skin-name', sk.name));
+      b.appendChild(el('span', 'skin-hint', sk.hint));
+      b.addEventListener('click', function () {
+        pb.company.sheetSkin = sk.id;
+        savePB();
+        renderSkinPick();
+        toast('見積書の見た目を「' + sk.name + '」にしました');
+      });
+      box.appendChild(b);
+    });
+  }
 
   $('#seal-size').addEventListener('input', function () {
     var v = num($('#seal-size').value);
@@ -6131,6 +6191,9 @@
   function buildSheet(mode, doc) {
     var d = doc || st;
     mode = mode || 'estimate';
+    /* 見た目を先に着せる。paginateSheet は実際の高さを測って紙を割るので、
+       あとから着せると線の太さの分だけ割り方がずれる */
+    $('#sheet').className = 'skin-' + skinId(pb.company.sheetSkin);
     var inv = (mode === 'invoice');
     var t = calcOf(d);
     var c = pb.company;

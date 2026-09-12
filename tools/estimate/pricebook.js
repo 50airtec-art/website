@@ -29,6 +29,7 @@ const DEFAULT_PRICEBOOK = {
     sealSizeMm: 18,    // 社判の大きさ（mm）
     logoImage: '',     // ロゴの画像（アップロードするとここに入る）
     logoHeightMm: 12,  // ロゴの高さ（mm）
+    sheetSkin: 'standard',  // 見積書の見た目（standard / frame / plain / band）
   },
 
   /* ---------- ワンタップ入力用のひな形（任意・追加してOK） ---------- */
