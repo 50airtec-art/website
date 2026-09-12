@@ -7,9 +7,11 @@
   'use strict';
 
   /* ---------- 保存キー ---------- */
-  /* この画面がいつの版か。index.html の ?v= と同じ数字にしておく。
-     配るときは両方を一緒に上げること（片方だけだと、直したものが端末に届かない）。 */
-  var APP_VERSION = '202609121900';
+  /* この画面がいつの版か。
+     ★ 手で直さないこと。version.txt を書き換えて `node build.mjs` を走らせれば、
+       ここも入口（index.html）も、build.mjs が機械的にそろえる。
+       人が何か所も手で合わせると、必ずどこかがずれる。 */
+  var APP_VERSION = '202609122100';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -2371,8 +2373,14 @@
 
   /* 連動（sync.js）は app.js のあとに読み込まれる。
      先に警告を描いてしまうと「連動していない」と誤って判断したまま残るので、
-     全部そろったところで一度描き直す。 */
-  window.addEventListener('load', function () { renderBackupState(); });
+     全部そろったところで一度描き直す。
+
+     ★ 入口と本体に割ってから（[[project-kuchoo-lock]]）、app.js はページが
+       出来上がったあとに流し込まれるようになった。そのときは load がとっくに
+       済んでいて、この待ち伏せは永久に当たらない。だから、もう済んでいたら
+       待たずに描く。待つのは、昔ながらの読み込まれ方をしたときだけ。 */
+  if (document.readyState === 'complete') setTimeout(renderBackupState, 0);
+  else window.addEventListener('load', function () { renderBackupState(); });
 
   $('#btn-a2hs-how').addEventListener('click', showA2HS);
   $('#btn-a2hs-how2').addEventListener('click', showA2HS);
