@@ -383,6 +383,15 @@
         s.textContent = pair[1];
         document.body.appendChild(s);
       });
+
+      /* 「新しくする」で付いた ?v=… を、住所から外しておく。
+         付けっぱなしだと、この先ずっと控えを使わずクラウドに聞きに行くことになり、
+         圏外で開かなくなる。ホーム画面に追加された住所にも残ってしまう。 */
+      if (/[?&]v=/.test(location.search) && history.replaceState) {
+        var u = new URL(location.href);
+        u.searchParams.delete('v');
+        history.replaceState({}, '', u.pathname + (u.search || '') + u.hash);
+      }
     } catch (e) {
       sayBad('空調王をひらけませんでした。', 'もう一度ためしてください。', e);
     }
@@ -468,11 +477,24 @@
 
     if (!lic || !lic.key) { askKey(); return; }
 
+    /* ------------------------------------------------------------------
+       「新しい版が出ています → 新しくする」を押したときは、
+       控えを使わずにクラウドから取り直す。
+
+       ★ ここを入れないと、直したものが最長30日ぶん届かない。
+         app.js は version.txt を見て新しい版に気づき、
+         `?v=<新しい版>` を付けて開き直す。ところが入口が控えをそのまま開くと、
+         **押しても何も変わらない**。押した人は壊れたと思う。
+         version.txt を毎回見に行くやり方もあるが、起動のたびに待たされるうえ、
+         圏外だと止まる。**すでにある仕組みに乗るほうが確実で速い。**
+       ------------------------------------------------------------------ */
+    var forced = /[?&]v=/.test(location.search);
+
     /* 前に確かめてから30日以内なら、クラウドに聞かずに開く。
        機械室でも屋上でも、電波が無くても今までどおり動かすため。 */
     var fresh = lic.checkedAt && (Date.now() - lic.checkedAt) < GRACE_DAYS * DAY;
     var expired = lic.until && lic.until < todayISO();
-    if (fresh && !expired && await openFromCache(lic)) {
+    if (!forced && fresh && !expired && await openFromCache(lic)) {
       // 開いたあとで、裏でこっそり確かめ直しておく（失敗しても画面は触らない）
       setTimeout(function () { quietRecheck(lic); }, 8000);
       return;

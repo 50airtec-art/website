@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>空調王 元締め</title>
+<!-- ======================================================================
+     空調王の元締め画面。
+
+     ★ このページは、BIGBOSSのパソコンの中でしか開きません。
+       admin.mjs が 127.0.0.1 でだけ待ち受けていて、
+       サービスアカウントの鍵は node の中にしかありません。
+       このページは「してほしいこと」を頼むだけで、鍵は持ちません。
+
+     開き方： cd _kuchoo-admin && node admin.mjs serve
+     ====================================================================== -->
+<style>
+  :root {
+    --bg: #f6f6f4; --card: #fff; --line: #e3e3e0; --text: #1a1a1a;
+    --dim: #6b6b6b; --ok: #1e6b3a; --ng: #9a2b2b; --accent: #1a1a1a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #15161a; --card: #1d1f25; --line: #33363f; --text: #e9e9ea;
+            --dim: #9a9aa2; --ok: #5fbe84; --ng: #ef8b8b; --accent: #e9e9ea; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 64px; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    font-size: 15px; line-height: 1.7;
+  }
+  .wrap { max-width: 56rem; margin: 0 auto; }
+  h1 { font-size: 1.3rem; margin: 0 0 .25rem; }
+  .sub { color: var(--dim); font-size: .85rem; margin: 0 0 1.5rem; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: .75rem;
+    padding: 1.1rem 1.2rem; margin-bottom: 1rem;
+  }
+  .card h2 { font-size: 1rem; margin: 0 0 .8rem; }
+  .row { display: flex; gap: .6rem; align-items: baseline; padding: .15rem 0; }
+  .row .k { color: var(--dim); min-width: 10rem; font-size: .88rem; }
+  .ok { color: var(--ok); } .ng { color: var(--ng); font-weight: 600; }
+  .note {
+    margin-top: .8rem; padding: .7rem .9rem; border-radius: .5rem;
+    background: rgba(154,43,43,.08); border: 1px solid rgba(154,43,43,.25);
+    color: var(--ng); font-size: .88rem;
+  }
+  .note b { font-weight: 700; }
+  pre.note { font: inherit; font-size: .88rem; white-space: pre-wrap; margin: 0 0 1rem; }
+  button {
+    font: inherit; font-size: .9rem; padding: .45rem 1rem; border-radius: .5rem;
+    border: 1px solid var(--line); background: var(--card); color: inherit; cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+  button.danger  { color: var(--ng); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.sm { padding: .25rem .6rem; font-size: .82rem; }
+  .btns { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .9rem; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { text-align: left; padding: .5rem .4rem; border-bottom: 1px solid var(--line); vertical-align: middle;
+           white-space: nowrap; }   /* 会社名も日付も、折り返すと読みにくい */
+  .tablewrap { overflow-x: auto; }  /* 狭い画面では、表だけ横に動かす */
+  th { color: var(--dim); font-weight: 500; font-size: .82rem; }
+  td.key { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: .02em; white-space: nowrap; }
+  tr.dead td { color: var(--dim); }
+  .pill { font-size: .78rem; padding: .1rem .5rem; border-radius: 1rem; border: 1px solid var(--line); white-space: nowrap; }
+  .pill.live { color: var(--ok); border-color: currentColor; }
+  .pill.dead { color: var(--ng); border-color: currentColor; }
+  .money { font-size: 1.05rem; margin-top: .9rem; }
+  .money b { font-size: 1.25rem; }
+  label { display: block; margin-bottom: .6rem; font-size: .88rem; }
+  label span { display: block; color: var(--dim); font-size: .82rem; margin-bottom: .2rem; }
+  input {
+    width: 100%; padding: .5rem .6rem; font: inherit; border-radius: .5rem;
+    border: 1px solid var(--line); background: var(--bg); color: inherit;
+  }
+  dialog {
+    border: 1px solid var(--line); border-radius: .75rem; background: var(--card); color: inherit;
+    padding: 1.2rem; max-width: 28rem; width: calc(100% - 2rem);
+  }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  .newkey {
+    font-family: ui-monospace, Consolas, monospace; font-size: 1.35rem; text-align: center;
+    letter-spacing: .06em; padding: 1rem; margin: .8rem 0; border-radius: .5rem;
+    background: var(--bg); border: 1px dashed var(--line); word-break: break-all;
+  }
+  .steps { font-size: .9rem; }
+  .steps div { padding: .1rem 0; }
+  #toast {
+    position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%);
+    background: var(--accent); color: var(--bg); padding: .6rem 1.2rem; border-radius: .5rem;
+    font-size: .9rem; opacity: 0; pointer-events: none; transition: opacity .2s;
+  }
+  #toast.on { opacity: 1; }
+  .busy { color: var(--dim); font-size: .88rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>空調王　元締め</h1>
+  <p class="sub">ライセンスキーを配る・本体を載せる。このページはあなたのパソコンの中だけで動いています。</p>
+
+  <pre class="note" id="fail" hidden></pre>
+
+  <div class="card">
+    <h2>調子</h2>
+    <div id="doctor"><p class="busy">見ています…</p></div>
+    <div class="btns">
+      <button id="btn-refresh">見直す</button>
+      <button id="btn-publish" class="primary">本体を載せる</button>
+      <button id="btn-rotate" class="danger">合鍵を作り直す</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>契約</h2>
+    <div id="list"><p class="busy">読んでいます…</p></div>
+    <div class="btns">
+      <button id="btn-issue" class="primary">＋ キーを発行する</button>
+    </div>
+  </div>
+</div>
+
+<dialog id="dlg-issue">
+  <h2 style="margin:0 0 .9rem;font-size:1rem">キーを発行する</h2>
+  <label><span>会社名</span><input id="in-name" placeholder="今野空調"></label>
+  <label><span>期限（この日まで使えます）</span><input id="in-until" type="date"></label>
+  <pre class="note fail" hidden></pre>
+  <div class="btns">
+    <button class="primary" id="do-issue">発行する</button>
+    <button onclick="document.getElementById('dlg-issue').close()">やめる</button>
+  </div>
+</dialog>
+
+<dialog id="dlg-key">
+  <h2 style="margin:0 0 .4rem;font-size:1rem"><span id="key-name"></span> さんのライセンスキー</h2>
+  <div class="newkey" id="key-value"></div>
+  <p style="margin:0;font-size:.88rem;color:var(--dim)">
+    このキーを伝えて、<b>50airtec.com/m</b> を開いてもらうだけです。<br>
+    会員登録もメールアドレスも要りません。人数の制限もありません。
+  </p>
+  <div class="btns">
+    <button class="primary" id="key-copy">コピーする</button>
+    <button onclick="document.getElementById('dlg-key').close()">閉じる</button>
+  </div>
+</dialog>
+
+<dialog id="dlg-check">
+  <h2 style="margin:0 0 .9rem;font-size:1rem">お客さんと同じ順番でたどりました</h2>
+  <div class="steps" id="check-steps"></div>
+  <div class="btns"><button onclick="document.getElementById('dlg-check').close()">閉じる</button></div>
+</dialog>
+
+<div id="toast"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* 合言葉は住所（?t=…）に入っている。頼みごとのたびに付けて送る */
+  var TOKEN = new URLSearchParams(location.search).get('t') || '';
+  var $ = function (s) { return document.querySelector(s); };
+
+  function toast(msg) {
+    var t = $('#toast');
+    t.textContent = msg; t.classList.add('on');
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(function () { t.classList.remove('on'); }, 2600);
+  }
+
+  async function api(what, body) {
+    var res = await fetch('/api/' + what, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Airtec-Token': TOKEN },
+      body: JSON.stringify(body || {})
+    });
+    var j = await res.json();
+    if (!j.ok) throw new Error(j.error || 'うまくいきませんでした');
+    return j.data;
+  }
+
+  /* うまくいかなかったことは、消えない箱に出す。
+     いちばん読んでほしいのは「service-account.json がありません」のような
+     何行もある案内なので、2秒で消える帯では読み終わらない。 */
+  function failBox() {
+    /* 窓（dialog）が開いているときは、その中に出す。
+       窓の裏に出しても見えないので、押した人は「何も起きない」と思ってしまう */
+    var open = document.querySelector('dialog[open]');
+    return (open && open.querySelector('.fail')) || $('#fail');
+  }
+  function fail(msg) {
+    var box = failBox();
+    box.textContent = msg;
+    box.hidden = false;
+    box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  function clearFail() {
+    [].forEach.call(document.querySelectorAll('#fail, .fail'), function (b) { b.hidden = true; });
+  }
+
+  /** 押している間は二度押しできないようにする */
+  async function busy(btn, fn) {
+    var was = btn.textContent;
+    btn.disabled = true; btn.textContent = '…しています';
+    clearFail();
+    try { await fn(); }
+    catch (e) { fail('✗ ' + e.message); }
+    finally { btn.disabled = false; btn.textContent = was; }
+  }
+
+  var esc = function (s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  };
+
+  /* ---------------- 調子 ---------------- */
+  function drawDoctor(d) {
+    var mark = function (ok, yes, no) {
+      return '<span class="' + (ok ? 'ok' : 'ng') + '">' + (ok ? '○ ' + yes : '✗ ' + no) + '</span>';
+    };
+    var h = '';
+    h += '<div class="row"><span class="k">クラウドに書く鍵</span>' +
+         mark(d.sa, 'あります', 'service-account.json がありません') + '</div>';
+    h += '<div class="row"><span class="k">手元の本体</span>' +
+         mark(!!d.bundle, d.bundle ? '版 ' + d.bundle.v : '', 'bundle.js がありません（node build.mjs）') + '</div>';
+    h += '<div class="row"><span class="k">載せてある版</span>' +
+         (d.ledger.publishedVersion
+            ? '<span class="ok">○ 版 ' + esc(d.ledger.publishedVersion) + '</span>'
+            : '<span class="ng">✗ まだ載せていません</span>') + '</div>';
+    h += '<div class="row"><span class="k">契約</span>' + d.ledger.alive + '社' +
+         '<span style="color:var(--dim);font-size:.85rem">（発行ぜんぶで ' + d.ledger.total + '件）</span></div>';
+
+    h += '<div class="row" style="margin-top:.5rem"><span class="k">クラウドの許可設定</span>' +
+         '<span style="color:var(--dim);font-size:.85rem">お客さんとまったく同じやり方で確かめています</span></div>';
+    Object.keys(d.rules).forEach(function (k) {
+      var r = d.rules[k];
+      h += '<div class="row"><span class="k" style="padding-left:1rem">' + esc(r.label) + '</span>' +
+           mark(r.ok, '読める', r.status + ' で断られた') + '</div>';
+    });
+
+    (d.note || []).forEach(function (n) {
+      h += '<div class="note">' + esc(n).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>') + '</div>';
+    });
+    $('#doctor').innerHTML = h;
+  }
+
+  /* ---------------- 契約の一覧 ---------------- */
+  function drawList(r) {
+    if (!r.rows.length) {
+      $('#list').innerHTML = '<p class="busy">まだ1件も発行していません。' +
+        '<br>まず自分のぶん（50Airtec）を発行して、自分の端末で開けることを確かめてください。</p>';
+      return;
+    }
+    var h = '<div class="tablewrap"><table><thead><tr><th>会社名</th><th>ライセンスキー</th><th>期限</th><th>状態</th><th></th></tr></thead><tbody>';
+    r.rows.forEach(function (x) {
+      var live = x.state === '契約中';
+      h += '<tr class="' + (live ? '' : 'dead') + '">' +
+        '<td>' + esc(x.name) + '</td>' +
+        '<td class="key">' + esc(x.key) + '</td>' +
+        '<td>' + esc(x.until) + '</td>' +
+        '<td><span class="pill ' + (live ? 'live' : 'dead') + '">' + esc(x.state) +
+          (x.revoked ? ' ' + esc(x.revoked) : '') + '</span></td>' +
+        '<td style="white-space:nowrap">' +
+          '<button class="sm" data-act="copy" data-key="' + esc(x.key) + '">コピー</button> ' +
+          '<button class="sm" data-act="renew" data-key="' + esc(x.key) + '" data-until="' + esc(x.until) + '">のばす</button> ' +
+          '<button class="sm" data-act="check" data-key="' + esc(x.key) + '">確かめる</button> ' +
+          (live ? '<button class="sm danger" data-act="revoke" data-key="' + esc(x.key) +
+                  '" data-name="' + esc(x.name) + '">止める</button>' : '') +
+        '</td></tr>';
+    });
+    h += '</tbody></table></div>';
+    h += '<p class="money">契約中 <b>' + r.alive + '社</b>　＝　月 <b>¥' + r.tsuki.toLocaleString('ja-JP') +
+         '</b>　／　年 <b>¥' + r.nen.toLocaleString('ja-JP') + '</b></p>';
+    $('#list').innerHTML = h;
+  }
+
+  async function refresh() {
+    try { drawDoctor(await api('doctor')); } catch (e) { $('#doctor').innerHTML = '<div class="note">' + esc(e.message) + '</div>'; }
+    try { drawList(await api('list')); } catch (e) { $('#list').innerHTML = '<div class="note">' + esc(e.message) + '</div>'; }
+  }
+
+  /* ---------------- 押したとき ---------------- */
+  $('#btn-refresh').addEventListener('click', function () { busy(this, refresh); });
+
+  $('#btn-publish').addEventListener('click', function () {
+    var b = this;
+    busy(b, async function () {
+      var r = await api('publish', { rotate: false });
+      toast('○ 版 ' + r.version + ' を載せました（' + r.sealedKB + '）');
+      await refresh();
+    });
+  });
+
+  $('#btn-rotate').addEventListener('click', function () {
+    if (!confirm('合鍵を作り直します。\n\n' +
+      '契約中の人の札は自動で書き直すので、そのまま使えます。\n' +
+      '止めた人は、手元に控えが残っていても、ここで本当に開かなくなります。\n\n' +
+      'よろしいですか？')) return;
+    var b = this;
+    busy(b, async function () {
+      var r = await api('publish', { rotate: true });
+      toast('○ 合鍵を作り直し、' + r.rewritten.length + '社の札を書き直しました');
+      await refresh();
+    });
+  });
+
+  $('#btn-issue').addEventListener('click', function () {
+    $('#in-name').value = '';
+    var d = new Date(); d.setFullYear(d.getFullYear() + 1);
+    $('#in-until').value = d.toISOString().slice(0, 10);
+    $('#dlg-issue').showModal();
+    $('#in-name').focus();
+  });
+
+  $('#do-issue').addEventListener('click', function () {
+    var b = this;
+    busy(b, async function () {
+      var lic = await api('issue', { name: $('#in-name').value, until: $('#in-until').value });
+      $('#dlg-issue').close();
+      $('#key-name').textContent = lic.name;
+      $('#key-value').textContent = lic.key;
+      $('#dlg-key').showModal();
+      await refresh();
+    });
+  });
+
+  $('#key-copy').addEventListener('click', function () {
+    navigator.clipboard.writeText($('#key-value').textContent).then(function () { toast('コピーしました'); });
+  });
+
+  document.addEventListener('click', function (ev) {
+    var b = ev.target.closest('button[data-act]');
+    if (!b) return;
+    var act = b.dataset.act, key = b.dataset.key;
+
+    if (act === 'copy') {
+      navigator.clipboard.writeText(key).then(function () { toast('コピーしました'); });
+      return;
+    }
+    if (act === 'renew') {
+      var until = prompt('いつまで使えるようにしますか（2028-03-31 の形）', b.dataset.until);
+      if (!until) return;
+      busy(b, async function () {
+        var lic = await api('renew', { key: key, until: until });
+        toast('○ ' + lic.name + ' の期限を ' + lic.until + ' にしました');
+        await refresh();
+      });
+      return;
+    }
+    if (act === 'revoke') {
+      if (!confirm(b.dataset.name + ' を止めます。\n\n' +
+        '相手の端末は、手元の控えが切れたところ（最長30日）で開かなくなります。\n' +
+        'すぐ止めたいときは、このあと［合鍵を作り直す］を押してください。\n\n' +
+        '入れた単価も見積も消えません。よろしいですか？')) return;
+      busy(b, async function () {
+        var lic = await api('revoke', { key: key });
+        toast('○ ' + lic.name + ' を止めました');
+        await refresh();
+      });
+      return;
+    }
+    if (act === 'check') {
+      busy(b, async function () {
+        var r = await api('check', { key: key });
+        $('#check-steps').innerHTML = r.steps.map(function (s) {
+          return '<div class="' + (s[0] === '○' ? 'ok' : 'ng') + '">' + s[0] + ' ' + esc(s[1]) + '</div>';
+        }).join('');
+        $('#dlg-check').showModal();
+      });
+      return;
+    }
+  });
+
+  refresh();
+})();
+</script>
+</body>
+</html>
