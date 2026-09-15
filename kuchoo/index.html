@@ -206,13 +206,15 @@
   .cta:hover{filter:brightness(1.06);}
   .cta-note{margin:.85rem 0 0;font-size:.82rem;color:var(--ink-faint);}
 
-  /* 動画の席。撮れたらこの中に YouTube か video を入れる */
-  .video-slot{margin-top:3rem;}
+  /* 動画の席。撮れたらこの中に YouTube か video を入れる。
+     動画は縦長（1080×1920）なので、パソコンで開いても細長いまま中央に置く */
+  .video-slot{margin-top:3rem;display:flex;justify-content:center;}
   .video-slot .frame{
-    aspect-ratio:16/9;max-width:100%;
+    aspect-ratio:9/16;width:min(17rem,78vw);
     border:1px solid rgba(255,255,255,.25);border-radius:var(--radius);
     background:rgba(0,0,0,.2);
     display:flex;align-items:center;justify-content:center;
+    text-align:center;padding:1rem;
     color:rgba(255,255,255,.6);font-size:.85rem;
   }
 
