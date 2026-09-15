@@ -21,6 +21,7 @@
 <meta name="robots" content="index,follow">
 <link rel="canonical" href="https://50airtec.com/kuchoo/">
 <meta http-equiv="content-language" content="ja-JP">
+<meta name="theme-color" content="#05555c">
 
 <!-- Open Graph -->
 <meta property="og:type" content="website">
@@ -29,13 +30,17 @@
 <meta property="og:url" content="https://50airtec.com/kuchoo/">
 <meta property="og:site_name" content="空調王">
 <meta property="og:locale" content="ja_JP">
+<!-- ★ SNSに貼ったとき出る絵。まだ作っていない。作ったらここを入れる
+<meta property="og:image" content="https://50airtec.com/kuchoo/ogp.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630"> -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="空調王 | カタログを入れると、単価表になる">
 <meta name="twitter:description" content="業務用エアコンの見積を、現場で作る道具です。月2,980円・人数無制限・45日無料。">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
 
 <script type="application/ld+json">
 {
@@ -75,8 +80,21 @@
 </script>
 
 <style>
+  /* ══════════════════════════════════════════════════════════════
+     色。ここの5行を入れ替えれば、ページ全体の色が変わります。
+
+     ターコイズ＋イエロー（BIGBOSS 2026-09-15 決定）。
+     インスタ・YouTubeから来た人の指を止めるための色です。
+     イエローは「押すところ」だけに使うこと。あちこちに散らすと効かなくなります。
+     ══════════════════════════════════════════════════════════════ */
   :root{
-    --paper:#f6f6f4;
+    --brand:#0B8087;        /* 主役の色（ターコイズ）。数字・丸・線 */
+    --brand-deep:#05555c;   /* その濃いほう。ヒーローの下・帯・footer */
+    --brand-soft:#e3f3f4;   /* その薄いほう（面を塗る） */
+    --accent:#FFD23F;       /* 目を引く色（イエロー）。ボタンと印だけに使う */
+    --accent-ink:#1a1a1a;   /* イエローの上に載せる字の色 */
+
+    --paper:#f7f7f5;
     --card:#ffffff;
     --ink:#1a1a1a;
     --ink-sub:#5f636a;
@@ -84,13 +102,17 @@
     --line:#e2e2dd;
     --line-soft:#eeeeea;
     --minus:#9a2b2b;
-    --btn:#1a1a1a;
-    --btn-ink:#ffffff;
-    --shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.05);
+    --shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.06);
     --radius:.75rem;
   }
   @media (prefers-color-scheme: dark){
     :root{
+      --brand:#3fc1c9;
+      --brand-deep:#05555c;
+      --brand-soft:#1b2528;
+      --accent:#FFD23F;
+      --accent-ink:#1a1a1a;
+
       --paper:#15161a;
       --card:#1c1e23;
       --ink:#e9e9ea;
@@ -99,8 +121,6 @@
       --line:#31343b;
       --line-soft:#26282e;
       --minus:#e08b8b;
-      --btn:#e9e9ea;
-      --btn-ink:#15161a;
       --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
     }
   }
@@ -123,69 +143,71 @@
   .wrap{max-width:52rem;margin:0 auto;padding-inline:20px;}
 
   /* ── 上のほそい帯 ───────────────────────────── */
-  .topbar{
-    border-bottom:1px solid var(--line);
-    background:var(--card);
-  }
+  .topbar{background:var(--brand-deep);color:#fff;}
   .topbar .wrap{
     display:flex;align-items:center;gap:.6rem;
-    padding-block:.7rem;
-    font-size:.82rem;color:var(--ink-faint);
+    padding-block:.65rem;font-size:.82rem;
   }
   .mark{
     display:inline-flex;align-items:center;justify-content:center;
     width:1.9rem;height:1.9rem;border-radius:.45rem;flex:none;
-    background:var(--btn);color:var(--btn-ink);
+    background:var(--accent);color:var(--accent-ink);
     font-size:.68rem;font-weight:700;letter-spacing:.02em;
   }
-  .topbar strong{color:var(--ink);font-size:.95rem;font-weight:700;letter-spacing:.04em;}
+  .topbar strong{font-size:.95rem;font-weight:700;letter-spacing:.04em;}
   .topbar .spacer{margin-left:auto;}
-  .topbar a{color:var(--ink-faint);text-decoration:none;border-bottom:1px solid var(--line);}
-  .topbar a:hover{color:var(--ink);}
+  .topbar a{color:rgba(255,255,255,.72);text-decoration:none;}
+  .topbar a:hover{color:#fff;}
 
-  /* ── ヒーロー ──────────────────────────────── */
-  .hero{padding-block:4.5rem 3.5rem;text-align:center;}
+  /* ── ヒーロー（ここが色の主役） ────────────────── */
+  .hero{
+    background:var(--brand);
+    background-image:
+      radial-gradient(120% 90% at 50% -10%, rgba(255,255,255,.14), transparent 60%),
+      linear-gradient(180deg, var(--brand) 0%, var(--brand-deep) 100%);
+    color:#fff;
+    padding-block:4.5rem 3.8rem;
+    text-align:center;
+  }
   .hero h1{
     margin:0;
-    font-size:clamp(1.9rem,6.4vw,3.1rem);
-    line-height:1.4;
-    font-weight:700;
-    letter-spacing:-.01em;
+    font-size:clamp(2rem,6.6vw,3.2rem);
+    line-height:1.4;font-weight:900;letter-spacing:-.01em;
+    text-wrap:balance;
   }
+  .hero h1 em{font-style:normal;color:var(--accent);}
   .hero .sub{
     margin:1.1rem auto 0;max-width:34rem;
     font-size:clamp(1rem,3vw,1.18rem);
-    color:var(--ink-sub);
+    color:rgba(255,255,255,.82);
+    text-wrap:balance;
   }
-  /* 「…道具で／す。」のような不格好な折り返しを避ける */
-  .hero h1,.hero .sub,h2,h3{text-wrap:balance;}
-  .nowrap{white-space:nowrap;}
   .hero .price-line{
-    margin-top:2.2rem;
-    font-size:.98rem;color:var(--ink-sub);
+    margin-top:2.3rem;font-size:.95rem;color:rgba(255,255,255,.72);
   }
-  .hero .price-line b{color:var(--ink);font-size:1.15rem;}
+  .hero .price-line b{color:#fff;font-size:1.2rem;font-weight:700;}
+  .hero .cta-note{color:rgba(255,255,255,.6);}
 
   .cta{
     display:inline-block;margin-top:1rem;
-    padding:.95rem 2.4rem;
-    background:var(--btn);color:var(--btn-ink);
+    padding:1rem 2.6rem;
+    background:var(--accent);color:var(--accent-ink);
     border-radius:.6rem;border:0;
-    font:inherit;font-size:1.02rem;font-weight:700;
+    font:inherit;font-size:1.05rem;font-weight:700;
     text-decoration:none;
-    box-shadow:var(--shadow);
+    box-shadow:0 6px 18px rgba(0,0,0,.18);
   }
-  .cta:hover{opacity:.88;}
-  .cta-note{margin:.8rem 0 0;font-size:.82rem;color:var(--ink-faint);}
+  .cta:hover{filter:brightness(1.06);}
+  .cta-note{margin:.85rem 0 0;font-size:.82rem;color:var(--ink-faint);}
 
-  /* 動画の席。撮れたらこの中に <video> か YouTube を入れる */
+  /* 動画の席。撮れたらこの中に YouTube か video を入れる */
   .video-slot{margin-top:3rem;}
   .video-slot .frame{
     aspect-ratio:16/9;max-width:100%;
-    border:1px solid var(--line);border-radius:var(--radius);
-    background:var(--card);
+    border:1px solid rgba(255,255,255,.25);border-radius:var(--radius);
+    background:rgba(0,0,0,.2);
     display:flex;align-items:center;justify-content:center;
-    color:var(--ink-faint);font-size:.85rem;
+    color:rgba(255,255,255,.6);font-size:.85rem;
   }
 
   /* ── 節 ────────────────────────────────────── */
@@ -193,30 +215,35 @@
   section + section{border-top:1px solid var(--line-soft);}
   h2{
     margin:0 0 1.6rem;
-    font-size:clamp(1.25rem,4vw,1.55rem);
-    font-weight:700;line-height:1.5;
+    font-size:clamp(1.3rem,4vw,1.6rem);
+    font-weight:700;line-height:1.5;text-wrap:balance;
+    padding-left:.75rem;border-left:4px solid var(--brand);
   }
-  h3{margin:0 0 .5rem;font-size:1.06rem;font-weight:700;line-height:1.6;}
+  h3{margin:0 0 .5rem;font-size:1.06rem;font-weight:700;line-height:1.6;text-wrap:balance;}
   p{margin:0 0 1rem;}
   p:last-child{margin-bottom:0;}
   .lead{font-size:1.05rem;}
   .em{font-weight:700;}
   .quiet{color:var(--ink-sub);}
   .small{font-size:.86rem;color:var(--ink-faint);line-height:1.8;}
+  .nowrap{white-space:nowrap;}
+  .ib{display:inline-block;}
+  .mark-text{
+    background:linear-gradient(transparent 62%, rgba(255,210,63,.55) 62%);
+    font-weight:700;
+  }
 
+  .why{background:var(--brand-soft);}
   .why p{max-width:40rem;}
 
   /* できること */
-  .feature{
-    display:flex;gap:1.1rem;align-items:flex-start;
-    padding-block:1.5rem;
-  }
+  .feature{display:flex;gap:1.1rem;align-items:flex-start;padding-block:1.6rem;}
   .feature + .feature{border-top:1px solid var(--line-soft);}
   .feature .no{
-    flex:none;width:2rem;height:2rem;margin-top:.15rem;
+    flex:none;width:2.1rem;height:2.1rem;margin-top:.15rem;
     display:flex;align-items:center;justify-content:center;
-    border-radius:50%;border:1px solid var(--line);
-    font-size:.86rem;font-weight:700;color:var(--ink-sub);
+    border-radius:50%;background:var(--brand);color:#fff;
+    font-size:.9rem;font-weight:700;
   }
   .feature .body{min-width:0;}
 
@@ -226,16 +253,17 @@
     grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));
     background:var(--line);
     border:1px solid var(--line);border-radius:var(--radius);
-    overflow:hidden;margin-top:1.2rem;
+    overflow:hidden;margin-top:1.3rem;
   }
   .nums div{background:var(--card);padding:1.1rem 1rem;text-align:center;}
-  .nums .n{display:block;font-size:1.5rem;font-weight:700;line-height:1.3;}
+  .nums .n{display:block;font-size:1.55rem;font-weight:900;line-height:1.3;color:var(--brand);}
   .nums .l{display:block;font-size:.8rem;color:var(--ink-faint);margin-top:.15rem;}
 
   /* 差し引きの実例 */
   .demo{
     margin-top:1.3rem;padding:1.3rem 1.2rem;
     background:var(--card);border:1px solid var(--line);
+    border-top:3px solid var(--brand);
     border-radius:var(--radius);box-shadow:var(--shadow);
   }
   .demo .cap{font-size:.8rem;color:var(--ink-faint);margin-bottom:.9rem;}
@@ -248,58 +276,61 @@
   .demo .row dt{margin:0;min-width:0;}
   .demo .row dd{margin:0;flex:none;font-weight:500;}
   .demo .minus dd{color:var(--minus);}
-  .demo .total{
-    margin-top:.3rem;padding-top:.7rem;border-top:2px solid var(--line);
-    font-weight:700;
-  }
+  .demo .total{margin-top:.3rem;padding-top:.7rem;border-top:2px solid var(--line);font-weight:700;}
   .demo .total dd{color:var(--minus);}
 
   /* 値段 */
   .plan{
     background:var(--card);border:1px solid var(--line);
+    border-top:4px solid var(--accent);
     border-radius:var(--radius);box-shadow:var(--shadow);
     padding:2rem 1.5rem;text-align:center;
   }
-  .plan .yen{font-size:clamp(2.1rem,8vw,2.9rem);font-weight:700;line-height:1.2;}
-  .plan .yen small{font-size:.42em;font-weight:500;color:var(--ink-sub);}
+  .plan .yen{font-size:clamp(2.2rem,8vw,3rem);font-weight:900;line-height:1.2;color:var(--brand);}
+  .plan .yen small{font-size:.4em;font-weight:500;color:var(--ink-sub);}
   .plan .per{margin-top:.2rem;font-size:.88rem;color:var(--ink-faint);}
-  .plan ul{
-    list-style:none;margin:1.6rem auto 0;padding:0;
-    max-width:26rem;text-align:left;
+  .plan ul{list-style:none;margin:1.6rem auto 0;padding:0;max-width:26rem;text-align:left;}
+  .plan li{position:relative;padding-left:1.6rem;margin-bottom:.7rem;font-size:.95rem;}
+  .plan li::before{
+    content:"";position:absolute;left:.3rem;top:.8em;
+    width:.5rem;height:.5rem;border-radius:50%;background:var(--accent);
   }
-  .plan li{position:relative;padding-left:1.5rem;margin-bottom:.7rem;font-size:.95rem;}
-  .plan li::before{content:"";position:absolute;left:.25rem;top:.85em;width:.45rem;height:.45rem;border-radius:50%;background:var(--ink-faint);}
   .plan li:last-child{margin-bottom:0;}
 
   /* FAQ */
   .qa{border-top:1px solid var(--line-soft);padding-block:1.2rem;}
   .qa:last-of-type{border-bottom:1px solid var(--line-soft);}
   .qa h3{display:flex;gap:.6rem;}
-  .qa h3 span{color:var(--ink-faint);flex:none;}
-  .qa p{margin:.3rem 0 0 1.55rem;color:var(--ink-sub);font-size:.95rem;}
+  .qa h3 span{color:var(--brand);flex:none;font-weight:900;}
+  .qa p{margin:.3rem 0 0 1.75rem;color:var(--ink-sub);font-size:.95rem;}
 
   /* 申し込み */
-  .apply{text-align:center;}
+  .apply{background:var(--brand-soft);text-align:center;}
+  .apply h2{display:inline-block;border-left:0;padding-left:0;}
   .apply .steps{
     display:grid;gap:1px;background:var(--line);
     border:1px solid var(--line);border-radius:var(--radius);
     overflow:hidden;margin:1.5rem 0 2rem;text-align:left;
   }
   .apply .steps > div{background:var(--card);padding:1.1rem 1.2rem;}
-  .apply .steps .st{font-size:.78rem;color:var(--ink-faint);letter-spacing:.06em;}
+  .apply .steps .st{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:1.5rem;height:1.5rem;border-radius:50%;
+    background:var(--brand);color:#fff;
+    font-size:.76rem;font-weight:700;margin-bottom:.35rem;
+  }
+  .apply .cta-note{color:var(--ink-faint);}
 
   footer{
-    border-top:1px solid var(--line);
-    background:var(--card);
-    padding-block:2.2rem;
-    font-size:.85rem;color:var(--ink-faint);
-    line-height:2;
+    background:var(--brand-deep);color:rgba(255,255,255,.65);
+    padding-block:2.4rem;font-size:.85rem;line-height:2;
   }
-  footer a{color:var(--ink-sub);}
-  footer .name{color:var(--ink);font-weight:700;}
+  footer a{color:rgba(255,255,255,.85);}
+  footer .name{color:#fff;font-weight:700;font-size:1.05rem;margin-bottom:.1rem;}
+  footer .small{color:rgba(255,255,255,.45);}
 
   @media (max-width:520px){
-    .hero{padding-block:3rem 2.5rem;}
+    .hero{padding-block:3.2rem 2.8rem;}
     .cta{display:block;padding-inline:1rem;}
   }
 </style>
@@ -317,8 +348,9 @@
 
 <header class="hero">
   <div class="wrap">
-    <h1>カタログを入れると、<br>単価表になる。</h1>
-    <p class="sub">業務用エアコンの見積を、現場で作る道具です。</p>
+    <h1>カタログを入れると、<br><em>単価表になる。</em></h1>
+    <!-- 「見積／を、」で割れると読みにくいので、句読点のところで折る -->
+    <p class="sub"><span class="ib">業務用エアコンの見積を、</span><span class="ib">現場で作る道具です。</span></p>
 
     <p class="price-line"><b>月 2,980円</b>（会社ごと・人数無制限）</p>
     <a class="cta" href="#apply">45日ためす</a>
@@ -338,7 +370,7 @@
 <section class="why">
   <div class="wrap">
     <h2>なぜ作ったか</h2>
-    <p class="lead">見積をつくるのに、カタログをめくって品番を探し、電卓を叩き、エクセルに写す。<span class="em">この時間が一番もったいない。</span></p>
+    <p class="lead">見積をつくるのに、カタログをめくって品番を探し、電卓を叩き、エクセルに写す。<span class="mark-text">この時間が一番もったいない。</span></p>
     <p class="quiet">山形でエアコン工事をしている <span class="em nowrap">50Airtec（五十嵐）</span> が、自分の現場のために作りました。いまも毎日、自分の見積をこれで作っています。</p>
   </div>
 </section>
@@ -353,7 +385,7 @@
         <h3>メーカーのカタログを、そのまま読み込める</h3>
         <p class="quiet"><span class="em">業務用</span>はダイキン・三菱電機・パナソニック・日本キヤリア・日立の5社。<span class="em">ルームエアコン</span>はその4社にゼネラルを加えた5社。公開されているカタログPDFから、品番・能力・定価を読み取ります。</p>
         <p class="quiet">部材（因幡電工・オーケー器材・ユーシー産業・キヤッチャー）も、価格改定表のPDFから同じように読み取れます。</p>
-        <p class="quiet"><span class="em">機種データを買う必要はありません。</span>カタログは、どのメーカーも無料で配っています。値段が変わったら、新しいカタログを入れ直すだけです。</p>
+        <p class="quiet"><span class="mark-text">機種データを買う必要はありません。</span>カタログは、どのメーカーも無料で配っています。値段が変わったら、新しいカタログを入れ直すだけです。</p>
 
         <div class="nums">
           <div><span class="n">5,681</span><span class="l">業務用の機種</span></div>
@@ -370,7 +402,7 @@
       <div class="body">
         <h3>機種を選ぶと、その機種に付く別売品だけが出る</h3>
         <p class="quiet">化粧パネル・リモコン・分岐管。関係のない品番は出てきません。</p>
-        <p class="quiet">セットに最初から付いているものを選ぶと「付いてきます」と知らせるので、<span class="em">二重に見積もることがありません。</span>別のものに替えるときは、付属分を自動で差し引きます。</p>
+        <p class="quiet">セットに最初から付いているものを選ぶと「付いてきます」と知らせるので、<span class="mark-text">二重に見積もることがありません。</span>別のものに替えるときは、付属分を自動で差し引きます。</p>
 
         <div class="demo">
           <p class="cap">センサーパネル付きの機種を、標準パネルに替えたとき</p>
@@ -388,7 +420,7 @@
       <div class="no">3</div>
       <div class="body">
         <h3>現場でそのまま使える</h3>
-        <p class="quiet">スマホでもパソコンでも同じ画面。<span class="em">電波が無くても動きます。</span>機械室でも屋上でも山の中でも、いつも通り使えます。</p>
+        <p class="quiet">スマホでもパソコンでも同じ画面。<span class="mark-text">電波が無くても動きます。</span>機械室でも屋上でも山の中でも、いつも通り使えます。</p>
         <p class="quiet">現場写真も、現地調査のチェックシート（68項目）も、そのまま入ります。測った横と縦を打てば広さを出し、<span class="em">必要な能力（kW）と馬力まで出します。</span>電卓は要りません。</p>
       </div>
     </div>
