@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- Google tag (gtag.js) - GA4 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-VVN10LSG5F"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-VVN10LSG5F');
+</script>
+
+<title>空調王 | カタログを入れると、単価表になる｜業務用エアコンの見積ソフト</title>
+<meta name="description" content="業務用エアコンの見積を現場で作るソフト「空調王」。メーカーのカタログPDFを読み込ませると単価表になります。機種を選ぶとその機種の別売品だけが出て、本体に付いてくるパネルは二重に足しません。月2,980円・人数無制限・45日無料。山形のエアコン工事店 50Airtec が自分の現場のために作りました。">
+<meta name="keywords" content="業務用エアコン 見積ソフト,エアコン 見積 アプリ,設備業 見積ソフト,空調 見積,機種選定,別売品,単価表,空調王">
+<meta name="author" content="50Airtec">
+<!-- ここは /m（道具そのもの）とちがって、検索に出すページ。noindex は付けない -->
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://50airtec.com/kuchoo/">
+<meta http-equiv="content-language" content="ja-JP">
+
+<!-- Open Graph -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="空調王 | カタログを入れると、単価表になる">
+<meta property="og:description" content="業務用エアコンの見積を、現場で作る道具です。月2,980円・人数無制限・45日無料でためせます。">
+<meta property="og:url" content="https://50airtec.com/kuchoo/">
+<meta property="og:site_name" content="空調王">
+<meta property="og:locale" content="ja_JP">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="空調王 | カタログを入れると、単価表になる">
+<meta name="twitter:description" content="業務用エアコンの見積を、現場で作る道具です。月2,980円・人数無制限・45日無料。">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "空調王",
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "Web（iPhone・Android・Windows・Mac）",
+  "url": "https://50airtec.com/kuchoo/",
+  "inLanguage": "ja-JP",
+  "description": "業務用エアコンの見積を現場で作るソフト。メーカーのカタログPDFを読み込ませて単価表にする。機種を選ぶとその機種に付く別売品だけが出て、本体に付属するパネルやリモコンを二重計上しない。オフラインで動く。",
+  "offers": {
+    "@type": "Offer",
+    "price": "2980",
+    "priceCurrency": "JPY",
+    "description": "1社あたり月額・利用人数無制限・45日間の無料お試しあり",
+    "availability": "https://schema.org/InStock"
+  },
+  "creator": {
+    "@type": "Organization",
+    "name": "50Airtec",
+    "url": "https://50airtec.com/"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {"@type":"Question","name":"パソコンが苦手でも使えますか？","acceptedAnswer":{"@type":"Answer","text":"使えます。作った本人も詳しくありません。難しい言葉は画面から追い出してあります。"}},
+    {"@type":"Question","name":"今つかっているエクセルの単価表は、どうなりますか？","acceptedAnswer":{"@type":"Answer","text":"そのまま取り込めます。捨てる必要はありません。"}},
+    {"@type":"Question","name":"入れたデータは他の会社に見えませんか？","acceptedAnswer":{"@type":"Answer","text":"見えません。中身は端末の中で暗号にしてから預けています。同じURLを別の会社が開いても、それぞれ自分の会社の中身だけが出ます。"}},
+    {"@type":"Question","name":"やめるときは？","acceptedAnswer":{"@type":"Answer","text":"連絡をもらえば止めます。違約金はありません。止めても、入れた内容は消えません。"}}
+  ]
+}
+</script>
+
+<style>
+  :root{
+    --paper:#f6f6f4;
+    --card:#ffffff;
+    --ink:#1a1a1a;
+    --ink-sub:#5f636a;
+    --ink-faint:#8a8f96;
+    --line:#e2e2dd;
+    --line-soft:#eeeeea;
+    --minus:#9a2b2b;
+    --btn:#1a1a1a;
+    --btn-ink:#ffffff;
+    --shadow:0 1px 2px rgba(0,0,0,.04), 0 8px 24px rgba(0,0,0,.05);
+    --radius:.75rem;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --paper:#15161a;
+      --card:#1c1e23;
+      --ink:#e9e9ea;
+      --ink-sub:#a0a0a6;
+      --ink-faint:#7c7c84;
+      --line:#31343b;
+      --line-soft:#26282e;
+      --minus:#e08b8b;
+      --btn:#e9e9ea;
+      --btn-ink:#15161a;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+
+  *,*::before,*::after{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:"Noto Sans JP","Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+    font-size:16px;
+    line-height:1.9;
+    letter-spacing:.01em;
+    -webkit-font-smoothing:antialiased;
+  }
+  img{max-width:100%;}
+  a{color:inherit;}
+
+  .wrap{max-width:52rem;margin:0 auto;padding-inline:20px;}
+
+  /* ── 上のほそい帯 ───────────────────────────── */
+  .topbar{
+    border-bottom:1px solid var(--line);
+    background:var(--card);
+  }
+  .topbar .wrap{
+    display:flex;align-items:center;gap:.6rem;
+    padding-block:.7rem;
+    font-size:.82rem;color:var(--ink-faint);
+  }
+  .mark{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:1.9rem;height:1.9rem;border-radius:.45rem;flex:none;
+    background:var(--btn);color:var(--btn-ink);
+    font-size:.68rem;font-weight:700;letter-spacing:.02em;
+  }
+  .topbar strong{color:var(--ink);font-size:.95rem;font-weight:700;letter-spacing:.04em;}
+  .topbar .spacer{margin-left:auto;}
+  .topbar a{color:var(--ink-faint);text-decoration:none;border-bottom:1px solid var(--line);}
+  .topbar a:hover{color:var(--ink);}
+
+  /* ── ヒーロー ──────────────────────────────── */
+  .hero{padding-block:4.5rem 3.5rem;text-align:center;}
+  .hero h1{
+    margin:0;
+    font-size:clamp(1.9rem,6.4vw,3.1rem);
+    line-height:1.4;
+    font-weight:700;
+    letter-spacing:-.01em;
+  }
+  .hero .sub{
+    margin:1.1rem auto 0;max-width:34rem;
+    font-size:clamp(1rem,3vw,1.18rem);
+    color:var(--ink-sub);
+  }
+  /* 「…道具で／す。」のような不格好な折り返しを避ける */
+  .hero h1,.hero .sub,h2,h3{text-wrap:balance;}
+  .nowrap{white-space:nowrap;}
+  .hero .price-line{
+    margin-top:2.2rem;
+    font-size:.98rem;color:var(--ink-sub);
+  }
+  .hero .price-line b{color:var(--ink);font-size:1.15rem;}
+
+  .cta{
+    display:inline-block;margin-top:1rem;
+    padding:.95rem 2.4rem;
+    background:var(--btn);color:var(--btn-ink);
+    border-radius:.6rem;border:0;
+    font:inherit;font-size:1.02rem;font-weight:700;
+    text-decoration:none;
+    box-shadow:var(--shadow);
+  }
+  .cta:hover{opacity:.88;}
+  .cta-note{margin:.8rem 0 0;font-size:.82rem;color:var(--ink-faint);}
+
+  /* 動画の席。撮れたらこの中に <video> か YouTube を入れる */
+  .video-slot{margin-top:3rem;}
+  .video-slot .frame{
+    aspect-ratio:16/9;max-width:100%;
+    border:1px solid var(--line);border-radius:var(--radius);
+    background:var(--card);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--ink-faint);font-size:.85rem;
+  }
+
+  /* ── 節 ────────────────────────────────────── */
+  section{padding-block:3.2rem;}
+  section + section{border-top:1px solid var(--line-soft);}
+  h2{
+    margin:0 0 1.6rem;
+    font-size:clamp(1.25rem,4vw,1.55rem);
+    font-weight:700;line-height:1.5;
+  }
+  h3{margin:0 0 .5rem;font-size:1.06rem;font-weight:700;line-height:1.6;}
+  p{margin:0 0 1rem;}
+  p:last-child{margin-bottom:0;}
+  .lead{font-size:1.05rem;}
+  .em{font-weight:700;}
+  .quiet{color:var(--ink-sub);}
+  .small{font-size:.86rem;color:var(--ink-faint);line-height:1.8;}
+
+  .why p{max-width:40rem;}
+
+  /* できること */
+  .feature{
+    display:flex;gap:1.1rem;align-items:flex-start;
+    padding-block:1.5rem;
+  }
+  .feature + .feature{border-top:1px solid var(--line-soft);}
+  .feature .no{
+    flex:none;width:2rem;height:2rem;margin-top:.15rem;
+    display:flex;align-items:center;justify-content:center;
+    border-radius:50%;border:1px solid var(--line);
+    font-size:.86rem;font-weight:700;color:var(--ink-sub);
+  }
+  .feature .body{min-width:0;}
+
+  /* 数字 */
+  .nums{
+    display:grid;gap:1px;
+    grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));
+    background:var(--line);
+    border:1px solid var(--line);border-radius:var(--radius);
+    overflow:hidden;margin-top:1.2rem;
+  }
+  .nums div{background:var(--card);padding:1.1rem 1rem;text-align:center;}
+  .nums .n{display:block;font-size:1.5rem;font-weight:700;line-height:1.3;}
+  .nums .l{display:block;font-size:.8rem;color:var(--ink-faint);margin-top:.15rem;}
+
+  /* 差し引きの実例 */
+  .demo{
+    margin-top:1.3rem;padding:1.3rem 1.2rem;
+    background:var(--card);border:1px solid var(--line);
+    border-radius:var(--radius);box-shadow:var(--shadow);
+  }
+  .demo .cap{font-size:.8rem;color:var(--ink-faint);margin-bottom:.9rem;}
+  .demo dl{margin:0;font-variant-numeric:tabular-nums;}
+  .demo .row{
+    display:flex;justify-content:space-between;gap:1rem;
+    padding-block:.5rem;font-size:.95rem;
+  }
+  .demo .row + .row{border-top:1px solid var(--line-soft);}
+  .demo .row dt{margin:0;min-width:0;}
+  .demo .row dd{margin:0;flex:none;font-weight:500;}
+  .demo .minus dd{color:var(--minus);}
+  .demo .total{
+    margin-top:.3rem;padding-top:.7rem;border-top:2px solid var(--line);
+    font-weight:700;
+  }
+  .demo .total dd{color:var(--minus);}
+
+  /* 値段 */
+  .plan{
+    background:var(--card);border:1px solid var(--line);
+    border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:2rem 1.5rem;text-align:center;
+  }
+  .plan .yen{font-size:clamp(2.1rem,8vw,2.9rem);font-weight:700;line-height:1.2;}
+  .plan .yen small{font-size:.42em;font-weight:500;color:var(--ink-sub);}
+  .plan .per{margin-top:.2rem;font-size:.88rem;color:var(--ink-faint);}
+  .plan ul{
+    list-style:none;margin:1.6rem auto 0;padding:0;
+    max-width:26rem;text-align:left;
+  }
+  .plan li{position:relative;padding-left:1.5rem;margin-bottom:.7rem;font-size:.95rem;}
+  .plan li::before{content:"";position:absolute;left:.25rem;top:.85em;width:.45rem;height:.45rem;border-radius:50%;background:var(--ink-faint);}
+  .plan li:last-child{margin-bottom:0;}
+
+  /* FAQ */
+  .qa{border-top:1px solid var(--line-soft);padding-block:1.2rem;}
+  .qa:last-of-type{border-bottom:1px solid var(--line-soft);}
+  .qa h3{display:flex;gap:.6rem;}
+  .qa h3 span{color:var(--ink-faint);flex:none;}
+  .qa p{margin:.3rem 0 0 1.55rem;color:var(--ink-sub);font-size:.95rem;}
+
+  /* 申し込み */
+  .apply{text-align:center;}
+  .apply .steps{
+    display:grid;gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:var(--radius);
+    overflow:hidden;margin:1.5rem 0 2rem;text-align:left;
+  }
+  .apply .steps > div{background:var(--card);padding:1.1rem 1.2rem;}
+  .apply .steps .st{font-size:.78rem;color:var(--ink-faint);letter-spacing:.06em;}
+
+  footer{
+    border-top:1px solid var(--line);
+    background:var(--card);
+    padding-block:2.2rem;
+    font-size:.85rem;color:var(--ink-faint);
+    line-height:2;
+  }
+  footer a{color:var(--ink-sub);}
+  footer .name{color:var(--ink);font-weight:700;}
+
+  @media (max-width:520px){
+    .hero{padding-block:3rem 2.5rem;}
+    .cta{display:block;padding-inline:1rem;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap">
+    <span class="mark">空調</span>
+    <strong>空調王</strong>
+    <span class="spacer"></span>
+    <a href="https://50airtec.com/">50Airtec</a>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>カタログを入れると、<br>単価表になる。</h1>
+    <p class="sub">業務用エアコンの見積を、現場で作る道具です。</p>
+
+    <p class="price-line"><b>月 2,980円</b>（会社ごと・人数無制限）</p>
+    <a class="cta" href="#apply">45日ためす</a>
+    <p class="cta-note">カードは預かりません。会社名・お名前・メールの3つだけ。</p>
+
+    <!-- ★ 60秒の紹介動画が撮れたら、hidden を外して
+         .frame の中身を YouTube の iframe か video に差し替える。
+         台本：空調王_データ\09_紹介ページ\紹介動画_60秒_台本.md -->
+    <div class="video-slot" hidden>
+      <div class="frame">ここに60秒の紹介動画が入ります</div>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<section class="why">
+  <div class="wrap">
+    <h2>なぜ作ったか</h2>
+    <p class="lead">見積をつくるのに、カタログをめくって品番を探し、電卓を叩き、エクセルに写す。<span class="em">この時間が一番もったいない。</span></p>
+    <p class="quiet">山形でエアコン工事をしている <span class="em nowrap">50Airtec（五十嵐）</span> が、自分の現場のために作りました。いまも毎日、自分の見積をこれで作っています。</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>できること</h2>
+
+    <div class="feature">
+      <div class="no">1</div>
+      <div class="body">
+        <h3>メーカーのカタログを、そのまま読み込める</h3>
+        <p class="quiet"><span class="em">業務用</span>はダイキン・三菱電機・パナソニック・日本キヤリア・日立の5社。<span class="em">ルームエアコン</span>はその4社にゼネラルを加えた5社。公開されているカタログPDFから、品番・能力・定価を読み取ります。</p>
+        <p class="quiet">部材（因幡電工・オーケー器材・ユーシー産業・キヤッチャー）も、価格改定表のPDFから同じように読み取れます。</p>
+        <p class="quiet"><span class="em">機種データを買う必要はありません。</span>カタログは、どのメーカーも無料で配っています。値段が変わったら、新しいカタログを入れ直すだけです。</p>
+
+        <div class="nums">
+          <div><span class="n">5,681</span><span class="l">業務用の機種</span></div>
+          <div><span class="n">1,076</span><span class="l">ルームエアコン</span></div>
+          <div><span class="n">2,318</span><span class="l">別売品</span></div>
+          <div><span class="n">4,358</span><span class="l">工事・部材の単価</span></div>
+        </div>
+        <p class="small" style="margin-top:.7rem;">※ 2026年9月に読み込んだときの数です。</p>
+      </div>
+    </div>
+
+    <div class="feature">
+      <div class="no">2</div>
+      <div class="body">
+        <h3>機種を選ぶと、その機種に付く別売品だけが出る</h3>
+        <p class="quiet">化粧パネル・リモコン・分岐管。関係のない品番は出てきません。</p>
+        <p class="quiet">セットに最初から付いているものを選ぶと「付いてきます」と知らせるので、<span class="em">二重に見積もることがありません。</span>別のものに替えるときは、付属分を自動で差し引きます。</p>
+
+        <div class="demo">
+          <p class="cap">センサーパネル付きの機種を、標準パネルに替えたとき</p>
+          <dl>
+            <div class="row"><dt>標準パネル</dt><dd>＋¥56,000</dd></div>
+            <div class="row minus"><dt>付いてくるセンサーパネル</dt><dd>−¥74,000</dd></div>
+            <div class="row total"><dt>差引</dt><dd>−¥18,000</dd></div>
+          </dl>
+        </div>
+        <p class="small" style="margin-top:.7rem;">ここを手で計算すると、定価より高い見積ができあがります。</p>
+      </div>
+    </div>
+
+    <div class="feature">
+      <div class="no">3</div>
+      <div class="body">
+        <h3>現場でそのまま使える</h3>
+        <p class="quiet">スマホでもパソコンでも同じ画面。<span class="em">電波が無くても動きます。</span>機械室でも屋上でも山の中でも、いつも通り使えます。</p>
+        <p class="quiet">現場写真も、現地調査のチェックシート（68項目）も、そのまま入ります。測った横と縦を打てば広さを出し、<span class="em">必要な能力（kW）と馬力まで出します。</span>電卓は要りません。</p>
+      </div>
+    </div>
+
+    <div class="feature">
+      <div class="no">4</div>
+      <div class="body">
+        <h3>見積書・請求書がそのまま出る</h3>
+        <p class="quiet">A4できれいに出ます。<span class="em">見た目は5つ・色は5つ</span>から選べます。出精値引きの欄もあります。</p>
+        <p class="quiet">工事が終わったら、見積から請求書を1回で作れます。打ち直しません。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>値段</h2>
+    <div class="plan">
+      <div class="yen">2,980<small>円 / 月</small></div>
+      <p class="per">税込・1社あたり・利用人数は無制限</p>
+      <ul>
+        <li>社員が3人でも10人でも、値段は変わりません</li>
+        <li><span class="em">45日、無料でためせます。</span>カードは預かりません</li>
+        <li>やめても、入れた単価も見積も写真も<span class="em">消えません</span>。払い直せば続きから使えます</li>
+      </ul>
+    </div>
+    <p class="small" style="margin-top:1.2rem;">同じような道具は、ひと月 9,800円〜30,000円。買い切りなら 22万円〜49万5千円です。</p>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <h2>よくある質問</h2>
+
+    <div class="qa">
+      <h3><span>Q.</span>パソコンが苦手でも使えますか？</h3>
+      <p>使えます。作った本人も詳しくありません。難しい言葉は画面から追い出してあります。</p>
+    </div>
+    <div class="qa">
+      <h3><span>Q.</span>今つかっているエクセルの単価表は、どうなりますか？</h3>
+      <p>そのまま取り込めます。捨てる必要はありません。</p>
+    </div>
+    <div class="qa">
+      <h3><span>Q.</span>入れたデータは他の会社に見えませんか？</h3>
+      <p>見えません。中身は端末の中で暗号にしてから預けています。同じURLを別の会社が開いても、それぞれ自分の会社の中身だけが出ます。</p>
+    </div>
+    <div class="qa">
+      <h3><span>Q.</span>やめるときは？</h3>
+      <p>連絡をもらえば止めます。違約金はありません。止めても、入れた内容は消えません。</p>
+    </div>
+  </div>
+</section>
+
+<section class="apply" id="apply">
+  <div class="wrap">
+    <h2>45日、ためしてみてください</h2>
+
+    <div class="steps">
+      <div>
+        <div class="st">1</div>
+        <div>下のボタンから、<span class="em">会社名・お名前・メールアドレス</span>の3つを送る</div>
+      </div>
+      <div>
+        <div class="st">2</div>
+        <div>こちらで鍵（ライセンスキー）を作って、メールで返します</div>
+      </div>
+      <div>
+        <div class="st">3</div>
+        <div>その鍵を入れれば、<span class="em">その場から使えます。</span>インストールは要りません</div>
+      </div>
+    </div>
+
+    <!-- ★ 専用のGoogleフォームができたら、この href を差し替える。
+         それまではメールで受ける -->
+    <a class="cta" href="mailto:info@50airtec.com?subject=%E7%A9%BA%E8%AA%BF%E7%8E%8B%2045%E6%97%A5%E3%81%8A%E3%81%9F%E3%82%81%E3%81%97%E3%81%AE%E7%94%B3%E8%BE%BC&amp;body=%E4%BC%9A%E7%A4%BE%E5%90%8D%EF%BC%9A%0D%0A%E3%81%8A%E5%90%8D%E5%89%8D%EF%BC%9A%0D%0A%E3%83%A1%E3%83%BC%E3%83%AB%E3%82%A2%E3%83%89%E3%83%AC%E3%82%B9%EF%BC%9A%0D%0A%0D%0A%EF%BC%88%E3%81%93%E3%81%AE%E3%81%BE%E3%81%BE%E9%80%81%E4%BF%A1%E3%81%97%E3%81%A6%E3%81%8F%E3%81%A0%E3%81%95%E3%81%84%EF%BC%89">45日ためす</a>
+    <p class="cta-note">お金はかかりません。期間が過ぎても、こちらから請求はしません。</p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p class="name">空調王</p>
+    <p>業務用エアコンの見積を、現場で終わらせる。</p>
+    <p>
+      作っているのは <a href="https://50airtec.com/">50Airtec（ゴーマルエアテック）</a>／山形県寒河江市中郷683-9<br>
+      お問い合わせ： <a href="mailto:info@50airtec.com">info@50airtec.com</a>
+    </p>
+    <p class="small">ご契約中のかたは <a href="https://50airtec.com/m">50airtec.com/m</a> から。</p>
+  </div>
+</footer>
+
+</body>
+</html>
