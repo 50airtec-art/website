@@ -116,13 +116,14 @@
     <h2>契約</h2>
     <div id="list"><p class="busy">読んでいます…</p></div>
     <div class="btns">
-      <button id="btn-issue" class="primary">＋ キーを発行する</button>
+      <button id="btn-trial" class="primary">＋ おためし（45日）</button>
+      <button id="btn-issue">＋ キーを発行する（期限を決めて）</button>
     </div>
   </div>
 </div>
 
 <dialog id="dlg-issue">
-  <h2 style="margin:0 0 .9rem;font-size:1rem">キーを発行する</h2>
+  <h2 style="margin:0 0 .9rem;font-size:1rem" id="dlg-issue-title">キーを発行する</h2>
   <label><span>会社名</span><input id="in-name" placeholder="今野空調"></label>
   <label><span>期限（この日まで使えます）</span><input id="in-until" type="date"></label>
   <pre class="note fail" hidden></pre>
@@ -254,7 +255,7 @@
     }
     var h = '<div class="tablewrap"><table><thead><tr><th>会社名</th><th>ライセンスキー</th><th>期限</th><th>状態</th><th></th></tr></thead><tbody>';
     r.rows.forEach(function (x) {
-      var live = x.state === '契約中';
+      var live = x.state === '契約中' || x.state === 'おためし';
       h += '<tr class="' + (live ? '' : 'dead') + '">' +
         '<td>' + esc(x.name) + '</td>' +
         '<td class="key">' + esc(x.key) + '</td>' +
@@ -271,7 +272,9 @@
     });
     h += '</tbody></table></div>';
     h += '<p class="money">契約中 <b>' + r.alive + '社</b>　＝　月 <b>¥' + r.tsuki.toLocaleString('ja-JP') +
-         '</b>　／　年 <b>¥' + r.nen.toLocaleString('ja-JP') + '</b></p>';
+         '</b>　／　年 <b>¥' + r.nen.toLocaleString('ja-JP') + '</b>' +
+         (r.tameshi ? '<br><span style="font-weight:400">ほかに おためし中 <b>' + r.tameshi +
+                      '社</b>（まだ売上には入っていません）</span>' : '') + '</p>';
     $('#list').innerHTML = h;
   }
 
@@ -305,10 +308,24 @@
     });
   });
 
+  var trialMode = false;   // ［おためし］から開いたか、［期限を決めて］から開いたか
+
+  $('#btn-trial').addEventListener('click', function () {
+    trialMode = true;
+    $('#in-name').value = '';
+    var d = new Date(); d.setDate(d.getDate() + 45);
+    $('#in-until').value = d.toISOString().slice(0, 10);
+    $('#dlg-issue-title').textContent = 'おためしのキーを発行する（45日）';
+    $('#dlg-issue').showModal();
+    $('#in-name').focus();
+  });
+
   $('#btn-issue').addEventListener('click', function () {
+    trialMode = false;
     $('#in-name').value = '';
     var d = new Date(); d.setFullYear(d.getFullYear() + 1);
     $('#in-until').value = d.toISOString().slice(0, 10);
+    $('#dlg-issue-title').textContent = 'キーを発行する';
     $('#dlg-issue').showModal();
     $('#in-name').focus();
   });
@@ -316,7 +333,8 @@
   $('#do-issue').addEventListener('click', function () {
     var b = this;
     busy(b, async function () {
-      var lic = await api('issue', { name: $('#in-name').value, until: $('#in-until').value });
+      var lic = await api('issue', { name: $('#in-name').value, until: $('#in-until').value,
+                                     trial: trialMode ? 1 : '' });
       $('#dlg-issue').close();
       $('#key-name').textContent = lic.name;
       $('#key-value').textContent = lic.key;

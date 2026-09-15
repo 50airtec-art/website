@@ -12,6 +12,7 @@
      node admin.mjs doctor                      いまの調子を見る（★困ったらまずこれ）
      node admin.mjs list                        いま誰に配っているか
      node admin.mjs issue "今野空調" 2027-03-31  キーを1つ発行する
+     node admin.mjs trial "○○空調"              おためしのキー（今日から45日）
      node admin.mjs renew  今野空調 2028-03-31   期限を延ばす
      node admin.mjs revoke 今野空調              止める（クラウドの札を消す）
      node admin.mjs publish                     本体をクラウドに載せる
@@ -216,6 +217,10 @@ const wide = (s) => [...String(s)].reduce((a, c) => a + (/[　-ヿ㐀-鿿！-｠
 const padJa = (s, n) => String(s) + ' '.repeat(Math.max(0, n - wide(s)));
 const today = () => new Date().toISOString().slice(0, 10);
 const TSUKI = 2980;                                   // 月額（[[research-2026-09-06-kuchoo-revenue]]）
+const TAMESHI = 45;                                   // おためしの日数（2026-09-15 決定）
+// 単価やカタログを入れ終える前に切れると「よく分からないまま終わった」になる。
+// 30日は短く、60日は忘れられる。あいだを取って45日にした。
+const plusDays = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
 
 const isAlive = (x, t) => !x.revoked && x.until >= t;
 
@@ -230,7 +235,7 @@ function readBundle() {
   return { src, bundle: JSON.parse(src.slice(from + 'window.__KUCHOO_BUNDLE__('.length, src.lastIndexOf(');'))) };
 }
 
-async function doIssue(name, until) {
+async function doIssue(name, until, trial) {
   name = String(name || '').trim();
   if (!name) throw new Error('会社名を入れてください');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(until || '')) throw new Error('期限は 2027-03-31 の形で入れてください');
@@ -240,6 +245,7 @@ async function doIssue(name, until) {
     throw new Error('「' + name + '」はもう発行ずみです。期限を延ばすなら［のばす］を使ってください');
   }
   const lic = { name, key: makeKey(), until, issued: today() };
+  if (trial) lic.trial = true;   // おためし。売上の勘定に入れない
   await writeLic(lic, l.secret);
   l.licences.push(lic);
   saveLedger(l);
@@ -382,11 +388,14 @@ function doList() {
   const t = today();
   const rows = l.licences.map((x) => ({
     name: x.name, key: x.key, until: x.until, issued: x.issued || '',
-    state: x.revoked ? '止めた' : (x.until < t ? '期限ぎれ' : '契約中'),
+    state: x.revoked ? '止めた' : (x.until < t ? '期限ぎれ' : (x.trial ? 'おためし' : '契約中')),
     revoked: x.revoked || null,
   }));
+  // おためしは売上に数えない。数えると、まだ1円も入っていない月に
+  // 「月 ¥29,800」と出てしまい、判断をまちがえる。
   const alive = rows.filter((r) => r.state === '契約中').length;
-  return { rows, alive, tsuki: alive * TSUKI, nen: alive * TSUKI * 12 };
+  const tameshi = rows.filter((r) => r.state === 'おためし').length;
+  return { rows, alive, tameshi, tsuki: alive * TSUKI, nen: alive * TSUKI * 12 };
 }
 
 /* ==========================================================================
@@ -401,6 +410,18 @@ async function cmdIssue(name, until) {
   console.log('');
   console.log('　期限：' + lic.until);
   console.log('　渡し方：このキーを伝えて、50airtec.com/m を開いてもらうだけです。');
+  console.log('');
+}
+async function cmdTrial(name) {
+  const lic = await doIssue(name, plusDays(TAMESHI), true);
+  console.log('');
+  console.log('　' + lic.name + ' さんの【おためし】ライセンスキー');
+  console.log('');
+  console.log('　　　' + lic.key);
+  console.log('');
+  console.log('　期限：' + lic.until + '（今日から ' + TAMESHI + '日）');
+  console.log('　渡し方：このキーを伝えて、50airtec.com/m を開いてもらうだけです。');
+  console.log('　※ 売上の勘定には入りません。続けてもらえたら［のばす］で期限を延ばします。');
   console.log('');
 }
 async function cmdRenew(needle, until) {
@@ -425,7 +446,8 @@ function cmdList() {
                 x.state + (x.revoked ? ' (' + x.revoked + ')' : ''));
   });
   console.log('');
-  console.log('  契約中 ' + r.alive + '社　＝　月 ¥' + yen(r.tsuki) + '　／　年 ¥' + yen(r.nen));
+  console.log('  契約中 ' + r.alive + '社　＝　月 ¥' + yen(r.tsuki) + '　／　年 ¥' + yen(r.nen) +
+              (r.tameshi ? '　（ほかに おためし中 ' + r.tameshi + '社）' : ''));
   console.log('');
 }
 async function cmdPublish(rotate) {
@@ -503,7 +525,8 @@ async function cmdServe() {
         let out;
         if (url.pathname === '/api/doctor')       out = await doDoctor();
         else if (url.pathname === '/api/list')    out = doList();
-        else if (url.pathname === '/api/issue')   out = await doIssue(q.name, q.until);
+        else if (url.pathname === '/api/issue')   out = await doIssue(q.name, q.until, q.trial);
+        else if (url.pathname === '/api/trial')   out = await doIssue(q.name, plusDays(TAMESHI), true);
         else if (url.pathname === '/api/renew')   out = await doRenew(q.key, q.until);
         else if (url.pathname === '/api/revoke')  out = await doRevoke(q.key);
         else if (url.pathname === '/api/publish') out = await doPublish(!!q.rotate);
@@ -535,6 +558,7 @@ async function cmdServe() {
 const [cmd, a, b] = process.argv.slice(2);
 try {
   if (cmd === 'issue')        await cmdIssue(a, b);
+  else if (cmd === 'trial')   await cmdTrial(a);
   else if (cmd === 'renew')   await cmdRenew(a, b);
   else if (cmd === 'revoke')  await cmdRevoke(a);
   else if (cmd === 'list')    cmdList();
