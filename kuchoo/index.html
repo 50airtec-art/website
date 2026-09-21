@@ -209,14 +209,12 @@
   /* 動画の席。撮れたらこの中に YouTube か video を入れる。
      動画は縦長（1080×1920）なので、パソコンで開いても細長いまま中央に置く */
   .video-slot{margin-top:3rem;display:flex;justify-content:center;}
-  .video-slot .frame{
-    aspect-ratio:9/16;width:min(17rem,78vw);
-    border:1px solid rgba(255,255,255,.25);border-radius:var(--radius);
-    background:rgba(0,0,0,.2);
-    display:flex;align-items:center;justify-content:center;
-    text-align:center;padding:1rem;
-    color:rgba(255,255,255,.6);font-size:.85rem;
+  .video-slot video{
+    width:min(46rem,92vw);aspect-ratio:16/9;height:auto;display:block;
+    border-radius:var(--radius);background:#05555c;
+    box-shadow:0 14px 44px rgba(0,0,0,.4);
   }
+  .video-note{margin:.8rem 0 0;text-align:center;color:rgba(255,255,255,.62);font-size:.85rem;}
 
   /* ── 節 ────────────────────────────────────── */
   section{padding-block:3.2rem;}
@@ -364,12 +362,16 @@
     <a class="cta" href="#apply">45日ためす</a>
     <p class="cta-note">カードは預かりません。会社名・お名前・メールの3つだけ。</p>
 
-    <!-- ★ 60秒の紹介動画が撮れたら、hidden を外して
-         .frame の中身を YouTube の iframe か video に差し替える。
-         台本：空調王_データ\09_紹介ページ\紹介動画_60秒_台本.md -->
-    <div class="video-slot" hidden>
-      <div class="frame">ここに60秒の紹介動画が入ります</div>
+    <!-- 紹介動画（2026-09-16 に作った横長・119秒・6つの話）。
+         もとは 09_紹介ページ\YouTube用_6つの話_横長.mp4。
+         preload="none" なので、押すまで動画は落ちてこない（28MBある） -->
+    <div class="video-slot">
+      <video controls playsinline preload="none" poster="kuchoo-video-poster.jpg" width="1280" height="720">
+        <source src="kuchoo-video.mp4" type="video/mp4">
+        この端末では動画を再生できません。
+      </video>
     </div>
+    <p class="video-note">2分で分かります（音が出ます）</p>
   </div>
 </header>
 
