@@ -2689,3 +2689,151 @@ img.logo-img {
     width: 100%;
   }
 }
+
+/* ==========================================================================
+   WORKS - 施工実績
+   ========================================================================== */
+
+.works-list {
+  display: flex;
+  flex-direction: column;
+  gap: 64px;
+}
+
+.work-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+  padding-bottom: 64px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.works-list .work-card:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* 工事前・工事後を横に並べる。同じ大きさに切り揃える */
+.work-photos {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.work-shot {
+  margin: 0;
+}
+
+.work-shot img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--color-bg-alt);
+}
+
+.work-shot figcaption {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--color-text-sub);
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+/* 写真がまだ無いときの仮置き。img を入れたらこのブロックごと消す */
+.work-shot-empty {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  border-radius: 8px;
+  background: var(--color-bg-alt);
+  border: 1px dashed var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.work-shot-empty span {
+  font-size: 0.85rem;
+  color: var(--color-text-light);
+}
+
+.work-tag {
+  display: inline-block;
+  font-family: var(--font-en);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--color-white);
+  background: var(--color-dark);
+  padding: 4px 12px;
+  border-radius: 999px;
+  margin-bottom: 16px;
+}
+
+.work-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.work-spec {
+  border-top: 1px solid var(--color-border);
+  margin-bottom: 20px;
+}
+
+.work-spec > div {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.work-spec dt {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--color-text-sub);
+}
+
+.work-spec dd {
+  font-size: 0.95rem;
+}
+
+.work-text {
+  font-size: 0.95rem;
+  color: var(--color-text-sub);
+  line-height: 1.9;
+}
+
+@media (max-width: 900px) {
+  .work-card {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .works-list {
+    gap: 48px;
+  }
+  .work-title {
+    font-size: 1.15rem;
+  }
+  .work-spec > div {
+    grid-template-columns: 6rem 1fr;
+    gap: 12px;
+  }
+}
+
+/* 明るい背景の上に置く電話ボタン（.btn-ghost は暗い背景専用なので、白文字が消える） */
+.btn-outline-dark {
+  background: transparent;
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+
+.btn-outline-dark:hover {
+  background: var(--color-dark);
+  color: var(--color-white);
+  border-color: var(--color-dark);
+  opacity: 1;
+}
