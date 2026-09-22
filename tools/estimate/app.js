@@ -11,7 +11,7 @@
      ★ 手で直さないこと。version.txt を書き換えて `node build.mjs` を走らせれば、
        ここも入口（index.html）も、build.mjs が機械的にそろえる。
        人が何か所も手で合わせると、必ずどこかがずれる。 */
-  var APP_VERSION = '202609222127';
+  var APP_VERSION = '202609222157';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -35,10 +35,21 @@
      折り返す textarea にして、中身の行数だけ高さを伸ばす */
   function autoGrow(t) {
     if (!t) return;
+    // 画面に出ていない欄は幅が0で、測っても嘘の高さになる。出たときに測り直す
+    if (!t.offsetParent && t.offsetHeight === 0) return;
     t.style.height = 'auto';
     // border-box なので、中身の高さに枠線ぶんを足さないと最後の1行が2px欠ける
     var frame = t.offsetHeight - t.clientHeight;
     t.style.height = ((t.scrollHeight || 0) + (frame > 0 ? frame : 0)) + 'px';
+  }
+  /* 明細の品名・仕様を、いまの列の幅でまとめて測り直す。
+     品名の列の幅は「原価を出す・隠す」や画面の切り替えで変わるので、
+     幅が変わったあとは必ずこれを呼ぶ。呼ばないと行数だけ増えて高さが古いままになり、
+     2行目が枠の下に隠れる */
+  function growAllNames() {
+    var tb = document.getElementById('lines-body');
+    if (!tb) return;
+    Array.prototype.forEach.call(tb.querySelectorAll('textarea'), autoGrow);
   }
   function num(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
   function yen(n) { return '¥' + Math.round(n).toLocaleString('ja-JP'); }
@@ -939,6 +950,8 @@
       $$('.view').forEach(function (v) { v.classList.remove('is-active'); });
       btn.classList.add('is-active');
       $('#view-' + btn.dataset.view).classList.add('is-active');
+      // 隠れている間は幅が測れない。戻ってきたところで品名の高さを測り直す
+      if (btn.dataset.view === 'edit')     growAllNames();
       if (btn.dataset.view === 'list')     renderList();
       if (btn.dataset.view === 'master')   { renderCsvTargets(); renderMaster(); }
       if (btn.dataset.view === 'settings') fillCompany();
@@ -1513,10 +1526,12 @@
 
       showMargin();
       tb.appendChild(tr);
-      autoGrow(iName); autoGrow(iSpec);
     });
 
+    // ★ 高さを測るのは applyCostVisibility のあと。
+    //   先に測ると、原価の列が出て品名の列が細くなったときに高さが足りなくなる
     applyCostVisibility();
+    growAllNames();
     refreshAutoLines();
     renderTotals();
   }
@@ -1646,6 +1661,7 @@
       showCost = chk.checked;
       save(KEY_COST, showCost);
       applyCostVisibility();
+      growAllNames();   // 品名の列の幅が変わる。高さを測り直す
       renderTotals();
     });
   });
@@ -6569,11 +6585,7 @@
   var growTimer = null;
   window.addEventListener('resize', function () {
     clearTimeout(growTimer);
-    growTimer = setTimeout(function () {
-      var tb = document.getElementById('lines-body');
-      if (!tb) return;
-      Array.prototype.forEach.call(tb.querySelectorAll('textarea'), autoGrow);
-    }, 120);
+    growTimer = setTimeout(growAllNames, 120);
   });
 
   $('#btn-preview').addEventListener('click', function () {
