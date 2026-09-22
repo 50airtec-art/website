@@ -11,7 +11,7 @@
      ★ 手で直さないこと。version.txt を書き換えて `node build.mjs` を走らせれば、
        ここも入口（index.html）も、build.mjs が機械的にそろえる。
        人が何か所も手で合わせると、必ずどこかがずれる。 */
-  var APP_VERSION = '202609122100';
+  var APP_VERSION = '202609222127';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -30,6 +30,15 @@
     if (cls) n.className = cls;
     if (text != null) n.textContent = text;
     return n;
+  }
+  /* 品名や仕様は長い。input だと欄の幅を超えたぶんが隠れて読めないので、
+     折り返す textarea にして、中身の行数だけ高さを伸ばす */
+  function autoGrow(t) {
+    if (!t) return;
+    t.style.height = 'auto';
+    // border-box なので、中身の高さに枠線ぶんを足さないと最後の1行が2px欠ける
+    var frame = t.offsetHeight - t.clientHeight;
+    t.style.height = ((t.scrollHeight || 0) + (frame > 0 ? frame : 0)) + 'px';
   }
   function num(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
   function yen(n) { return '¥' + Math.round(n).toLocaleString('ja-JP'); }
@@ -1269,10 +1278,14 @@
       // 品名・仕様
       var tdName = el('td', 'c-name');
       var wrap = el('div', 'line-name');
-      var iName = el('input'); iName.type = 'text'; iName.value = l.name; iName.placeholder = '品名';
-      var iSpec = el('input', 'spec'); iSpec.type = 'text'; iSpec.value = l.spec || ''; iSpec.placeholder = '仕様・型番など（任意）';
-      iName.addEventListener('input', function () { l.name = iName.value; persistDraft(); });
-      iSpec.addEventListener('input', function () { l.spec = iSpec.value; persistDraft(); });
+      var iName = el('textarea'); iName.rows = 1; iName.value = l.name; iName.placeholder = '品名';
+      var iSpec = el('textarea', 'spec'); iSpec.rows = 1; iSpec.value = l.spec || ''; iSpec.placeholder = '仕様・型番など（任意）';
+      // 改行が入ると見積書の行が崩れるので、Enter は入れさせない
+      function noEnter(ev) { if (ev.key === 'Enter') ev.preventDefault(); }
+      iName.addEventListener('keydown', noEnter);
+      iSpec.addEventListener('keydown', noEnter);
+      iName.addEventListener('input', function () { l.name = iName.value; autoGrow(iName); persistDraft(); });
+      iSpec.addEventListener('input', function () { l.spec = iSpec.value; autoGrow(iSpec); persistDraft(); });
       wrap.appendChild(iName); wrap.appendChild(iSpec);
       tdName.appendChild(wrap);
       // 見積書に出る「定価 → 売値」を、画面でも見えるようにしておく
@@ -1500,6 +1513,7 @@
 
       showMargin();
       tb.appendChild(tr);
+      autoGrow(iName); autoGrow(iSpec);
     });
 
     applyCostVisibility();
@@ -6550,6 +6564,17 @@
   }
 
   window.addEventListener('resize', fitPreview);
+  /* 画面の幅が変わると品名の折り返し行数も変わる。
+     スマホを横にした・PCの窓を狭めた、のあとに高さがずれたままにならないよう計算し直す */
+  var growTimer = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(growTimer);
+    growTimer = setTimeout(function () {
+      var tb = document.getElementById('lines-body');
+      if (!tb) return;
+      Array.prototype.forEach.call(tb.querySelectorAll('textarea'), autoGrow);
+    }, 120);
+  });
 
   $('#btn-preview').addEventListener('click', function () {
     if (!readyToPrint()) return;
