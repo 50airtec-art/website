@@ -11,7 +11,7 @@
      ★ 手で直さないこと。version.txt を書き換えて `node build.mjs` を走らせれば、
        ここも入口（index.html）も、build.mjs が機械的にそろえる。
        人が何か所も手で合わせると、必ずどこかがずれる。 */
-  var APP_VERSION = '202609251300';
+  var APP_VERSION = '202609251400';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -2063,8 +2063,8 @@
      ====================================================================== */
   var ledgerOpen = {};   // 開いた収支欄は、書き直したあとも開いたままにする
   var LEDGER_KINDS = [
-    { id: 'buy',  label: '仕入・材料', cost: true },
-    { id: 'sub',  label: '外注',       cost: true },
+    { id: 'buy',  label: '材料（見積にない分）', cost: true },
+    { id: 'sub',  label: '作業・外注（見積にない分）', cost: true },
     { id: 'exp',  label: '現場の経費', cost: false }
   ];
   function ledgerKind(id) {
@@ -2078,7 +2078,8 @@
     return {
       contract: num(g.contract),                 // 税込
       estIds: Array.isArray(g.estIds) ? g.estIds : null,   // null なら現場の見積ぜんぶ
-      costs: Array.isArray(g.costs) ? g.costs : []
+      lineActual: Array.isArray(g.lineActual) ? g.lineActual : [],   // 見積の行ごとの実際の原価（税抜）
+      costs: Array.isArray(g.costs) ? g.costs : []   // 見積にない作業・材料と、現場の経費
     };
   }
 
@@ -2094,17 +2095,51 @@
     return saveSites(sites);
   }
 
+  function sameLineActual(a, b) {
+    return a.estId === b.estId && a.idx === b.idx && (a.name || '') === (b.name || '');
+  }
+
+  /**
+   * 見積の行を並べ、入れてある実際の原価と結びつける。
+   * 行には目印が無いので「どの見積の何行目で、品名は何か」で覚えておく。
+   * 見積をあとで直して行がずれたら、同じ見積の中を品名で探し直す。
+   * それでも見つからない分は orphans として残す（入れたお金を黙って消さない）。
+   */
+  function ledgerLines(ests, g) {
+    var rows = [];
+    ests.forEach(function (e) {
+      (e.lines || []).forEach(function (l, i) {
+        var amount = num(l.qty) * num(l.price);
+        if (amount < 0) return;                    // 値引きの行は原価を持たない
+        if (!(l.name || '').trim() && !amount) return;
+        rows.push({ est: e, idx: i, line: l, plan: num(l.qty) * num(l.cost), actual: null, entry: null });
+      });
+    });
+    var used = {};
+    function take(r, a, k) { r.actual = num(a.amount); r.entry = a; used[k] = true; }
+    g.lineActual.forEach(function (a, k) {       // 1回目：何行目＋品名がぴったり
+      rows.forEach(function (r) {
+        if (!used[k] && !r.entry && r.est.id === a.estId && r.idx === a.idx && (r.line.name || '') === (a.name || '')) take(r, a, k);
+      });
+    });
+    g.lineActual.forEach(function (a, k) {       // 2回目：同じ見積の中を品名で
+      if (used[k]) return;
+      rows.forEach(function (r) {
+        if (!used[k] && !r.entry && r.est.id === a.estId && (r.line.name || '') === (a.name || '')) take(r, a, k);
+      });
+    });
+    var orphans = g.lineActual.filter(function (a, k) { return !used[k]; });
+    return { rows: rows, orphans: orphans };
+  }
+
   function ledgerCalc(site) {
     var g = ledgerOf(site);
     var all = estimatesOf(site.id);
     var ests = g.estIds ? all.filter(function (e) { return g.estIds.indexOf(e.id) >= 0; }) : all;
 
-    var estSales = 0, estCost = 0, blank = 0, taxRate = 0;
+    var estSales = 0, taxRate = 0;
     ests.forEach(function (e) {
-      var p = profitOf(e);
       estSales += calcOf(e).taxable;
-      estCost += p.cost;
-      blank += p.blank;
       if (!taxRate) taxRate = num(e.tax);
     });
     if (!taxRate) taxRate = 10;
@@ -2112,21 +2147,34 @@
     var toExTax = function (c) {
       return c.taxIn ? Math.round(num(c.amount) / (1 + taxRate / 100)) : num(c.amount);
     };
-    var cost = 0, exp = 0, costRows = 0;
+
+    var L = ledgerLines(ests, g);
+    var plan = 0, lineCost = 0, entered = 0, blank = 0;
+    L.rows.forEach(function (r) {
+      plan += r.plan;
+      if (r.entry) { lineCost += r.actual; entered++; }
+      else lineCost += r.plan;                   // 未入力の行は見込みのまま数える
+      if (!r.entry && r.plan <= 0 && !num(r.line.autoPercent) && num(r.line.qty) * num(r.line.price) > 0) blank++;
+    });
+    var orphanCost = L.orphans.reduce(function (a, x) { return a + num(x.amount); }, 0);
+
+    var extra = 0, exp = 0;
     g.costs.forEach(function (c) {
-      if (ledgerKind(c.kind).cost) { cost += toExTax(c); costRows++; }
+      if (ledgerKind(c.kind).cost) extra += toExTax(c);
       else exp += toExTax(c);
     });
 
     var sales = g.contract > 0 ? Math.round(g.contract / (1 + taxRate / 100)) : estSales;
-    var actual = costRows > 0;
-    var usedCost = actual ? cost : estCost;
-    var gross = sales - usedCost;
+    var actual = entered > 0 || extra > 0 || orphanCost > 0;
+    var cost = lineCost + orphanCost + extra;
+    var gross = sales - (actual ? cost : plan);
     var net = gross - exp;
     return {
       ledger: g, all: all, ests: ests, taxRate: taxRate, toExTax: toExTax,
+      rows: L.rows, orphans: L.orphans,
       sales: sales, fromContract: g.contract > 0,
-      estCost: estCost, blank: blank, cost: cost, actual: actual,
+      plan: plan, blank: blank, entered: entered, extra: extra,
+      cost: cost, actual: actual,
       gross: gross, exp: exp, net: net,
       grossRate: sales > 0 ? gross / sales * 100 : 0,
       netRate: sales > 0 ? net / sales * 100 : 0
@@ -2134,6 +2182,7 @@
   }
 
   function pctText(r) { return (Math.round(r * 10) / 10) + '%'; }
+  function parseYen(v) { return String(v == null ? '' : v).replace(/[,，¥￥円\s]/g, ''); }
 
   function renderLedgerBlock(site) {
     var c = ledgerCalc(site);
@@ -2144,7 +2193,8 @@
     wrap.open = ledgerOpen[site.id] === true;
     wrap.addEventListener('toggle', function () { ledgerOpen[site.id] = wrap.open; });
     var sum = el('summary', null, '収支（粗利・手残り）');
-    if (c.fromContract || g.costs.length) sum.appendChild(el('span', 'ledger-peek', '手残り ' + yen(c.net)));
+    var peek = el('span', 'ledger-peek');
+    sum.appendChild(peek);
     wrap.appendChild(sum);
     var inner = el('div', 'ledger-body');
     wrap.appendChild(inner);
@@ -2158,7 +2208,7 @@
       var v = prompt('契約した金額（税込）を入れてください。\n空欄にすると、見積の金額で計算します。',
                      g.contract > 0 ? String(g.contract) : '');
       if (v === null) return;
-      v = String(v).replace(/[,，¥￥円\s]/g, '');
+      v = parseYen(v);
       if (v && !(num(v) > 0)) { toast('数字で入れてください'); return; }
       if (updateLedger(site.id, function (x) { x.contract = v ? num(v) : 0; }) === false) return;
       renderList();
@@ -2171,7 +2221,7 @@
 
     /* ---- どの見積を契約に入れたか ---- */
     if (c.all.length > 1) {
-      inner.appendChild(el('div', 'ledger-sub', '契約に入っている見積（原価の見込みに使います）'));
+      inner.appendChild(el('div', 'ledger-sub', '契約に入っている見積'));
       c.all.forEach(function (e) {
         var lb = el('label', 'ledger-est');
         var ck = document.createElement('input'); ck.type = 'checkbox';
@@ -2191,29 +2241,110 @@
       });
     }
 
-    /* ---- まとめ ---- */
+    /* ---- まとめ（入力のたびに、ここだけ書き直す。全部書き直すと入力中の欄が消えるため） ---- */
     var tbl = el('table', 'ledger-table');
-    function tr(k, v, cls, note) {
-      var r = el('tr', cls || null);
-      r.appendChild(el('th', null, k));
-      var td = el('td', null, v);
-      if (note) td.appendChild(el('small', null, note));
-      r.appendChild(td);
-      tbl.appendChild(r);
-    }
-    tr('売上（税抜）', yen(c.sales), null, c.fromContract ? '契約金額から' : '見積から');
-    tr('原価（見積の見込み）', yen(c.estCost), c.actual ? 'ledger-dim' : null,
-       c.blank ? '原価の入っていない行が ' + c.blank + ' 行あります' : null);
-    if (c.actual) tr('原価（実際）', yen(c.cost));
-    tr('粗利', yen(c.gross) + '　' + pctText(c.grossRate), 'ledger-strong',
-       c.actual ? null : 'まだ見込み。仕入・外注を入れると実際の数字になります');
-    tr('現場の経費', yen(c.exp));
-    tr('手残り', yen(c.net) + '　' + pctText(c.netRate), 'ledger-strong ledger-net');
     inner.appendChild(tbl);
+    function drawTotals() {
+      c = ledgerCalc(findSite(site.id) || site);
+      peek.textContent = (c.fromContract || c.actual || c.exp) ? '手残り ' + yen(c.net) : '';
+      tbl.innerHTML = '';
+      function tr(k, v, cls, note) {
+        var r = el('tr', cls || null);
+        r.appendChild(el('th', null, k));
+        var td = el('td', null, v);
+        if (note) td.appendChild(el('small', null, note));
+        r.appendChild(td);
+        tbl.appendChild(r);
+      }
+      tr('売上（税抜）', yen(c.sales), null, c.fromContract ? '契約金額から' : '見積から');
+      tr('原価（見積の見込み）', yen(c.plan), c.actual ? 'ledger-dim' : null,
+         c.blank ? '原価の入っていない行が ' + c.blank + ' 行あります' : null);
+      if (c.actual) {
+        tr('原価（実際）', yen(c.cost), null,
+           '見積の項目 ' + c.entered + ' / ' + c.rows.length + ' 行入力' +
+           (c.entered < c.rows.length ? '（残りは見込みで計算）' : '') +
+           (c.extra ? '　＋見積にない分 ' + yen(c.extra) : ''));
+      }
+      tr('粗利', yen(c.gross) + '　' + pctText(c.grossRate), 'ledger-strong',
+         c.actual ? null : 'まだ見込み。下の「実際」に原価を入れると実際の数字になります');
+      tr('現場の経費', yen(c.exp));
+      tr('手残り', yen(c.net) + '　' + pctText(c.netRate), 'ledger-strong ledger-net');
+    }
+    drawTotals();
 
-    /* ---- 実際にかかったお金 ---- */
-    var head = el('div', 'ledger-sub', '実際にかかったお金（' + g.costs.length + '件）');
-    inner.appendChild(head);
+    /* ---- 見積の項目ごとの実際の原価 ---- */
+    inner.appendChild(el('div', 'ledger-sub', '見積の項目（実際の原価を税抜で入れる）'));
+    if (!c.rows.length) inner.appendChild(el('p', 'empty-note', '契約に入っている見積がありません。'));
+    var lastEst = null;
+    c.rows.forEach(function (r) {
+      if (c.ests.length > 1 && r.est !== lastEst) {
+        inner.appendChild(el('div', 'ledger-est-head', r.est.no + '　' + (r.est.subject || site.name)));
+        lastEst = r.est;
+      }
+      var row = el('div', 'ledger-item');
+      var main = el('div', 'ledger-item-name');
+      main.appendChild(el('b', null, r.line.name || '（品名なし）'));
+      var sub = [r.line.spec, num(r.line.qty) + (r.line.unit || '')].filter(Boolean).join('　');
+      if (sub) main.appendChild(el('small', null, sub));
+      row.appendChild(main);
+      var nums = el('div', 'ledger-item-nums');
+      nums.appendChild(el('span', 'ledger-plan', '見込み ' + (r.plan > 0 ? yen(r.plan) : '—')));
+      var inp = document.createElement('input');
+      inp.type = 'text'; inp.inputMode = 'numeric'; inp.className = 'ledger-input';
+      inp.placeholder = '実際';
+      inp.value = r.entry ? String(r.actual) : '';
+      function mark() { row.classList.toggle('is-over', !!r.entry && r.plan > 0 && r.actual > r.plan); }
+      inp.addEventListener('change', function () {
+        var v = parseYen(inp.value);
+        if (v !== '' && !isFinite(Number(v))) {
+          toast('数字で入れてください');
+          inp.value = r.entry ? String(r.actual) : '';
+          return;
+        }
+        var me = { estId: r.est.id, idx: r.idx, name: r.line.name || '' };
+        var old = r.entry;
+        updateLedger(site.id, function (x) {
+          // 前に入れた分（行がずれて品名で見つけたものも含めて）を外してから入れ直す
+          x.lineActual = x.lineActual.filter(function (a) {
+            return !sameLineActual(a, me) && !(old && sameLineActual(a, old));
+          });
+          if (v !== '') {
+            me.amount = num(v);
+            x.lineActual.push(me);
+          }
+        });
+        if (v !== '') { r.entry = me; r.actual = me.amount; } else { r.entry = null; r.actual = null; }
+        mark();
+        drawTotals();
+      });
+      mark();
+      nums.appendChild(inp);
+      row.appendChild(nums);
+      inner.appendChild(row);
+    });
+
+    /* 見積を直して行が消えたのに、実際の原価だけ残っている分 */
+    if (c.orphans.length) {
+      inner.appendChild(el('div', 'ledger-sub', '見積から消えた項目（原価には数えています）'));
+      c.orphans.forEach(function (a) {
+        var row = el('div', 'ledger-cost');
+        row.appendChild(el('div', 'est-main', a.name || '（品名なし）'));
+        row.appendChild(el('div', 'est-amount', yen(a.amount)));
+        var del = el('button', 'btn btn-ghost btn-sm btn-danger', '削除'); del.type = 'button';
+        del.addEventListener('click', function () {
+          if (!confirm('「' + (a.name || '') + '　' + yen(a.amount) + '」を消します。よろしいですか？')) return;
+          updateLedger(site.id, function (x) {
+            x.lineActual = x.lineActual.filter(function (y) { return !sameLineActual(y, a); });
+          });
+          renderList();
+        });
+        row.appendChild(del);
+        inner.appendChild(row);
+      });
+    }
+
+    /* ---- 見積にない作業・材料と、現場の経費 ---- */
+    inner.appendChild(el('div', 'ledger-sub', '見積にない作業・材料／現場の経費（' + g.costs.length + '件）'));
     var list = g.costs.slice().sort(function (a, b) { return String(a.date).localeCompare(String(b.date)); });
     list.forEach(function (x) {
       var row = el('div', 'ledger-cost');
@@ -2234,11 +2365,12 @@
       row.appendChild(ed); row.appendChild(del);
       inner.appendChild(row);
     });
-    var add = el('button', 'btn btn-primary btn-sm', '＋ かかったお金を足す'); add.type = 'button';
+    var add = el('button', 'btn btn-primary btn-sm', '＋ 見積にない分・経費を足す'); add.type = 'button';
     add.addEventListener('click', function () { ledgerCostDialog(site, null); });
     inner.appendChild(add);
     inner.appendChild(el('p', 'hint',
-      '金額は税抜で計算します。レシートなど税込の金額は、入れるときに「税込」を選べば税抜に直します。' +
+      '見積の項目の「実際」は税抜で入れます。空のままの行は見込みの原価で計算します。' +
+      '「足す」ではレシートなど税込の金額も入れられます（税抜に直して計算）。' +
       '会社全体の固定費（車の保険・リースなど）は入れません。'));
     return wrap;
   }
@@ -2252,7 +2384,7 @@
     if (k === null) return;
     k = LEDGER_KINDS[num(String(k).replace(/[０-９]/g, function (d) { return String.fromCharCode(d.charCodeAt(0) - 0xFEE0); })) - 1];
     if (!k) { toast('1〜' + LEDGER_KINDS.length + ' の番号で選んでください'); return; }
-    var name = prompt('内容（例：西方商店 機器代／今野さん フロン回収／ガソリン）', x.name);
+    var name = prompt('内容（例：追加の配管材／今野さん フロン回収／ガソリン）', x.name);
     if (name === null) return;
     var amt = prompt('金額', x.amount ? String(x.amount) : '');
     if (amt === null) return;
