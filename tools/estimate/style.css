@@ -1346,5 +1346,6 @@ body:not(.show-cost) .ledger-list-net { display: none; }
 .po-item.is-on { opacity: 1; }
 .po-item .ledger-item-name { cursor: pointer; }
 .po-check { width: 20px; height: 20px; flex: none; }
-.po-qty { width: 64px; }
+.po-item input.ledger-input { width: 110px; }
+.po-item input.po-qty { width: 64px; }
 .po-acts { margin-top: 14px; }

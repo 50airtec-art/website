@@ -11,7 +11,7 @@
      ★ 手で直さないこと。version.txt を書き換えて `node build.mjs` を走らせれば、
        ここも入口（index.html）も、build.mjs が機械的にそろえる。
        人が何か所も手で合わせると、必ずどこかがずれる。 */
-  var APP_VERSION = '202610011900';
+  var APP_VERSION = '202610012000';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -2771,16 +2771,23 @@
     var acts = el('div', 'card-actions po-acts');
     var ok = el('button', 'btn btn-primary', '保存する'); ok.type = 'button';
     ok.addEventListener('click', function () { saveOrder(site, cands); });
+    // 保存する前に紙の見た目を確かめる（保存はしない）
+    var pv = el('button', 'btn btn-ghost', 'プレビュー'); pv.type = 'button';
+    pv.addEventListener('click', function () {
+      var d = composeOrder(site, cands);
+      if (d) printOrder(d);
+    });
     var cancel = el('button', 'btn btn-ghost', 'やめる'); cancel.type = 'button';
     cancel.addEventListener('click', function () { poEdit = null; renderList(); });
-    acts.appendChild(ok); acts.appendChild(cancel);
+    acts.appendChild(ok); acts.appendChild(pv); acts.appendChild(cancel);
     box.appendChild(acts);
     return box;
   }
 
-  function saveOrder(site, cands) {
+  /** いまチェックしている行で発注書の中身を組む（保存はしない）。足りないものがあれば null */
+  function composeOrder(site, cands) {
     var E = poEdit, d = E.doc;
-    if (!(d.supplier || '').trim()) { toast('宛先（仕入先）を入れてください'); return; }
+    if (!(d.supplier || '').trim()) { toast('宛先（仕入先）を入れてください'); return null; }
     var lines = [];
     cands.forEach(function (r) {
       var s = E.sel[r.key];
@@ -2792,12 +2799,18 @@
       });
     });
     lines = lines.concat(E.extras);
-    if (!lines.length) { toast('頼むものにチェックを入れてください'); return; }
+    if (!lines.length) { toast('頼むものにチェックを入れてください'); return null; }
     d.supplier = d.supplier.trim();
     d.lines = lines;
     d.siteId = site.id;
     d.subject = site.name;
     d.total = calcOf(d).total;
+    return d;
+  }
+
+  function saveOrder(site, cands) {
+    var d = composeOrder(site, cands);
+    if (!d) return;
     d.savedAt = new Date().toISOString();
     var ok = updateOrders(site.id, function (list) {
       var found = false;
