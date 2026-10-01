@@ -11,7 +11,7 @@
      ★ 手で直さないこと。version.txt を書き換えて `node build.mjs` を走らせれば、
        ここも入口（index.html）も、build.mjs が機械的にそろえる。
        人が何か所も手で合わせると、必ずどこかがずれる。 */
-  var APP_VERSION = '202610012100';
+  var APP_VERSION = '202610012200';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -2569,14 +2569,38 @@
    * 発注書に載せる仕様は型番だけ。
    * 仕入先は型番で品物を引くので、「梱包20」「受注単位1」や仕入値の書き込みが
    * 混ざっていると、かえって数量を読み違える（BIGBOSS 2026-10-01）。
-   * まず単価マスタの品番を使い、無ければ仕様の先頭の品番、
-   * それも無ければ梱包・受注単位・値段の書き込みだけ取り除く。
+   *
+   * ★ 品名だけで単価マスタを引いてはいけない。ウォールコーナーは13種類、
+   *   ペアコイルは4サイズが同じ品名で入っていて、最初に見つかった別サイズの
+   *   品番が出てしまう（SW-100 → LDW-70。2026-10-01、BIGBOSSに指摘された）。
+   *   品番は「仕様に書いてある品番」を正とし、マスタはそれを確かめるのに使うだけ。
+   *
+   *   1. 同じ品名のマスタの品番のうち、仕様がその品番で始まるもの
+   *   2. 仕様の先頭のかたまりが品番の形なら、それ
+   *   3. 品番の無い仕様が、同じ品名のマスタ1つだけの仕様と同じなら、その品番
+   *   4. どれでもなければ、梱包・受注単位・値段の書き込みだけ取り除く
    */
+  // 「RAS-GP140RSH4／RPC-GP140KA」（室外機／室内機の組）のように全角の／でつなぐ品番もある
+  var ORDER_CODE_RE = /^([0-9A-Za-z][0-9A-Za-z\-_\/.／]{1,40})(?=[　\s]|$)/;
+
   function orderSpec(l) {
-    var hit = findMasterItem(l.name, l.spec);
-    if (hit && String(hit.item.code || '').trim()) return String(hit.item.code).trim();
-    var s = strippedSpec(l) || String(l.spec || '');
-    return s
+    var spec = String(l.spec || '').trim();
+    var name = String(l.name || '').trim();
+    var byHead = '', exact = '', sameSpec = 0;
+    pb.categories.forEach(function (c) {
+      c.items.forEach(function (it) {
+        var code = String(it.code || '').trim();
+        if (!code || String(it.name || '').trim() !== name) return;
+        if (spec.indexOf(code) === 0 && /^([　\s]|$)/.test(spec.slice(code.length)) &&
+            code.length > byHead.length) byHead = code;
+        if (spec && String(it.spec || '').trim() === spec) { exact = code; sameSpec++; }
+      });
+    });
+    if (byHead) return byHead;
+    var m = spec.match(ORDER_CODE_RE);
+    if (m) return m[1];
+    if (sameSpec === 1) return exact;   // 品番の無い仕様は、マスタで1つに決まるときだけ
+    return spec
       .replace(/[（(][^）)]*[¥￥][^）)]*[）)]/g, ' ')
       .replace(/(梱包入数|梱包|受注単位|入数)[:：]?\s*[\d,]+\S*/g, ' ')
       .replace(/[　\s]+/g, ' ')
