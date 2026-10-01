@@ -11,7 +11,7 @@
      ★ 手で直さないこと。version.txt を書き換えて `node build.mjs` を走らせれば、
        ここも入口（index.html）も、build.mjs が機械的にそろえる。
        人が何か所も手で合わせると、必ずどこかがずれる。 */
-  var APP_VERSION = '202610012300';
+  var APP_VERSION = '202610020000';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -2620,11 +2620,40 @@
   function colorLabel(c) { return c ? (COLOR_NAMES[c] || c) + '（' + c + '）' : ''; }
 
   /** 発注書に並べられる見積の行（値引き・自動計算の行は外す） */
-  function orderCandidates(site) {
+  /**
+   * この現場の見積（新しい順）。［見積作成］で直している途中の見積は、保存前でもその中身を使う。
+   * 「セットに直したのに発注書が個のまま」は、見積を保存していなかったのが原因だった
+   * （BIGBOSS 2026-10-01）。直した内容をそのまま使い、未保存であることは画面に出す。
+   */
+  function orderEstimates(site) {
+    var list = estimatesOf(site.id).map(function (e) {
+      if (st && st.id === e.id && JSON.stringify(st.lines || []) !== JSON.stringify(e.lines || [])) {
+        var x = clone(st);
+        x.savedAt = e.savedAt;
+        x.unsaved = true;
+        return x;
+      }
+      return e;
+    });
+    if (st && st.siteId === site.id && (st.lines || []).length &&
+        !list.some(function (e) { return e.id === st.id; })) {
+      var y = clone(st);
+      y.savedAt = new Date().toISOString();
+      y.unsaved = true;
+      list.push(y);
+    }
+    return list.sort(function (a, b) { return String(b.savedAt).localeCompare(String(a.savedAt)); });
+  }
+
+  function orderEstimateById(site, id) {
+    var hit = null;
+    orderEstimates(site).forEach(function (e) { if (e.id === id) hit = e; });
+    return hit;
+  }
+
+  function orderCandidates(site, estId) {
     var rows = [];
-    estimatesOf(site.id).sort(function (a, b) {
-      return String(a.savedAt).localeCompare(String(b.savedAt));
-    }).forEach(function (e) {
+    orderEstimates(site).filter(function (e) { return e.id === estId; }).forEach(function (e) {
       (e.lines || []).forEach(function (l, i) {
         if (num(l.autoPercent)) return;              // 消耗品雑費・諸経費
         if (num(l.price) < 0) return;                // 値引き
@@ -2649,9 +2678,16 @@
       tax: pb.defaults.taxRatePercent,
       lines: []
     };
+    // 新しく作るときは一番新しい見積から。直すときは、その発注書を作った見積から
+    var ests = orderEstimates(site);
+    var estId = ests.length ? ests[0].id : '';
+    doc.lines.some(function (ol) {
+      if (ol.src && orderEstimateById(site, ol.src.estId)) { estId = ol.src.estId; return true; }
+      return false;
+    });
     // 前に選んだ行をチェック済みにする。行がずれていたら同じ見積の中を品名で探す
     var sel = {}, extras = [];
-    var cands = orderCandidates(site);
+    var cands = orderCandidates(site, estId);
     doc.lines.forEach(function (ol) {
       var src = ol.src || {};
       var hit = null;
@@ -2664,7 +2700,7 @@
       if (hit) sel[hit.key] = { on: true, qty: ol.qty, price: ol.price, color: ol.color || '' };
       else extras.push(clone(ol));                    // 見積にない品・見積から消えた品
     });
-    poEdit = { siteId: site.id, doc: doc, sel: sel, extras: extras, isNew: !cur };
+    poEdit = { siteId: site.id, doc: doc, sel: sel, extras: extras, isNew: !cur, estId: estId };
     renderList();
   }
 
@@ -2714,8 +2750,39 @@
     sp.appendChild(el('span', null, '単価と金額を発注書に載せる（仕入値）'));
     box.appendChild(sp);
 
+    /* ---- どの見積から作るか ---- */
+    var ests = orderEstimates(site);
+    var curEst = orderEstimateById(site, E.estId);
+    if (ests.length > 1) {
+      var ef = el('label', 'po-field');
+      ef.appendChild(el('span', null, 'どの見積から'));
+      var es = document.createElement('select');
+      ests.forEach(function (e) {
+        es.appendChild(new Option(e.no + '　' + (e.subject || site.name) + '　' + yen(calcOf(e).total) +
+                                  (e.unsaved ? '（直している途中）' : ''), e.id));
+      });
+      es.value = E.estId;
+      es.addEventListener('change', function () {
+        var on = Object.keys(E.sel).some(function (k) { return E.sel[k].on; });
+        if (on && !confirm('見積を切り替えると、いまのチェックははずれます。よろしいですか？')) {
+          es.value = E.estId;
+          return;
+        }
+        E.estId = es.value;
+        E.sel = {};
+        renderList();
+      });
+      ef.appendChild(es);
+      box.appendChild(ef);
+    }
+    if (curEst && curEst.unsaved) {
+      box.appendChild(el('p', 'po-warn',
+        'この見積は［見積作成］で直している途中で、まだ保存されていません。直した内容で発注書を作ります。' +
+        '見積のほうも［保存］を押しておいてください。'));
+    }
+
     /* ---- 見積の行から選ぶ ---- */
-    var cands = orderCandidates(site);
+    var cands = orderCandidates(site, E.estId);
     var head = el('div', 'ledger-sub', '見積の項目から、頼むものにチェック');
     box.appendChild(head);
     var bar = el('div', 'po-bar');
@@ -2774,7 +2841,7 @@
 
     if (!cands.length) box.appendChild(el('p', 'empty-note', 'この現場の見積に、選べる行がありません。'));
     var lastEst = null;
-    var multi = estimatesOf(site.id).length > 1;
+    var multi = false;   // 並ぶのは選んだ見積1つだけ
     cands.forEach(function (r) {
       if (multi && r.est !== lastEst) {
         box.appendChild(el('div', 'ledger-est-head', r.est.no + '　' + (r.est.subject || site.name)));
@@ -2965,8 +3032,32 @@
     return wrap;
   }
 
+  /**
+   * 保存ずみの発注書を、元の見積の今の単位・型番で刷る。
+   * 数量・単価・色は発注書で決めたものなので、そのまま。
+   */
+  function refreshOrder(o) {
+    var site = findSite(o.siteId);
+    if (!site) return o;
+    var x = clone(o);
+    x.lines.forEach(function (ol) {
+      var src = ol.src;
+      if (!src) return;
+      var e = orderEstimateById(site, src.estId);
+      if (!e) return;
+      var ls = e.lines || [];
+      var l = (ls[src.idx] && (ls[src.idx].name || '') === (ol.name || '')) ? ls[src.idx] : null;
+      if (!l) ls.forEach(function (y) { if (!l && (y.name || '') === (ol.name || '')) l = y; });
+      if (!l) return;
+      ol.unit = l.unit || ol.unit;
+      ol.spec = orderSpec(l);
+    });
+    return x;
+  }
+
   function printOrder(o) {
     if (!readyToPrint()) return;
+    if (o.savedAt) o = refreshOrder(o);
     buildSheet('order', o);
     openPreview('発注書　' + o.no + '　' + (o.supplier || ''),
                 '発注書_' + (o.supplier || '無題') + '_' + o.no);
