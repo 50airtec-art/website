@@ -11,7 +11,7 @@
      ★ 手で直さないこと。version.txt を書き換えて `node build.mjs` を走らせれば、
        ここも入口（index.html）も、build.mjs が機械的にそろえる。
        人が何か所も手で合わせると、必ずどこかがずれる。 */
-  var APP_VERSION = '202610012000';
+  var APP_VERSION = '202610012100';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -2565,6 +2565,24 @@
     return out;
   }
 
+  /**
+   * 発注書に載せる仕様は型番だけ。
+   * 仕入先は型番で品物を引くので、「梱包20」「受注単位1」や仕入値の書き込みが
+   * 混ざっていると、かえって数量を読み違える（BIGBOSS 2026-10-01）。
+   * まず単価マスタの品番を使い、無ければ仕様の先頭の品番、
+   * それも無ければ梱包・受注単位・値段の書き込みだけ取り除く。
+   */
+  function orderSpec(l) {
+    var hit = findMasterItem(l.name, l.spec);
+    if (hit && String(hit.item.code || '').trim()) return String(hit.item.code).trim();
+    var s = strippedSpec(l) || String(l.spec || '');
+    return s
+      .replace(/[（(][^）)]*[¥￥][^）)]*[）)]/g, ' ')
+      .replace(/(梱包入数|梱包|受注単位|入数)[:：]?\s*[\d,]+\S*/g, ' ')
+      .replace(/[　\s]+/g, ' ')
+      .trim();
+  }
+
   /** 発注書に並べられる見積の行（値引き・自動計算の行は外す） */
   function orderCandidates(site) {
     var rows = [];
@@ -2709,7 +2727,7 @@
       row.appendChild(ck);
       var main = el('div', 'ledger-item-name');
       main.appendChild(el('b', null, r.line.name));
-      var sub = [r.line.spec, isWorkLine(r.line) ? '作業' : ''].filter(Boolean).join('　');
+      var sub = [orderSpec(r.line), isWorkLine(r.line) ? '作業' : ''].filter(Boolean).join('　');
       if (sub) main.appendChild(el('small', null, sub));
       row.appendChild(main);
       var nums = el('div', 'ledger-item-nums');
@@ -2793,7 +2811,7 @@
       var s = E.sel[r.key];
       if (!s || !s.on) return;
       lines.push({
-        name: r.line.name || '', spec: r.line.spec || '', unit: r.line.unit || '',
+        name: r.line.name || '', spec: orderSpec(r.line), unit: r.line.unit || '',
         qty: num(s.qty), price: num(s.price),
         src: { estId: r.est.id, idx: r.idx, estNo: r.est.no }
       });
@@ -7031,10 +7049,11 @@
 
     var rowList = [];
     d.lines.forEach(function (l, i) {
+      var spec = ord ? orderSpec(l) : l.spec;   // 発注書は型番だけ
       rowList.push(
         '<tr>' +
           '<td class="t-no">' + (i + 1) + '</td>' +
-          '<td>' + esc(l.name) + (l.spec ? '<span class="l-spec">' + esc(l.spec) + '</span>' : '') + (ord ? '' : listPriceHTML(l)) + '</td>' +
+          '<td>' + esc(l.name) + (spec ? '<span class="l-spec">' + esc(spec) + '</span>' : '') + (ord ? '' : listPriceHTML(l)) + '</td>' +
           '<td class="t-qty">' + (num(l.qty) % 1 === 0 ? num(l.qty) : num(l.qty).toFixed(1)) + '</td>' +
           '<td class="t-unit">' + esc(l.unit) + '</td>' +
           '<td class="t-price">' + (noPrice || (ord && !num(l.price)) ? '' : Math.round(num(l.price)).toLocaleString('ja-JP')) + '</td>' +
