@@ -1354,3 +1354,10 @@ body:not(.show-cost) .ledger-list-net { display: none; }
 .po-color-all select { flex: 0 1 auto; min-width: 160px; }
 .po-warn { font-size: 12px; line-height: 1.7; color: #7a4b00; background: #fff4e5; border: 1px solid #f0c48a; border-radius: 6px; padding: 8px 10px; margin: 6px 0 10px; }
 .po-field > select { flex: 1; min-width: 180px; }
+/* 発注書の紙には単価・金額の列を出さない */
+#sheet.is-order .t-price, #sheet.is-order .t-amount { display: none; }
+.po-item input.po-unit { width: 64px; text-align: left; }
+.po-qlabel { font-size: 11px; color: var(--text-light); }
+.po-estqty { color: var(--text-sub) !important; }
+#sheet.is-order table.sheet-lines .t-qty { width: 18mm; }
+#sheet.is-order table.sheet-lines .t-unit { width: 28mm; }

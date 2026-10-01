@@ -11,7 +11,7 @@
      ★ 手で直さないこと。version.txt を書き換えて `node build.mjs` を走らせれば、
        ここも入口（index.html）も、build.mjs が機械的にそろえる。
        人が何か所も手で合わせると、必ずどこかがずれる。 */
-  var APP_VERSION = '202610020000';
+  var APP_VERSION = '202610020100';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -2674,7 +2674,6 @@
       due: '',
       place: site.address ? '現場納品　' + site.address : '',
       note: '',
-      showPrice: true,
       tax: pb.defaults.taxRatePercent,
       lines: []
     };
@@ -2697,7 +2696,7 @@
       cands.forEach(function (r) {
         if (!hit && !sel[r.key] && r.est.id === src.estId && (r.line.name || '') === (ol.name || '')) hit = r;
       });
-      if (hit) sel[hit.key] = { on: true, qty: ol.qty, price: ol.price, color: ol.color || '' };
+      if (hit) sel[hit.key] = { on: true, qty: ol.qty, unit: ol.unit || '', color: ol.color || '' };
       else extras.push(clone(ol));                    // 見積にない品・見積から消えた品
     });
     poEdit = { siteId: site.id, doc: doc, sel: sel, extras: extras, isNew: !cur, estId: estId };
@@ -2743,12 +2742,6 @@
     nt.addEventListener('input', function () { d.note = nt.value; });
     field('備考', nt);
 
-    var sp = el('label', 'ledger-est');
-    var spc = document.createElement('input'); spc.type = 'checkbox'; spc.checked = d.showPrice !== false;
-    spc.addEventListener('change', function () { d.showPrice = spc.checked; });
-    sp.appendChild(spc);
-    sp.appendChild(el('span', null, '単価と金額を発注書に載せる（仕入値）'));
-    box.appendChild(sp);
 
     /* ---- どの見積から作るか ---- */
     var ests = orderEstimates(site);
@@ -2791,7 +2784,7 @@
       cands.forEach(function (r) {
         if (isWorkLine(r.line)) return;
         var cur = E.sel[r.key];
-        E.sel[r.key] = { on: true, qty: cur ? cur.qty : r.line.qty, price: cur ? cur.price : num(r.line.cost), color: cur ? cur.color : '' };
+        E.sel[r.key] = { on: true, qty: cur ? cur.qty : r.line.qty, unit: cur ? cur.unit : (r.line.unit || ''), color: cur ? cur.color : '' };
       });
       renderList();
     });
@@ -2817,7 +2810,7 @@
         if (!all.value) return;
         cands.forEach(function (r) {
           if (colorChoices(r.line).indexOf(all.value) < 0) return;
-          var cur = E.sel[r.key] || { on: false, qty: r.line.qty, price: num(r.line.cost) };
+          var cur = E.sel[r.key] || { on: false, qty: r.line.qty, unit: r.line.unit || '' };
           cur.color = all.value;
           E.sel[r.key] = cur;
         });
@@ -2830,13 +2823,12 @@
     var count = el('span', 'po-count');
     head.appendChild(count);
     function drawCount() {
-      var n = E.extras.length, sum = 0;
+      var n = E.extras.length;
       cands.forEach(function (r) {
         var s = E.sel[r.key];
-        if (s && s.on) { n++; sum += num(s.qty) * num(s.price); }
+        if (s && s.on) n++;
       });
-      E.extras.forEach(function (x) { sum += num(x.qty) * num(x.price); });
-      count.textContent = '　' + n + ' 品目' + (sum ? '　税抜 ' + yen(sum) : '');
+      count.textContent = '　' + n + ' 品目';
     }
 
     if (!cands.length) box.appendChild(el('p', 'empty-note', 'この現場の見積に、選べる行がありません。'));
@@ -2847,7 +2839,7 @@
         box.appendChild(el('div', 'ledger-est-head', r.est.no + '　' + (r.est.subject || site.name)));
         lastEst = r.est;
       }
-      var s = E.sel[r.key] || { on: false, qty: r.line.qty, price: num(r.line.cost), color: '' };
+      var s = E.sel[r.key] || { on: false, qty: r.line.qty, unit: r.line.unit || '', color: '' };
       var colors = colorChoices(r.line);
       var row = el('div', 'ledger-item po-item' + (s.on ? ' is-on' : ''));
       var ck = document.createElement('input'); ck.type = 'checkbox'; ck.checked = !!s.on;
@@ -2857,14 +2849,15 @@
       main.appendChild(el('b', null, r.line.name));
       var sub = [orderSpec(r.line), isWorkLine(r.line) ? '作業' : ''].filter(Boolean).join('　');
       if (sub) main.appendChild(el('small', null, sub));
+      // 見積の数量と、仕入れる数量はちがうことがある（ペアコイル13mでも仕入れは20m巻1本）
+      main.appendChild(el('small', 'po-estqty', '見積 ' + num(r.line.qty) + (r.line.unit || '')));
       row.appendChild(main);
       var nums = el('div', 'ledger-item-nums');
       var q = document.createElement('input');
       q.type = 'text'; q.inputMode = 'decimal'; q.className = 'ledger-input po-qty'; q.value = String(num(s.qty));
-      var u = el('span', 'ledger-plan', r.line.unit || '');
-      var p = document.createElement('input');
-      p.type = 'text'; p.inputMode = 'numeric'; p.className = 'ledger-input'; p.placeholder = '仕入単価';
-      p.value = num(s.price) ? String(num(s.price)) : '';
+      var u = document.createElement('input');
+      u.type = 'text'; u.className = 'ledger-input po-unit'; u.placeholder = '単位';
+      u.value = s.unit != null ? s.unit : (r.line.unit || '');
       var cs = null;
       if (colors.length) {
         cs = document.createElement('select');
@@ -2874,21 +2867,22 @@
         cs.value = s.color || '';
         nums.appendChild(cs);
       }
-      nums.appendChild(q); nums.appendChild(u); nums.appendChild(p);
+      nums.appendChild(el('span', 'po-qlabel', '発注'));
+      nums.appendChild(q); nums.appendChild(u);
       row.appendChild(nums);
       function markColor() { if (cs) row.classList.toggle('is-nocolor', ck.checked && !cs.value); }
 
       function put() {
-        E.sel[r.key] = { on: ck.checked, qty: num(String(q.value).replace(/[,，\s]/g, '')), price: num(parseYen(p.value)),
+        E.sel[r.key] = { on: ck.checked, qty: num(String(q.value).replace(/[,，\s]/g, '')), unit: u.value.trim(),
                          color: cs ? cs.value : '' };
         row.classList.toggle('is-on', ck.checked);
         markColor();
         drawCount();
       }
       ck.addEventListener('change', put);
-      // 数や単価を触ったら、その行は頼むものとしてチェックを入れる
+      // 数や単位を触ったら、その行は頼むものとしてチェックを入れる
       q.addEventListener('input', function () { ck.checked = true; put(); });
-      p.addEventListener('input', function () { ck.checked = true; put(); });
+      u.addEventListener('input', function () { ck.checked = true; put(); });
       if (cs) cs.addEventListener('change', function () { ck.checked = true; put(); });
       markColor();
       // 品名を押してもチェックが切り替わるように
@@ -2902,7 +2896,7 @@
       var row = el('div', 'ledger-cost');
       var main = el('div', 'est-main');
       main.appendChild(el('b', null, x.name));
-      main.appendChild(el('small', null, [x.spec, num(x.qty) + (x.unit || ''), num(x.price) ? '@' + yen(x.price) : ''].filter(Boolean).join('　')));
+      main.appendChild(el('small', null, [x.spec, num(x.qty) + (x.unit || '')].filter(Boolean).join('　')));
       row.appendChild(main);
       var del = el('button', 'btn btn-ghost btn-sm btn-danger', '外す'); del.type = 'button';
       del.addEventListener('click', function () { E.extras.splice(i, 1); renderList(); });
@@ -2919,9 +2913,7 @@
       if (qty === null) return;
       var unit = prompt('単位', '個');
       if (unit === null) return;
-      var price = prompt('仕入単価（税抜／空欄可）', '');
-      if (price === null) return;
-      E.extras.push({ name: name.trim(), spec: spec.trim(), qty: num(qty) || 1, unit: unit.trim(), price: num(parseYen(price)) });
+      E.extras.push({ name: name.trim(), spec: spec.trim(), qty: num(qty) || 1, unit: unit.trim(), price: 0 });
       renderList();
     });
     box.appendChild(addX);
@@ -2954,8 +2946,8 @@
       if (!s || !s.on) return;
       if (colorChoices(r.line).length && !s.color) noColor.push(r.line.name);
       lines.push({
-        name: r.line.name || '', spec: orderSpec(r.line), unit: r.line.unit || '',
-        qty: num(s.qty), price: num(s.price), color: s.color || '',
+        name: r.line.name || '', spec: orderSpec(r.line), unit: s.unit != null && s.unit !== '' ? s.unit : (r.line.unit || ''),
+        qty: num(s.qty), price: num(r.line.cost), color: s.color || '',
         src: { estId: r.est.id, idx: r.idx, estNo: r.est.no }
       });
     });
@@ -3006,7 +2998,6 @@
       main.appendChild(el('small', null,
         '発注日 ' + jpDate(o.date) + (o.due ? '　/　納期 ' + o.due : '') + '　/　' + (o.lines || []).length + ' 品目'));
       row.appendChild(main);
-      if (o.showPrice !== false && o.total) row.appendChild(el('div', 'est-amount', yen(o.total)));
 
       var pr = el('button', 'btn btn-primary', '印刷 / PDF'); pr.type = 'button';
       pr.addEventListener('click', function () { printOrder(o); });
@@ -3049,7 +3040,6 @@
       var l = (ls[src.idx] && (ls[src.idx].name || '') === (ol.name || '')) ? ls[src.idx] : null;
       if (!l) ls.forEach(function (y) { if (!l && (y.name || '') === (ol.name || '')) l = y; });
       if (!l) return;
-      ol.unit = l.unit || ol.unit;
       ol.spec = orderSpec(l);
     });
     return x;
@@ -7211,7 +7201,8 @@
     var inv = (mode === 'invoice');
     var ord = (mode === 'order');
     // 発注書で「単価を載せない」にしたときは、単価・金額・合計を空けておく
-    var noPrice = ord && d.showPrice === false;
+    var noPrice = ord;   // 発注書に単価・金額はいらない（BIGBOSS 2026-10-01）。列ごと隠す
+    if (ord) $('#sheet').classList.add('is-order');
     var t = calcOf(d);
     var c = pb.company;
     var to = ((ord ? d.supplier : d.customer) || '').trim();   // 発注書の宛先は仕入先
