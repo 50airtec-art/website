@@ -1329,3 +1329,22 @@ body:not(.show-cost) .ledger-list-net { display: none; }
 
 /* ロゴが無い会社は左上に会社名が大きく出るので、右の会社欄の会社名は隠す（2回出さない） */
 #sheet.skin-logo.no-logo .sheet-company b { display: none; }
+
+/* ===== 発注書 ===== */
+.po-block > .btn-sm { margin-top: 8px; }
+.po-editor { border: 1px solid var(--border); border-radius: 8px; background: #fafbfc; padding: 12px 14px; margin: 6px 0 12px; }
+.po-editor-title { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+.po-field { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.po-field > span { width: 110px; font-size: 13px; color: var(--text-sub); }
+.po-field > input, .po-field > textarea {
+  flex: 1; min-width: 180px; padding: 7px 9px; font-size: 14px; font-family: inherit;
+  border: 1px solid var(--border); border-radius: 6px; background: #fff;
+}
+.po-count { font-weight: 400; color: var(--text); }
+.po-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.po-item { opacity: .55; }
+.po-item.is-on { opacity: 1; }
+.po-item .ledger-item-name { cursor: pointer; }
+.po-check { width: 20px; height: 20px; flex: none; }
+.po-qty { width: 64px; }
+.po-acts { margin-top: 14px; }

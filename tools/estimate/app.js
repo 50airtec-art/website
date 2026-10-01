@@ -11,7 +11,7 @@
      ★ 手で直さないこと。version.txt を書き換えて `node build.mjs` を走らせれば、
        ここも入口（index.html）も、build.mjs が機械的にそろえる。
        人が何か所も手で合わせると、必ずどこかがずれる。 */
-  var APP_VERSION = '202609251400';
+  var APP_VERSION = '202610011900';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -2041,6 +2041,7 @@
     });
 
     box.appendChild(renderInvoiceBlock(s));
+    box.appendChild(renderOrderBlock(s));
     box.appendChild(renderLedgerBlock(s));
   }
 
@@ -2514,6 +2515,350 @@
     save(KEY_INV, list);
     renderList();
     toast('日付を直しました');
+  }
+
+  /* ======================================================================
+     発注書
+     ----------------------------------------------------------------------
+     その現場の見積の行から、仕入先に頼むものだけチェックして発注書にする。
+     単価は見積の売値ではなく原価（仕入値）を引き継ぐ。仕入先に売値を見せないため。
+     発注書を作ったあとで見積を直しても、出した発注書はそのまま残る（請求書と同じ）。
+
+     中身は現場（KEY_SITE）の orders に持たせる。置き場所の名前が増えないので、
+     Firestore のルールを貼り直さなくても連動する（[[project-kuchoo-firestore-rules]]）。
+     ====================================================================== */
+  var poEdit = null;   // 作っている途中の発注書 { siteId, doc, sel, extras }
+
+  function ordersOf(site) { return Array.isArray(site && site.orders) ? site.orders : []; }
+
+  function updateOrders(siteId, fn) {
+    var sites = loadSites();
+    var s = null;
+    sites.forEach(function (x) { if (x.id === siteId) s = x; });
+    if (!s) return false;
+    s.orders = fn(ordersOf(s).slice());
+    return saveSites(sites);
+  }
+
+  function nextOrderNo() {
+    var d = todayISO().replace(/-/g, '');
+    var n = 1;
+    loadSites().forEach(function (s) {
+      ordersOf(s).forEach(function (o) {
+        var m = String(o.no || '').match(new RegExp('^P' + d + '-(\\d+)$'));
+        if (m) n = Math.max(n, Number(m[1]) + 1);
+      });
+    });
+    return 'P' + d + '-' + ('0' + n).slice(-2);
+  }
+
+  /** これまでに発注した仕入先（新しい順・重複なし）。宛先の候補に出す */
+  function knownSuppliers() {
+    var all = [];
+    loadSites().forEach(function (s) { all = all.concat(ordersOf(s)); });
+    all.sort(function (a, b) { return String(b.savedAt).localeCompare(String(a.savedAt)); });
+    var out = [];
+    all.forEach(function (o) {
+      var v = (o.supplier || '').trim();
+      if (v && out.indexOf(v) < 0) out.push(v);
+    });
+    return out;
+  }
+
+  /** 発注書に並べられる見積の行（値引き・自動計算の行は外す） */
+  function orderCandidates(site) {
+    var rows = [];
+    estimatesOf(site.id).sort(function (a, b) {
+      return String(a.savedAt).localeCompare(String(b.savedAt));
+    }).forEach(function (e) {
+      (e.lines || []).forEach(function (l, i) {
+        if (num(l.autoPercent)) return;              // 消耗品雑費・諸経費
+        if (num(l.price) < 0) return;                // 値引き
+        if (!(l.name || '').trim()) return;
+        rows.push({ key: e.id + ':' + i, est: e, idx: i, line: l });
+      });
+    });
+    return rows;
+  }
+
+  function startOrder(site, cur) {
+    var doc = cur ? clone(cur) : {
+      id: 'o' + Date.now(),
+      no: nextOrderNo(),
+      date: todayISO(),
+      supplier: knownSuppliers()[0] || '',
+      honorific: '御中',
+      due: '',
+      place: site.address ? '現場納品　' + site.address : '',
+      note: '',
+      showPrice: true,
+      tax: pb.defaults.taxRatePercent,
+      lines: []
+    };
+    // 前に選んだ行をチェック済みにする。行がずれていたら同じ見積の中を品名で探す
+    var sel = {}, extras = [];
+    var cands = orderCandidates(site);
+    doc.lines.forEach(function (ol) {
+      var src = ol.src || {};
+      var hit = null;
+      cands.forEach(function (r) {
+        if (!hit && !sel[r.key] && r.est.id === src.estId && r.idx === src.idx && (r.line.name || '') === (ol.name || '')) hit = r;
+      });
+      cands.forEach(function (r) {
+        if (!hit && !sel[r.key] && r.est.id === src.estId && (r.line.name || '') === (ol.name || '')) hit = r;
+      });
+      if (hit) sel[hit.key] = { on: true, qty: ol.qty, price: ol.price };
+      else extras.push(clone(ol));                    // 見積にない品・見積から消えた品
+    });
+    poEdit = { siteId: site.id, doc: doc, sel: sel, extras: extras, isNew: !cur };
+    renderList();
+  }
+
+  function renderOrderEditor(site) {
+    var E = poEdit, d = E.doc;
+    var box = el('div', 'po-editor');
+    box.appendChild(el('div', 'po-editor-title', (E.isNew ? '発注書を作る　' : '発注書を直す　') + d.no));
+
+    function field(label, input) {
+      var f = el('label', 'po-field');
+      f.appendChild(el('span', null, label));
+      f.appendChild(input);
+      box.appendChild(f);
+      return input;
+    }
+    function text(val, ph, onSet) {
+      var t = document.createElement('input');
+      t.type = 'text'; t.value = val || ''; t.placeholder = ph || '';
+      t.addEventListener('input', function () { onSet(t.value); });
+      return t;
+    }
+
+    var sup = field('宛先（仕入先）', text(d.supplier, '例：株式会社 西方商店', function (v) { d.supplier = v; }));
+    var known = knownSuppliers();
+    if (known.length) {
+      var dl = document.createElement('datalist');
+      dl.id = 'po-suppliers';
+      known.forEach(function (v) { var o = document.createElement('option'); o.value = v; dl.appendChild(o); });
+      box.appendChild(dl);
+      sup.setAttribute('list', 'po-suppliers');
+    }
+    var dt = document.createElement('input');
+    dt.type = 'date'; dt.value = d.date;
+    dt.addEventListener('change', function () { d.date = dt.value || todayISO(); });
+    field('発注日', dt);
+    field('納期', text(d.due, '例：10月16日（金）まで', function (v) { d.due = v; }));
+    field('納品場所', text(d.place, '例：現場納品／事務所渡し', function (v) { d.place = v; }));
+    var nt = document.createElement('textarea');
+    nt.rows = 2; nt.value = d.note || ''; nt.placeholder = '例：搬入は午前中にお願いします';
+    nt.addEventListener('input', function () { d.note = nt.value; });
+    field('備考', nt);
+
+    var sp = el('label', 'ledger-est');
+    var spc = document.createElement('input'); spc.type = 'checkbox'; spc.checked = d.showPrice !== false;
+    spc.addEventListener('change', function () { d.showPrice = spc.checked; });
+    sp.appendChild(spc);
+    sp.appendChild(el('span', null, '単価と金額を発注書に載せる（仕入値）'));
+    box.appendChild(sp);
+
+    /* ---- 見積の行から選ぶ ---- */
+    var cands = orderCandidates(site);
+    var head = el('div', 'ledger-sub', '見積の項目から、頼むものにチェック');
+    box.appendChild(head);
+    var bar = el('div', 'po-bar');
+    var allMat = el('button', 'btn btn-ghost btn-sm', '機器・材料をまとめてチェック'); allMat.type = 'button';
+    allMat.addEventListener('click', function () {
+      cands.forEach(function (r) {
+        if (isWorkLine(r.line)) return;
+        var cur = E.sel[r.key];
+        E.sel[r.key] = { on: true, qty: cur ? cur.qty : r.line.qty, price: cur ? cur.price : num(r.line.cost) };
+      });
+      renderList();
+    });
+    var none = el('button', 'btn btn-ghost btn-sm', 'チェックを全部はずす'); none.type = 'button';
+    none.addEventListener('click', function () {
+      Object.keys(E.sel).forEach(function (k) { E.sel[k].on = false; });
+      renderList();
+    });
+    bar.appendChild(allMat); bar.appendChild(none);
+    box.appendChild(bar);
+
+    var count = el('span', 'po-count');
+    head.appendChild(count);
+    function drawCount() {
+      var n = E.extras.length, sum = 0;
+      cands.forEach(function (r) {
+        var s = E.sel[r.key];
+        if (s && s.on) { n++; sum += num(s.qty) * num(s.price); }
+      });
+      E.extras.forEach(function (x) { sum += num(x.qty) * num(x.price); });
+      count.textContent = '　' + n + ' 品目' + (sum ? '　税抜 ' + yen(sum) : '');
+    }
+
+    if (!cands.length) box.appendChild(el('p', 'empty-note', 'この現場の見積に、選べる行がありません。'));
+    var lastEst = null;
+    var multi = estimatesOf(site.id).length > 1;
+    cands.forEach(function (r) {
+      if (multi && r.est !== lastEst) {
+        box.appendChild(el('div', 'ledger-est-head', r.est.no + '　' + (r.est.subject || site.name)));
+        lastEst = r.est;
+      }
+      var s = E.sel[r.key] || { on: false, qty: r.line.qty, price: num(r.line.cost) };
+      var row = el('div', 'ledger-item po-item' + (s.on ? ' is-on' : ''));
+      var ck = document.createElement('input'); ck.type = 'checkbox'; ck.checked = !!s.on;
+      ck.className = 'po-check';
+      row.appendChild(ck);
+      var main = el('div', 'ledger-item-name');
+      main.appendChild(el('b', null, r.line.name));
+      var sub = [r.line.spec, isWorkLine(r.line) ? '作業' : ''].filter(Boolean).join('　');
+      if (sub) main.appendChild(el('small', null, sub));
+      row.appendChild(main);
+      var nums = el('div', 'ledger-item-nums');
+      var q = document.createElement('input');
+      q.type = 'text'; q.inputMode = 'decimal'; q.className = 'ledger-input po-qty'; q.value = String(num(s.qty));
+      var u = el('span', 'ledger-plan', r.line.unit || '');
+      var p = document.createElement('input');
+      p.type = 'text'; p.inputMode = 'numeric'; p.className = 'ledger-input'; p.placeholder = '仕入単価';
+      p.value = num(s.price) ? String(num(s.price)) : '';
+      nums.appendChild(q); nums.appendChild(u); nums.appendChild(p);
+      row.appendChild(nums);
+
+      function put() {
+        E.sel[r.key] = { on: ck.checked, qty: num(String(q.value).replace(/[,，\s]/g, '')), price: num(parseYen(p.value)) };
+        row.classList.toggle('is-on', ck.checked);
+        drawCount();
+      }
+      ck.addEventListener('change', put);
+      // 数や単価を触ったら、その行は頼むものとしてチェックを入れる
+      q.addEventListener('input', function () { ck.checked = true; put(); });
+      p.addEventListener('input', function () { ck.checked = true; put(); });
+      // 品名を押してもチェックが切り替わるように
+      main.addEventListener('click', function () { ck.checked = !ck.checked; put(); });
+      box.appendChild(row);
+    });
+
+    /* ---- 見積にない品 ---- */
+    if (E.extras.length) box.appendChild(el('div', 'ledger-sub', '見積にない品'));
+    E.extras.forEach(function (x, i) {
+      var row = el('div', 'ledger-cost');
+      var main = el('div', 'est-main');
+      main.appendChild(el('b', null, x.name));
+      main.appendChild(el('small', null, [x.spec, num(x.qty) + (x.unit || ''), num(x.price) ? '@' + yen(x.price) : ''].filter(Boolean).join('　')));
+      row.appendChild(main);
+      var del = el('button', 'btn btn-ghost btn-sm btn-danger', '外す'); del.type = 'button';
+      del.addEventListener('click', function () { E.extras.splice(i, 1); renderList(); });
+      row.appendChild(del);
+      box.appendChild(row);
+    });
+    var addX = el('button', 'btn btn-ghost btn-sm', '＋ 見積にない品を足す'); addX.type = 'button';
+    addX.addEventListener('click', function () {
+      var name = prompt('品名');
+      if (name === null || !name.trim()) return;
+      var spec = prompt('品番・仕様（空欄可）', '');
+      if (spec === null) return;
+      var qty = prompt('数量', '1');
+      if (qty === null) return;
+      var unit = prompt('単位', '個');
+      if (unit === null) return;
+      var price = prompt('仕入単価（税抜／空欄可）', '');
+      if (price === null) return;
+      E.extras.push({ name: name.trim(), spec: spec.trim(), qty: num(qty) || 1, unit: unit.trim(), price: num(parseYen(price)) });
+      renderList();
+    });
+    box.appendChild(addX);
+    drawCount();
+
+    /* ---- 保存・やめる ---- */
+    var acts = el('div', 'card-actions po-acts');
+    var ok = el('button', 'btn btn-primary', '保存する'); ok.type = 'button';
+    ok.addEventListener('click', function () { saveOrder(site, cands); });
+    var cancel = el('button', 'btn btn-ghost', 'やめる'); cancel.type = 'button';
+    cancel.addEventListener('click', function () { poEdit = null; renderList(); });
+    acts.appendChild(ok); acts.appendChild(cancel);
+    box.appendChild(acts);
+    return box;
+  }
+
+  function saveOrder(site, cands) {
+    var E = poEdit, d = E.doc;
+    if (!(d.supplier || '').trim()) { toast('宛先（仕入先）を入れてください'); return; }
+    var lines = [];
+    cands.forEach(function (r) {
+      var s = E.sel[r.key];
+      if (!s || !s.on) return;
+      lines.push({
+        name: r.line.name || '', spec: r.line.spec || '', unit: r.line.unit || '',
+        qty: num(s.qty), price: num(s.price),
+        src: { estId: r.est.id, idx: r.idx, estNo: r.est.no }
+      });
+    });
+    lines = lines.concat(E.extras);
+    if (!lines.length) { toast('頼むものにチェックを入れてください'); return; }
+    d.supplier = d.supplier.trim();
+    d.lines = lines;
+    d.siteId = site.id;
+    d.subject = site.name;
+    d.total = calcOf(d).total;
+    d.savedAt = new Date().toISOString();
+    var ok = updateOrders(site.id, function (list) {
+      var found = false;
+      list = list.map(function (o) { if (o.id === d.id) { found = true; return d; } return o; });
+      if (!found) list.push(d);
+      return list;
+    });
+    if (ok === false) return;
+    poEdit = null;
+    renderList();
+    toast('発注書 ' + d.no + ' を保存しました');
+  }
+
+  function renderOrderBlock(site) {
+    var wrap = el('div', 'inv-block po-block');
+    var mine = ordersOf(site).slice().sort(function (a, b) {
+      return String(b.savedAt).localeCompare(String(a.savedAt));
+    });
+    wrap.appendChild(el('div', 'site-sec-label', '発注書（' + mine.length + '件）'));
+    var editing = poEdit && poEdit.siteId === site.id;
+    if (editing) wrap.appendChild(renderOrderEditor(site));
+
+    mine.forEach(function (o) {
+      if (editing && poEdit.doc.id === o.id) return;
+      var row = el('div', 'est-row');
+      var main = el('div', 'est-main');
+      main.appendChild(el('b', null, o.no + '　' + (o.supplier || '') + '　' + (o.honorific || '')));
+      main.appendChild(el('small', null,
+        '発注日 ' + jpDate(o.date) + (o.due ? '　/　納期 ' + o.due : '') + '　/　' + (o.lines || []).length + ' 品目'));
+      row.appendChild(main);
+      if (o.showPrice !== false && o.total) row.appendChild(el('div', 'est-amount', yen(o.total)));
+
+      var pr = el('button', 'btn btn-primary', '印刷 / PDF'); pr.type = 'button';
+      pr.addEventListener('click', function () { printOrder(o); });
+      var ed = el('button', 'btn btn-ghost', '直す'); ed.type = 'button';
+      ed.addEventListener('click', function () { startOrder(site, o); });
+      var del = el('button', 'btn btn-ghost btn-danger', '削除'); del.type = 'button';
+      del.addEventListener('click', function () {
+        if (!confirm('発注書 ' + o.no + '（' + (o.supplier || '') + '）を削除します。よろしいですか？')) return;
+        updateOrders(site.id, function (list) { return list.filter(function (x) { return x.id !== o.id; }); });
+        renderList();
+        toast('削除しました');
+      });
+      row.appendChild(pr); row.appendChild(ed); row.appendChild(del);
+      wrap.appendChild(row);
+    });
+
+    if (!editing) {
+      if (!mine.length) wrap.appendChild(el('p', 'empty-note', 'まだ発注書はありません。見積の項目から、頼むものを選んで作れます。'));
+      var mk = el('button', 'btn btn-ghost btn-sm', '＋ 発注書を作る'); mk.type = 'button';
+      mk.addEventListener('click', function () { startOrder(site, null); });
+      wrap.appendChild(mk);
+    }
+    return wrap;
+  }
+
+  function printOrder(o) {
+    if (!readyToPrint()) return;
+    buildSheet('order', o);
+    openPreview('発注書　' + o.no + '　' + (o.supplier || ''),
+                '発注書_' + (o.supplier || '無題') + '_' + o.no);
   }
 
   /* ======================================================================
@@ -6662,9 +7007,12 @@
     $('#sheet').className = 'skin-' + skinId(pb.company.sheetSkin);
     $('#sheet').style.setProperty('--sheet-accent', colorHex(pb.company.sheetColor));
     var inv = (mode === 'invoice');
+    var ord = (mode === 'order');
+    // 発注書で「単価を載せない」にしたときは、単価・金額・合計を空けておく
+    var noPrice = ord && d.showPrice === false;
     var t = calcOf(d);
     var c = pb.company;
-    var to = (d.customer || '').trim();
+    var to = ((ord ? d.supplier : d.customer) || '').trim();   // 発注書の宛先は仕入先
     var hon = d.honorific === '（なし）' ? '' : ('　' + d.honorific);
     var validUntil = d.validDays ? jpDate(addDays(d.date, d.validDays)) + 'まで' : '';
 
@@ -6673,11 +7021,11 @@
       rowList.push(
         '<tr>' +
           '<td class="t-no">' + (i + 1) + '</td>' +
-          '<td>' + esc(l.name) + (l.spec ? '<span class="l-spec">' + esc(l.spec) + '</span>' : '') + listPriceHTML(l) + '</td>' +
+          '<td>' + esc(l.name) + (l.spec ? '<span class="l-spec">' + esc(l.spec) + '</span>' : '') + (ord ? '' : listPriceHTML(l)) + '</td>' +
           '<td class="t-qty">' + (num(l.qty) % 1 === 0 ? num(l.qty) : num(l.qty).toFixed(1)) + '</td>' +
           '<td class="t-unit">' + esc(l.unit) + '</td>' +
-          '<td class="t-price">' + Math.round(num(l.price)).toLocaleString('ja-JP') + '</td>' +
-          '<td class="t-amount">' + lineAmount(l, d.unitRound).toLocaleString('ja-JP') + '</td>' +
+          '<td class="t-price">' + (noPrice || (ord && !num(l.price)) ? '' : Math.round(num(l.price)).toLocaleString('ja-JP')) + '</td>' +
+          '<td class="t-amount">' + (noPrice || (ord && !num(l.price)) ? '' : lineAmount(l, d.unitRound).toLocaleString('ja-JP')) + '</td>' +
         '</tr>');
     });
 
@@ -6700,9 +7048,17 @@
       if (!v) return '';
       return '<div><span class="k">' + esc(k) + '</span><span class="v">' + esc(v) + '</span></div>';
     }
-    termsHTML += term('件　　名', d.subject);
-    termsHTML += term('工事場所', d.site);
-    if (inv) {
+    if (ord) {
+      termsHTML += term('現　　場', d.subject);
+      termsHTML += term('納　　期', d.due);
+      termsHTML += term('納品場所', d.place);
+    } else {
+      termsHTML += term('件　　名', d.subject);
+      termsHTML += term('工事場所', d.site);
+    }
+    if (ord) {
+      // 発注書には支払条件・有効期限を載せない
+    } else if (inv) {
       termsHTML += term('工事完了日', d.doneDate ? jpDate(d.doneDate) : '');
       termsHTML += term('お支払期限', d.dueDate ? jpDate(d.dueDate) : '');
       termsHTML += term('お支払条件', d.payment);
@@ -6739,7 +7095,8 @@
         '</div>' +
       '</div>';
 
-    var remarks = (d.note || '') + (c.bank ? '\n\n【お振込先】' + c.bank : '');
+    // 振込先はお客様に払ってもらうための欄。仕入先への発注書には載せない
+    var remarks = (d.note || '') + (c.bank && !ord ? '\n\n【お振込先】' + c.bank : '');
 
     /* 「ロゴ大きく左」用の置き場所。ほかの見た目では CSS で隠している。
        いつも書き出しておけば、見た目の切り替えは CSS だけで済む。
@@ -6759,22 +7116,24 @@
 
     var headHTML =
         brandHTML +
-        '<div class="sheet-title">' + (inv ? '御請求書' : '御見積書') + '</div>' +
+        '<div class="sheet-title">' + (ord ? '発注書' : inv ? '御請求書' : '御見積書') + '</div>' +
         '<div class="sheet-meta">' +
-          (inv ? '請求番号：' : '見積番号：') + esc(d.no) + '<br>' +
-          (inv ? '請求日：' : '発行日：') + esc(jpDate(d.date)) +
+          (ord ? '発注番号：' : inv ? '請求番号：' : '見積番号：') + esc(d.no) + '<br>' +
+          (ord ? '発注日：' : inv ? '請求日：' : '発行日：') + esc(jpDate(d.date)) +
         '</div>' +
         '<div class="sheet-head">' +
           '<div class="sheet-head-left">' +
             '<div class="sheet-to">' + esc(to || '　') + esc(hon) + '</div>' +
             '<p class="sheet-lead">' +
-              (inv ? '下記の通りご請求申し上げます。' : '下記の通りお見積り申し上げます。') +
+              (ord ? '下記の通り発注いたします。よろしくお願いいたします。' :
+               inv ? '下記の通りご請求申し上げます。' : '下記の通りお見積り申し上げます。') +
             '</p>' +
+            (noPrice ? '' :
             '<div class="sheet-total-box">' +
-              '<span class="label">' + (inv ? 'ご請求金額' : '御見積金額') + '</span>' +
+              '<span class="label">' + (ord ? '発注金額' : inv ? 'ご請求金額' : '御見積金額') + '</span>' +
               '<span class="value">' + Math.round(t.total).toLocaleString('ja-JP') + ' 円</span>' +
               '<span class="tax-note">（消費税込）</span>' +
-            '</div>' +
+            '</div>') +
             '<div class="sheet-terms">' + termsHTML + '</div>' +
           '</div>' +
           '<div class="sheet-head-right">' + companyHTML + '</div>' +
@@ -6789,7 +7148,7 @@
     var footHTML =
         '<div class="sheet-foot">' +
           '<div class="sheet-remarks"><span class="rk">備考</span>' + esc(remarks) + '</div>' +
-          '<table class="sheet-sum">' + sumHTML + '</table>' +
+          (noPrice ? '' : '<table class="sheet-sum">' + sumHTML + '</table>') +
         '</div>';
 
     paginateSheet(headHTML, theadHTML, rowList, footHTML);
