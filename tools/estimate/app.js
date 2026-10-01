@@ -11,7 +11,7 @@
      ★ 手で直さないこと。version.txt を書き換えて `node build.mjs` を走らせれば、
        ここも入口（index.html）も、build.mjs が機械的にそろえる。
        人が何か所も手で合わせると、必ずどこかがずれる。 */
-  var APP_VERSION = '202610012200';
+  var APP_VERSION = '202610012300';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -2607,6 +2607,18 @@
       .trim();
   }
 
+  /**
+   * 配管カバーなど、色を選んで頼む品の色。仕様の「色G/I/B/K/W」から読む。
+   * 色を書かずに発注すると品物が決まらないので、発注書では必ず選ばせる（BIGBOSS 2026-10-01）。
+   * 文字の意味は因幡電工の色記号。
+   */
+  var COLOR_NAMES = { G: 'グレー', I: 'アイボリー', B: 'ブラウン', K: 'ブラック', W: 'ホワイト', C: 'クリーム', S: 'シルバー' };
+  function colorChoices(l) {
+    var m = String(l.spec || '').match(/色\s*([A-Z](?:\s*[\/／・]\s*[A-Z])+)/);
+    return m ? m[1].split(/\s*[\/／・]\s*/) : [];
+  }
+  function colorLabel(c) { return c ? (COLOR_NAMES[c] || c) + '（' + c + '）' : ''; }
+
   /** 発注書に並べられる見積の行（値引き・自動計算の行は外す） */
   function orderCandidates(site) {
     var rows = [];
@@ -2649,7 +2661,7 @@
       cands.forEach(function (r) {
         if (!hit && !sel[r.key] && r.est.id === src.estId && (r.line.name || '') === (ol.name || '')) hit = r;
       });
-      if (hit) sel[hit.key] = { on: true, qty: ol.qty, price: ol.price };
+      if (hit) sel[hit.key] = { on: true, qty: ol.qty, price: ol.price, color: ol.color || '' };
       else extras.push(clone(ol));                    // 見積にない品・見積から消えた品
     });
     poEdit = { siteId: site.id, doc: doc, sel: sel, extras: extras, isNew: !cur };
@@ -2712,7 +2724,7 @@
       cands.forEach(function (r) {
         if (isWorkLine(r.line)) return;
         var cur = E.sel[r.key];
-        E.sel[r.key] = { on: true, qty: cur ? cur.qty : r.line.qty, price: cur ? cur.price : num(r.line.cost) };
+        E.sel[r.key] = { on: true, qty: cur ? cur.qty : r.line.qty, price: cur ? cur.price : num(r.line.cost), color: cur ? cur.color : '' };
       });
       renderList();
     });
@@ -2723,6 +2735,30 @@
     });
     bar.appendChild(allMat); bar.appendChild(none);
     box.appendChild(bar);
+
+    var colorSet = [];
+    cands.forEach(function (r) {
+      colorChoices(r.line).forEach(function (c) { if (colorSet.indexOf(c) < 0) colorSet.push(c); });
+    });
+    if (colorSet.length) {
+      var cb = el('label', 'po-field po-color-all');
+      cb.appendChild(el('span', null, 'カバーの色をまとめて'));
+      var all = document.createElement('select');
+      all.appendChild(new Option('選ぶ…', ''));
+      colorSet.forEach(function (c) { all.appendChild(new Option(colorLabel(c), c)); });
+      all.addEventListener('change', function () {
+        if (!all.value) return;
+        cands.forEach(function (r) {
+          if (colorChoices(r.line).indexOf(all.value) < 0) return;
+          var cur = E.sel[r.key] || { on: false, qty: r.line.qty, price: num(r.line.cost) };
+          cur.color = all.value;
+          E.sel[r.key] = cur;
+        });
+        renderList();
+      });
+      cb.appendChild(all);
+      box.appendChild(cb);
+    }
 
     var count = el('span', 'po-count');
     head.appendChild(count);
@@ -2744,7 +2780,8 @@
         box.appendChild(el('div', 'ledger-est-head', r.est.no + '　' + (r.est.subject || site.name)));
         lastEst = r.est;
       }
-      var s = E.sel[r.key] || { on: false, qty: r.line.qty, price: num(r.line.cost) };
+      var s = E.sel[r.key] || { on: false, qty: r.line.qty, price: num(r.line.cost), color: '' };
+      var colors = colorChoices(r.line);
       var row = el('div', 'ledger-item po-item' + (s.on ? ' is-on' : ''));
       var ck = document.createElement('input'); ck.type = 'checkbox'; ck.checked = !!s.on;
       ck.className = 'po-check';
@@ -2761,18 +2798,32 @@
       var p = document.createElement('input');
       p.type = 'text'; p.inputMode = 'numeric'; p.className = 'ledger-input'; p.placeholder = '仕入単価';
       p.value = num(s.price) ? String(num(s.price)) : '';
+      var cs = null;
+      if (colors.length) {
+        cs = document.createElement('select');
+        cs.className = 'po-color';
+        cs.appendChild(new Option('色を選ぶ', ''));
+        colors.forEach(function (c) { cs.appendChild(new Option(colorLabel(c), c)); });
+        cs.value = s.color || '';
+        nums.appendChild(cs);
+      }
       nums.appendChild(q); nums.appendChild(u); nums.appendChild(p);
       row.appendChild(nums);
+      function markColor() { if (cs) row.classList.toggle('is-nocolor', ck.checked && !cs.value); }
 
       function put() {
-        E.sel[r.key] = { on: ck.checked, qty: num(String(q.value).replace(/[,，\s]/g, '')), price: num(parseYen(p.value)) };
+        E.sel[r.key] = { on: ck.checked, qty: num(String(q.value).replace(/[,，\s]/g, '')), price: num(parseYen(p.value)),
+                         color: cs ? cs.value : '' };
         row.classList.toggle('is-on', ck.checked);
+        markColor();
         drawCount();
       }
       ck.addEventListener('change', put);
       // 数や単価を触ったら、その行は頼むものとしてチェックを入れる
       q.addEventListener('input', function () { ck.checked = true; put(); });
       p.addEventListener('input', function () { ck.checked = true; put(); });
+      if (cs) cs.addEventListener('change', function () { ck.checked = true; put(); });
+      markColor();
       // 品名を押してもチェックが切り替わるように
       main.addEventListener('click', function () { ck.checked = !ck.checked; put(); });
       box.appendChild(row);
@@ -2830,16 +2881,21 @@
   function composeOrder(site, cands) {
     var E = poEdit, d = E.doc;
     if (!(d.supplier || '').trim()) { toast('宛先（仕入先）を入れてください'); return null; }
-    var lines = [];
+    var lines = [], noColor = [];
     cands.forEach(function (r) {
       var s = E.sel[r.key];
       if (!s || !s.on) return;
+      if (colorChoices(r.line).length && !s.color) noColor.push(r.line.name);
       lines.push({
         name: r.line.name || '', spec: orderSpec(r.line), unit: r.line.unit || '',
-        qty: num(s.qty), price: num(s.price),
+        qty: num(s.qty), price: num(s.price), color: s.color || '',
         src: { estId: r.est.id, idx: r.idx, estNo: r.est.no }
       });
     });
+    if (noColor.length) {
+      toast('色を選んでください：' + noColor.join('、'));
+      return null;
+    }
     lines = lines.concat(E.extras);
     if (!lines.length) { toast('頼むものにチェックを入れてください'); return null; }
     d.supplier = d.supplier.trim();
@@ -7074,6 +7130,7 @@
     var rowList = [];
     d.lines.forEach(function (l, i) {
       var spec = ord ? orderSpec(l) : l.spec;   // 発注書は型番だけ
+      if (ord && l.color) spec += '　色：' + colorLabel(l.color);
       rowList.push(
         '<tr>' +
           '<td class="t-no">' + (i + 1) + '</td>' +

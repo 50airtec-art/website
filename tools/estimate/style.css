@@ -1349,3 +1349,6 @@ body:not(.show-cost) .ledger-list-net { display: none; }
 .po-item input.ledger-input { width: 110px; }
 .po-item input.po-qty { width: 64px; }
 .po-acts { margin-top: 14px; }
+.po-item select.po-color { width: auto; min-width: 120px; padding: 6px 8px; font-size: 13px; }
+.po-item.is-nocolor select.po-color { border-color: var(--danger); color: var(--danger); }
+.po-color-all select { flex: 0 1 auto; min-width: 160px; }
