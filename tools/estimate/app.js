@@ -11,7 +11,7 @@
      ★ 手で直さないこと。version.txt を書き換えて `node build.mjs` を走らせれば、
        ここも入口（index.html）も、build.mjs が機械的にそろえる。
        人が何か所も手で合わせると、必ずどこかがずれる。 */
-  var APP_VERSION = '202610020100';
+  var APP_VERSION = '202610201200';
 
   var KEY_PB    = 'airtec_pricebook_v1';
   var KEY_EST   = 'airtec_estimates_v1';
@@ -3437,10 +3437,14 @@
     });
   });
 
+  /* 請求書も見積書・発注書と同じプレビューに出す。
+     ここだけ window.print() を直に呼んでいたので、iPhoneでPDFにならなかった
+     （2026-10-20）。プレビューの［PDFにする］は端末の印刷機能を通らない */
   function printInvoice(v) {
+    if (!readyToPrint()) return;
     buildSheet('invoice', v);
-    document.title = '請求書_' + (v.customer || '無題') + '_' + v.no;
-    setTimeout(function () { window.print(); }, 60);
+    openPreview('請求書　' + v.no + (v.customer ? '　' + v.customer : ''),
+                '請求書_' + (v.customer || '無題') + '_' + v.no);
   }
 
   /* ======================================================================
@@ -7206,7 +7210,7 @@
     var t = calcOf(d);
     var c = pb.company;
     var to = ((ord ? d.supplier : d.customer) || '').trim();   // 発注書の宛先は仕入先
-    var hon = d.honorific === '（なし）' ? '' : ('　' + d.honorific);
+    var hon = (!d.honorific || d.honorific === '（なし）') ? '' : ('　' + d.honorific);
     var validUntil = d.validDays ? jpDate(addDays(d.date, d.validDays)) + 'まで' : '';
 
     var rowList = [];
