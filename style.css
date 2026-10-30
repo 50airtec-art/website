@@ -1855,7 +1855,9 @@ img.logo-img {
 
 .footer-nav ul {
   display: flex;
-  gap: 32px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px 32px;
 }
 
 .footer-nav a {
@@ -2759,6 +2761,11 @@ img.logo-img {
 
 .work-shot-wide {
   grid-column: 1 / -1;
+}
+
+.work-photos-inline {
+  max-width: 640px;
+  margin: 0 auto;
 }
 
 .work-shot figcaption {
