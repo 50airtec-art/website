@@ -307,6 +307,25 @@ img.logo-img {
   padding: 6px 0;
 }
 
+/* 項目が7つになったので、PC幅では折り返さないように詰める */
+@media (min-width: 1025px) {
+  .global-nav ul {
+    gap: 28px;
+  }
+  .global-nav a {
+    white-space: nowrap;
+  }
+}
+
+@media (min-width: 1025px) and (max-width: 1200px) {
+  .logo-canvas {
+    height: 60px;
+  }
+  .global-nav ul {
+    gap: 16px;
+  }
+}
+
 .global-nav a:not(.nav-cta)::after {
   content: "";
   position: absolute;
@@ -2727,10 +2746,19 @@ img.logo-img {
 
 .work-shot img {
   width: 100%;
+  height: auto;
   aspect-ratio: 4 / 3;
   object-fit: cover;
   border-radius: 8px;
   background: var(--color-bg-alt);
+}
+
+.work-shot-tall img {
+  aspect-ratio: 3 / 4;
+}
+
+.work-shot-wide {
+  grid-column: 1 / -1;
 }
 
 .work-shot figcaption {
