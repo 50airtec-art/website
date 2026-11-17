@@ -1344,6 +1344,92 @@ img.logo-img {
 }
 
 /* ---------- Partner ---------- */
+/* ---------- Voice ---------- */
+.voice {
+  background: var(--color-bg);
+}
+
+.voice-score {
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-dark);
+  margin-bottom: 40px;
+}
+
+.voice-stars {
+  color: #e8a400;
+  letter-spacing: 0.1em;
+  margin-right: 8px;
+}
+
+.voice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.voice-card {
+  background: var(--color-bg-alt);
+  border: 1px solid var(--color-border);
+  padding: 32px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.voice-meta {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-sub);
+  margin-bottom: 16px;
+}
+
+.voice-text {
+  margin: 0 0 20px;
+  font-size: 15px;
+  line-height: 1.9;
+  color: var(--color-text);
+  flex: 1;
+}
+
+.voice-text p + p {
+  margin-top: 8px;
+}
+
+.voice-from {
+  font-size: 13px;
+  color: var(--color-text-light);
+}
+
+.voice-from a {
+  margin-left: 12px;
+  color: var(--color-dark);
+  text-decoration: underline;
+}
+
+.voice-link {
+  text-align: center;
+  margin-top: 40px;
+  font-size: 14px;
+}
+
+.voice-link a {
+  color: var(--color-dark);
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .voice-grid {
+    grid-template-columns: 1fr;
+  }
+  .voice-card {
+    padding: 24px 20px;
+  }
+}
+
 .partner {
   background: var(--color-bg-alt);
 }
