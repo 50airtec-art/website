@@ -2544,8 +2544,8 @@ img.logo-img {
 
 .price-tax {
   display: block;
-  font-size: 12px;
-  color: var(--color-text-light);
+  font-size: 14px;
+  color: var(--color-text-sub);
   margin-top: 2px;
 }
 
