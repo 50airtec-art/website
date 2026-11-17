@@ -2491,6 +2491,83 @@ img.logo-img {
   color: var(--color-text-sub);
 }
 
+/* Price Table */
+.price-table {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  border-collapse: collapse;
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+}
+
+.price-table th,
+.price-table td {
+  padding: 22px 28px;
+  border-bottom: 1px solid var(--color-border);
+  vertical-align: middle;
+}
+
+.price-table tr:last-child th,
+.price-table tr:last-child td {
+  border-bottom: none;
+}
+
+.price-table th {
+  text-align: left;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-dark);
+}
+
+.price-table td {
+  text-align: right;
+  white-space: nowrap;
+  font-size: 15px;
+  color: var(--color-dark);
+}
+
+.price-note {
+  display: block;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--color-text-sub);
+  margin-top: 4px;
+}
+
+.price-yen {
+  font-family: var(--font-en);
+  font-size: 26px;
+  font-weight: 700;
+  margin-right: 2px;
+}
+
+.price-tax {
+  display: block;
+  font-size: 12px;
+  color: var(--color-text-light);
+  margin-top: 2px;
+}
+
+.price-caption {
+  max-width: 720px;
+  margin: 24px auto 0;
+  padding-left: 1.2em;
+  font-size: 14px;
+  line-height: 1.9;
+  color: var(--color-text-sub);
+}
+
+@media (max-width: 768px) {
+  .price-table th,
+  .price-table td {
+    padding: 18px 16px;
+  }
+  .price-yen {
+    font-size: 22px;
+  }
+}
+
 /* Equipment List */
 .equipment-list {
   display: grid;
